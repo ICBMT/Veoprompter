@@ -677,3 +677,107 @@
         });
     });
 })();
+
+(() => {
+    const gsap = window.gsap;
+    const reduceMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+    if (!gsap || reduceMotion) return;
+
+    if (window.ScrollTrigger) gsap.registerPlugin(window.ScrollTrigger);
+
+    const studio = document.querySelector('.studio-page');
+    if (studio) {
+        const intro = gsap.timeline({ defaults: { ease: 'power3.out' } });
+        intro.from('.hero-copy .eyebrow-label', { y: 12, autoAlpha: 0, duration: 0.45 })
+            .from('.hero-copy h1', { y: 24, autoAlpha: 0, duration: 0.72, ease: 'power4.out' }, '-=0.24')
+            .from('.hero-copy > p, .hero-qualities', { y: 14, autoAlpha: 0, duration: 0.52, stagger: 0.08 }, '-=0.36')
+            .from('.storyboard-card', { y: 20, autoAlpha: 0, scale: 0.985, duration: 0.72 }, '-=0.56')
+            .from('.workspace-section .section-heading-row, .workspace-section .mode-tabs, .workspace-section .prompt-form', {
+                y: 18,
+                autoAlpha: 0,
+                duration: 0.56,
+                stagger: 0.09,
+                clearProps: 'transform,opacity,visibility',
+            }, '-=0.3');
+    } else {
+        const pageIntro = document.querySelector('.admin-page, .auth-page, .guide-page, .account-page, .history-page, .history-detail');
+        if (pageIntro) {
+            gsap.from(pageIntro, {
+                y: 16,
+                autoAlpha: 0,
+                duration: 0.62,
+                ease: 'power3.out',
+                clearProps: 'transform,opacity,visibility',
+            });
+        }
+    }
+
+    const revealTargets = gsap.utils.toArray(
+        '.admin-card, .admin-method-card, .guide-item, .history-card, .principles-row > div, .saved-brief-card, .saved-output-card'
+    );
+    revealTargets.forEach((element, index) => {
+        const reveal = {
+            y: 18,
+            autoAlpha: 0,
+            duration: 0.58,
+            delay: (index % 3) * 0.055,
+            ease: 'power3.out',
+            clearProps: 'transform,opacity,visibility',
+        };
+
+        if (window.ScrollTrigger) {
+            gsap.from(element, {
+                ...reveal,
+                scrollTrigger: { trigger: element, start: 'top 92%', once: true },
+            });
+        } else {
+            gsap.from(element, reveal);
+        }
+    });
+
+    if (studio) {
+        const art = document.querySelector('.storyboard-art');
+        if (art) {
+            const skyMotion = gsap.timeline({ repeat: -1, yoyo: true, defaults: { ease: 'sine.inOut' } });
+            skyMotion.to('.art-sun', { x: 3, y: -6, duration: 3.8 })
+                .to('.art-planet', { x: -2, y: 7, duration: 4.6 }, 0)
+                .to('.art-character', { y: -3, duration: 2.4 }, 0);
+
+            gsap.to('.art-orbit--two', {
+                rotation: 385,
+                duration: 42,
+                ease: 'none',
+                repeat: -1,
+                transformOrigin: '50% 50%',
+            });
+            gsap.to('.art-stars', {
+                backgroundPosition: '11px 27px, 40px 21px',
+                duration: 7,
+                ease: 'sine.inOut',
+                yoyo: true,
+                repeat: -1,
+            });
+        }
+    }
+
+    if (window.matchMedia('(hover: hover) and (pointer: fine)').matches) {
+        gsap.utils.toArray('.button-primary, .topbar-control').forEach((element) => {
+            const moveX = gsap.quickTo(element, 'x', { duration: 0.32, ease: 'power3.out' });
+            const moveY = gsap.quickTo(element, 'y', { duration: 0.32, ease: 'power3.out' });
+
+            element.addEventListener('pointermove', (event) => {
+                const bounds = element.getBoundingClientRect();
+                moveX((event.clientX - (bounds.left + bounds.width / 2)) * 0.045);
+                moveY((event.clientY - (bounds.top + bounds.height / 2)) * 0.08);
+            });
+            element.addEventListener('pointerleave', () => {
+                moveX(0);
+                moveY(0);
+            });
+        });
+    }
+
+    if (window.ScrollTrigger && document.fonts?.ready) {
+        document.fonts.ready.then(() => window.ScrollTrigger.refresh());
+    }
+})();

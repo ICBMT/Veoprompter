@@ -110,4 +110,4 @@ The test suite covers the master prompt's synchronization with root `prompt.txt`
 - `app/Http/Controllers/AuthController.php`, `PasswordResetController.php`, `AccountController.php` — account lifecycle and recovery.
 - `app/Http/Controllers/PromptHistoryController.php` — private prompt library, search, and owner-checked detail/deletion.
 - `app/Http/Controllers/Admin/AiSettingsController.php` — administrator-only provider configuration.
-- `resources/views/` and `public/css`, `public/js` — responsive studio, account, and history interface with copy/download helpers.
+- `resources/views/` and `public/css`, `public/js` — responsive studio, account, and history interface with copy/download helpers. GSAP 3.15.0 and ScrollTrigger are self-hosted under `public/js/vendor`; Inter 5.3.0 variable fonts are self-hosted under `public/fonts` with their OFL license. The motion layer respects reduced-motion preferences.

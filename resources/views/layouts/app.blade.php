@@ -4,9 +4,12 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="csrf-token" content="{{ csrf_token() }}">
-    <meta name="theme-color" content="#0b0d10">
+    <meta name="theme-color" content="#0a0e13">
     <title>@yield('title', 'VeoPrompter — Prompt studio')</title>
+    <link rel="preload" href="/fonts/inter-latin-wght-normal.woff2" as="font" type="font/woff2" crossorigin>
     <link rel="stylesheet" href="/css/veoprompter.css">
+    <script src="/js/vendor/gsap.min.js" defer></script>
+    <script src="/js/vendor/ScrollTrigger.min.js" defer></script>
     <script src="/js/veoprompter.js" defer></script>
 </head>
 <body>
