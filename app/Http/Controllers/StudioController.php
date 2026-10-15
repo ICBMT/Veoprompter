@@ -7,6 +7,8 @@ use App\Services\PromptGenerationException;
 use App\Services\PromptGenerationService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Arr;
+use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 use Throwable;
 
@@ -26,6 +28,7 @@ class StudioController extends Controller
     {
         $validated = $request->validate([
             'mode' => ['required', Rule::in(['story', 'extend'])],
+            'project_title' => ['nullable', 'string', 'max:120'],
             'topic' => ['nullable', 'required_if:mode,story', 'string', 'max:250'],
             'learning_objective' => ['nullable', 'string', 'max:500'],
             'next_action' => ['nullable', 'required_if:mode,extend', 'string', 'max:800'],
@@ -56,8 +59,10 @@ class StudioController extends Controller
             ], 503);
         }
 
+        $referenceFrame = $request->file('reference_frame');
+
         try {
-            $content = $generator->generate($settings, $validated, $request->file('reference_frame'));
+            $content = $generator->generate($settings, $validated, $referenceFrame);
         } catch (PromptGenerationException $exception) {
             return response()->json(['message' => $exception->getMessage()], 502);
         } catch (Throwable $exception) {
@@ -68,9 +73,42 @@ class StudioController extends Controller
             ], 500);
         }
 
+        $project = null;
+        $historyError = false;
+
+        if ($request->user()) {
+            try {
+                $brief = Arr::except($validated, ['reference_frame']);
+                $title = trim((string) ($validated['project_title'] ?? ''));
+                $title = $title !== ''
+                    ? $title
+                    : (string) ($validated['mode'] === 'extend' ? ($validated['next_action'] ?? 'Video extension') : ($validated['topic'] ?? 'Educational video'));
+
+                $project = $request->user()->promptProjects()->create([
+                    'title' => Str::limit($title, 160, ''),
+                    'mode' => $validated['mode'],
+                    'brief' => $brief,
+                    'content' => $content,
+                    'provider' => $settings->provider,
+                    'model' => $settings->model,
+                    'reference_frame_attached' => $referenceFrame !== null,
+                ]);
+            } catch (Throwable $exception) {
+                report($exception);
+                $historyError = true;
+            }
+        }
+
         return response()->json([
             'content' => $content,
             'mode' => $validated['mode'],
+            'saved_to_history' => $project !== null,
+            'history_error' => $historyError,
+            'project' => $project ? [
+                'id' => $project->id,
+                'title' => $project->title,
+                'url' => route('history.show', $project, false),
+            ] : null,
         ]);
     }
 }

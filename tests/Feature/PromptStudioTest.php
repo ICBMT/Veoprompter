@@ -13,13 +13,6 @@ class PromptStudioTest extends TestCase
 {
     use RefreshDatabase;
 
-    protected function setUp(): void
-    {
-        parent::setUp();
-
-        config(['app.key' => 'base64:'.base64_encode(str_repeat('v', 32))]);
-    }
-
     public function test_prompt_studio_is_public_and_explains_the_workflow(): void
     {
         $this->get(route('studio'))
@@ -27,7 +20,7 @@ class PromptStudioTest extends TestCase
             ->assertSee('Make every frame')
             ->assertSee('New story')
             ->assertSee('Extend a video')
-            ->assertSee('Copy-ready plan');
+            ->assertSee('YOUR COPY-READY PLAN');
     }
 
     public function test_prompt_generation_explains_when_an_admin_has_not_configured_an_ai(): void
@@ -92,13 +85,59 @@ class PromptStudioTest extends TestCase
 
         $this->postJson(route('studio.generate'), $this->storyBrief())
             ->assertOk()
-            ->assertJsonPath('content', "## PROJECT OVERVIEW\nA connected story.");
+            ->assertJsonPath('content', "## PROJECT OVERVIEW\nA connected story.")
+            ->assertJsonPath('saved_to_history', false)
+            ->assertJsonPath('history_error', false);
 
         Http::assertSent(function (ClientRequest $request): bool {
             return $request->url() === 'https://api.compatible-provider.com/v1/chat/completions'
                 && $request->hasHeader('Authorization', 'Bearer test-compatible-secret')
                 && data_get($request->data(), 'model') === 'gpt-4.1-mini';
         });
+    }
+
+    public function test_signed_in_generation_is_saved_to_private_history_and_remains_owner_scoped(): void
+    {
+        $generatedContent = "## PROJECT OVERVIEW\nA connected story.\n\n### COPY CLIP 1 PROMPT\n```text\nA stable opening shot.\n```";
+        Http::fake([
+            'https://generativelanguage.googleapis.com/*' => Http::response([
+                'candidates' => [['content' => ['parts' => [['text' => $generatedContent]]]]],
+            ], 200),
+        ]);
+        AiSetting::create([
+            'provider' => 'gemini',
+            'model' => 'gemini-2.5-flash',
+            'api_key' => 'test-provider-secret',
+        ]);
+
+        $owner = User::factory()->create();
+        $otherUser = User::factory()->create();
+        $payload = [...$this->storyBrief(), 'project_title' => 'Bee garden story'];
+
+        $response = $this->actingAs($owner)->postJson(route('studio.generate'), $payload)
+            ->assertOk()
+            ->assertJsonPath('saved_to_history', true)
+            ->assertJsonPath('history_error', false)
+            ->assertJsonPath('project.title', 'Bee garden story')
+            ->assertJsonPath('content', $generatedContent);
+
+        $this->assertDatabaseCount('prompt_projects', 1);
+        $project = $owner->promptProjects()->firstOrFail();
+        $this->assertSame($payload['topic'], $project->brief['topic']);
+        $this->assertArrayNotHasKey('reference_frame', $project->brief);
+        $this->assertSame('gemini', $project->provider);
+        $this->assertSame('gemini-2.5-flash', $project->model);
+        $this->assertFalse($project->reference_frame_attached);
+        $this->assertSame(route('history.show', $project, false), $response->json('project.url'));
+
+        $this->actingAs($otherUser)
+            ->get(route('history.show', $project))
+            ->assertNotFound();
+        $this->actingAs($owner)
+            ->get(route('history.show', $project))
+            ->assertOk()
+            ->assertSee('Bee garden story')
+            ->assertSee('A stable opening shot.');
     }
 
     public function test_only_an_administrator_can_open_the_control_room(): void

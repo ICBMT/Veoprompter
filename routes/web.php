@@ -1,7 +1,10 @@
 <?php
 
+use App\Http\Controllers\AccountController;
 use App\Http\Controllers\Admin\AiSettingsController;
 use App\Http\Controllers\AuthController;
+use App\Http\Controllers\PasswordResetController;
+use App\Http\Controllers\PromptHistoryController;
 use App\Http\Controllers\StudioController;
 use Illuminate\Support\Facades\Route;
 
@@ -12,9 +15,29 @@ Route::post('/generate', [StudioController::class, 'generate'])
 
 Route::view('/guide', 'pages.guide')->name('guide');
 
-Route::get('/login', [AuthController::class, 'showLogin'])->name('login');
-Route::post('/login', [AuthController::class, 'login'])->middleware('throttle:6,1')->name('login.store');
-Route::post('/logout', [AuthController::class, 'logout'])->name('logout');
+Route::middleware('guest')->group(function (): void {
+    Route::get('/login', [AuthController::class, 'showLogin'])->name('login');
+    Route::post('/login', [AuthController::class, 'login'])->middleware('throttle:8,1')->name('login.store');
+    Route::get('/register', [AuthController::class, 'showRegister'])->name('register');
+    Route::post('/register', [AuthController::class, 'register'])->middleware('throttle:5,1')->name('register.store');
+
+    Route::get('/forgot-password', [PasswordResetController::class, 'requestForm'])->name('password.request');
+    Route::post('/forgot-password', [PasswordResetController::class, 'sendLink'])->middleware('throttle:3,1')->name('password.email');
+    Route::get('/reset-password/{token}', [PasswordResetController::class, 'resetForm'])->name('password.reset');
+    Route::post('/reset-password', [PasswordResetController::class, 'reset'])->middleware('throttle:5,1')->name('password.update');
+});
+
+Route::middleware('user.auth')->group(function (): void {
+    Route::post('/logout', [AuthController::class, 'logout'])->name('logout');
+
+    Route::get('/history', [PromptHistoryController::class, 'index'])->name('history.index');
+    Route::get('/history/{project}', [PromptHistoryController::class, 'show'])->name('history.show');
+    Route::delete('/history/{project}', [PromptHistoryController::class, 'destroy'])->name('history.destroy');
+
+    Route::get('/account', [AccountController::class, 'edit'])->name('account.edit');
+    Route::put('/account/profile', [AccountController::class, 'updateProfile'])->name('account.profile.update');
+    Route::put('/account/password', [AccountController::class, 'updatePassword'])->name('account.password.update');
+});
 
 Route::prefix('admin')
     ->name('admin.')

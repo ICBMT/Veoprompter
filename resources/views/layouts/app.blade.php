@@ -30,6 +30,21 @@
                 <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M3 5.4A2.4 2.4 0 0 1 5.4 3h9.2A2.4 2.4 0 0 1 17 5.4v9.2a2.4 2.4 0 0 1-2.4 2.4H5.4A2.4 2.4 0 0 1 3 14.6V5.4Z"/><path d="m8 6.6 5.1 3.4L8 13.4V6.6Z"/></svg>
                 <span>Prompt studio</span><span class="nav-pulse" aria-hidden="true"></span>
             </a>
+            @if($currentUser)
+                <a href="{{ route('history.index', [], false) }}" class="nav-link {{ request()->routeIs('history.*') ? 'is-active' : '' }}">
+                    <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M4 5.2A2.2 2.2 0 0 1 6.2 3h8.6A2.2 2.2 0 0 1 17 5.2v9.6a2.2 2.2 0 0 1-2.2 2.2H6.2A2.2 2.2 0 0 1 4 14.8V5.2Z"/><path d="M7 6.5h7M7 9.5h7M7 12.5h4M2.5 6v9"/></svg>
+                    <span>Prompt library</span>
+                </a>
+                <a href="{{ route('account.edit', [], false) }}" class="nav-link {{ request()->routeIs('account.*') ? 'is-active' : '' }}">
+                    <svg viewBox="0 0 20 20" aria-hidden="true"><circle cx="10" cy="6.2" r="3.2"/><path d="M3.5 17c.7-3.5 2.8-5.2 6.5-5.2s5.8 1.7 6.5 5.2"/></svg>
+                    <span>Account</span>
+                </a>
+            @else
+                <a href="{{ route('login', [], false) }}" class="nav-link {{ request()->routeIs('login') || request()->routeIs('register') ? 'is-active' : '' }}">
+                    <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M10 2.7 3.5 5.5v4.2c0 3.7 2.8 6.1 6.5 7.5 3.7-1.4 6.5-3.8 6.5-7.5V5.5L10 2.7Z"/><path d="M10 7v5m-2.5-2.5h5"/></svg>
+                    <span>Sign in / Create account</span>
+                </a>
+            @endif
             <a href="{{ route('guide', [], false) }}" class="nav-link {{ request()->routeIs('guide') ? 'is-active' : '' }}">
                 <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M4 3.5h12v13H4z"/><path d="M7 7h6M7 10h6M7 13h3"/></svg>
                 <span>Continuity guide</span>
@@ -51,14 +66,14 @@
             <span class="status-chevron" aria-hidden="true">{{ $aiReady ? '↗' : '· · ·' }}</span>
         </div>
         <div class="sidebar-account">
-            @if($isAdmin)
-                <span class="account-avatar">{{ mb_substr($currentUser->name, 0, 1) }}</span>
-                <div class="account-copy"><strong>{{ $currentUser->name }}</strong><small>Administrator</small></div>
-                <a class="account-action" href="{{ route('admin.settings', [], false) }}" aria-label="Open Control room" title="Control room">⚙</a>
+            @if($currentUser)
+                <span class="account-avatar {{ $isAdmin ? '' : 'account-avatar--guest' }}">{{ mb_substr($currentUser->name, 0, 1) }}</span>
+                <div class="account-copy"><strong>{{ $currentUser->name }}</strong><small>{{ $isAdmin ? 'Administrator' : 'Prompt maker' }}</small></div>
+                <a class="account-action" href="{{ $isAdmin ? route('admin.settings', [], false) : route('account.edit', [], false) }}" aria-label="{{ $isAdmin ? 'Open Control room' : 'Open account settings' }}" title="{{ $isAdmin ? 'Control room' : 'Account settings' }}">{{ $isAdmin ? '⚙' : '↗' }}</a>
             @else
                 <span class="account-avatar account-avatar--guest">V</span>
-                <div class="account-copy"><strong>VeoPrompter</strong><small>Consistency, by design</small></div>
-                <a class="account-action" href="{{ route('login', [], false) }}" aria-label="Administrator sign in" title="Administrator sign in">↗</a>
+                <div class="account-copy"><strong>Your creative space</strong><small>Sign in to save prompt kits</small></div>
+                <a class="account-action" href="{{ route('register', [], false) }}" aria-label="Create an account" title="Create an account">↗</a>
             @endif
         </div>
     </aside>
@@ -70,9 +85,13 @@
                 <span class="topbar-status"><span class="status-dot {{ $aiReady ? 'dot-ready' : '' }}"></span>{{ $aiReady ? 'SYSTEM READY' : 'SETUP REQUIRED' }}</span>
                 @if($isAdmin)
                     <a class="topbar-control" href="{{ route('admin.settings', [], false) }}"><span aria-hidden="true">⚙</span> Control room</a>
+                @endif
+                @if($currentUser)
+                    <a class="topbar-library" href="{{ route('history.index', [], false) }}">My library</a>
                     <form action="{{ route('logout', [], false) }}" method="post" class="logout-form">@csrf<button type="submit" class="topbar-logout">Sign out</button></form>
-                @elseif(!auth()->check())
-                    <a class="topbar-control" href="{{ route('login', [], false) }}">Admin sign in <span aria-hidden="true">↗</span></a>
+                @else
+                    <a class="topbar-quiet" href="{{ route('login', [], false) }}">Sign in</a>
+                    <a class="topbar-control topbar-join" href="{{ route('register', [], false) }}">Create account <span aria-hidden="true">↗</span></a>
                 @endif
             </div>
         </header>

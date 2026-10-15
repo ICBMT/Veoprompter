@@ -4,6 +4,8 @@
 
     const message = document.querySelector('[data-generation-message]');
     const resultSection = document.querySelector('[data-results]');
+    const historyNotice = document.querySelector('[data-history-notice]');
+    const readyLabel = document.querySelector('[data-ready-label]');
     const output = document.querySelector('[data-output-content]');
     const submitButton = form.querySelector('[data-submit-button]');
     const submitLabel = form.querySelector('[data-submit-label]');
@@ -15,6 +17,11 @@
     const storyTabs = [...document.querySelectorAll('[data-mode-tab]')];
     let activeMode = 'story';
     let latestOutput = '';
+
+    const hideMessage = () => {
+        message.hidden = true;
+        message.textContent = '';
+    };
 
     const setGroupEnabled = (group, enabled) => {
         group.hidden = !enabled;
@@ -86,20 +93,8 @@
     narrationRadios.forEach((radio) => radio.addEventListener('change', updateNarration));
     updateNarration();
 
-    const hideMessage = () => {
-        message.hidden = true;
-        message.textContent = '';
-    };
-
-    const showMessage = (text, linkToAdmin = false) => {
-        message.replaceChildren();
-        message.append(document.createTextNode(text));
-        if (linkToAdmin) {
-            const link = document.createElement('a');
-            link.href = '/login';
-            link.textContent = ' Admin sign in';
-            message.append(link);
-        }
+    const showMessage = (text) => {
+        message.replaceChildren(document.createTextNode(text));
         message.hidden = false;
     };
 
@@ -307,9 +302,35 @@
     form.addEventListener('input', discardStaleOutput);
     form.addEventListener('change', discardStaleOutput);
 
+    const renderHistoryNotice = (payload) => {
+        historyNotice.replaceChildren();
+        const link = document.createElement('a');
+
+        if (payload.saved_to_history && payload.project?.url) {
+            historyNotice.classList.remove('is-warning');
+            historyNotice.append(document.createTextNode('Saved to your prompt library. '));
+            link.href = payload.project.url;
+            link.textContent = 'Open project ↗';
+        } else if (payload.history_error) {
+            historyNotice.classList.add('is-warning');
+            historyNotice.append(document.createTextNode('Your prompts are ready, but we could not save this kit. Copy or download it now.'));
+            historyNotice.hidden = false;
+            return;
+        } else {
+            historyNotice.classList.remove('is-warning');
+            historyNotice.append(document.createTextNode('Want to keep this prompt kit? '));
+            link.href = '/register';
+            link.textContent = 'Create a free account ↗';
+        }
+
+        historyNotice.append(link);
+        historyNotice.hidden = false;
+    };
+
     form.addEventListener('submit', async (event) => {
         event.preventDefault();
         resultSection.hidden = true;
+        historyNotice.hidden = true;
         latestOutput = '';
         hideMessage();
         if (!form.reportValidity()) return;
@@ -341,7 +362,7 @@
             if (!response.ok) {
                 const validationError = payload.errors ? Object.values(payload.errors).flat()[0] : null;
                 const errorText = validationError || payload.message || 'The request could not be completed. Please try again.';
-                showMessage(errorText, response.status === 503);
+                showMessage(errorText);
                 return;
             }
 
@@ -349,6 +370,8 @@
             renderOutput(latestOutput);
             resultSection.hidden = false;
             document.querySelector('#results-heading').textContent = payload.mode === 'extend' ? 'The next shot is in frame.' : 'The story is in frame.';
+            readyLabel.textContent = payload.mode === 'extend' ? 'EXTENSION PROMPT READY' : 'PROMPT KIT READY';
+            renderHistoryNotice(payload);
             resultSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
         } catch {
             showMessage('We could not reach VeoPrompter. Check your connection and try again.');
@@ -415,4 +438,63 @@
 
     updateProviderFields();
     provider.addEventListener('change', () => updateProviderFields(true));
+})();
+
+(() => {
+    const copyFrom = async (element) => {
+        const text = element?.textContent ?? '';
+        if (navigator.clipboard?.writeText) {
+            await navigator.clipboard.writeText(text);
+            return;
+        }
+        const textarea = document.createElement('textarea');
+        textarea.value = text;
+        textarea.setAttribute('readonly', '');
+        textarea.style.position = 'fixed';
+        textarea.style.opacity = '0';
+        document.body.append(textarea);
+        textarea.select();
+        const copied = document.execCommand('copy');
+        textarea.remove();
+        if (!copied) throw new Error('Clipboard access is unavailable.');
+    };
+
+    document.querySelectorAll('[data-copy-target]').forEach((button) => {
+        button.addEventListener('click', async () => {
+            const original = button.innerHTML;
+            try {
+                await copyFrom(document.querySelector(button.dataset.copyTarget));
+                button.textContent = '✓ Copied';
+                button.classList.add('is-copied');
+                window.setTimeout(() => {
+                    button.innerHTML = original;
+                    button.classList.remove('is-copied');
+                }, 1500);
+            } catch {
+                button.textContent = 'Select the text to copy';
+            }
+        });
+    });
+
+    document.querySelectorAll('[data-download-target]').forEach((button) => {
+        button.addEventListener('click', () => {
+            const text = document.querySelector(button.dataset.downloadTarget)?.textContent ?? '';
+            if (!text) return;
+            const blob = new Blob([text], { type: 'text/plain;charset=utf-8' });
+            const url = URL.createObjectURL(blob);
+            const anchor = document.createElement('a');
+            anchor.href = url;
+            anchor.download = button.dataset.downloadName || 'veoprompter-prompt-kit.txt';
+            document.body.append(anchor);
+            anchor.click();
+            anchor.remove();
+            URL.revokeObjectURL(url);
+        });
+    });
+
+    document.querySelectorAll('form[data-confirm]').forEach((form) => {
+        form.addEventListener('submit', (event) => {
+            if (!window.confirm(form.dataset.confirm)) event.preventDefault();
+        });
+    });
 })();

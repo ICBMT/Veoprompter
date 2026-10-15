@@ -11,6 +11,16 @@ class MasterSpecificationTest extends TestCase
         $specification = file_get_contents(resource_path('prompts/master-spec.txt'));
 
         $this->assertIsString($specification);
+
+        $source = file_get_contents(base_path('prompt.txt'));
+        $opening = 'content = r"""';
+        $contentStart = is_string($source) ? strpos($source, $opening) : false;
+        $contentEnd = is_string($source) ? strrpos($source, '"""') : false;
+        $this->assertNotFalse($contentStart, 'The root prompt.txt master specification must be present.');
+        $this->assertNotFalse($contentEnd, 'The root prompt.txt master specification must be complete.');
+        $rootSpecification = substr($source, $contentStart + strlen($opening), $contentEnd - ($contentStart + strlen($opening)));
+        $this->assertSame($rootSpecification, $specification, 'The AI prompt used at runtime must remain an exact copy of root prompt.txt.');
+
         $this->assertStringContainsString('MANDATORY CONTINUATION INSTRUCTION', $specification);
         $this->assertStringContainsString('Whatever was already in motion keeps its direction and speed through the cut rather than restarting', $specification);
         $this->assertStringContainsString('Never generate images or videos.', $specification);

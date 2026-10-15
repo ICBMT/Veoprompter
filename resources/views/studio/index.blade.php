@@ -41,13 +41,13 @@
     </section>
 
     @if(!$aiReady)
-        <div class="connection-notice" role="status"><span class="connection-notice-icon">!</span><span><strong>One last setup step.</strong> An administrator needs to connect an AI provider before prompts can be generated.</span><a href="{{ $isAdmin ? route('admin.settings', [], false) : route('login', [], false) }}">{{ $isAdmin ? 'Open Control room' : 'Admin sign in' }} <span aria-hidden="true">↗</span></a></div>
+        <div class="connection-notice" role="status"><span class="connection-notice-icon">!</span><span><strong>One last setup step.</strong> An administrator needs to connect an AI provider before prompts can be generated.</span>@if($isAdmin)<a href="{{ route('admin.settings', [], false) }}">Open Control room <span aria-hidden="true">↗</span></a>@elseif(auth()->guest())<a href="{{ route('login', [], false) }}">Admin sign in <span aria-hidden="true">↗</span></a>@else<span class="connection-contact">Contact your site administrator.</span>@endif</div>
     @endif
 
     <section class="workspace-section" aria-labelledby="build-heading">
         <div class="section-heading-row">
             <div><span class="section-index">01 <i>/</i> START WITH A BRIEF</span><h2 id="build-heading">What are we making?</h2></div>
-            <span class="secure-note"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M4.5 7V5.2a3.5 3.5 0 0 1 7 0V7M3.5 7h9v7h-9z"/></svg> Your brief stays on this request</span>
+            <span class="secure-note"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M4.5 7V5.2a3.5 3.5 0 0 1 7 0V7M3.5 7h9v7h-9z"/></svg> @auth Successful kits save to your private library @else Your brief stays on this request @endauth</span>
         </div>
 
         <div class="mode-tabs" role="tablist" aria-label="Choose a prompt workflow">
@@ -68,8 +68,12 @@
                 <section class="form-panel brief-panel">
                     <div class="panel-heading"><span class="panel-step">A</span><div><h3>Your idea</h3><p>Give the story a clear learning destination.</p></div></div>
 
+                    <label class="field-label" for="project_title">Project name <span class="optional">OPTIONAL</span></label>
+                    <input class="text-input input-secondary" id="project_title" name="project_title" type="text" maxlength="120" placeholder="A short name for your prompt library">
+                    <span class="field-hint field-hint--bottom">Leave it blank and we’ll use your topic as the title.</span>
+
                     <div class="mode-fields" data-story-fields>
-                        <label class="field-label" for="topic">What should the video teach? <span class="required-star">*</span></label>
+                        <label class="field-label field-label--spaced" for="topic">What should the video teach? <span class="required-star">*</span></label>
                         <input class="text-input input-large" id="topic" name="topic" type="text" maxlength="250" required placeholder="For example, how bees help flowers grow" autocomplete="off">
                         <span class="field-hint">A topic, question, or idea is plenty. The AI will shape it into a story.</span>
 
@@ -166,7 +170,8 @@
             <div class="results-header"><div><span class="section-index">02 <i>/</i> YOUR COPY-READY PLAN</span><h2 id="results-heading">The story is in frame.</h2><p>Each prompt is self-contained. Copy a section, then take it straight to Flow.</p></div>
                 <div class="results-actions"><button class="button-secondary" type="button" data-download-output><span aria-hidden="true">↓</span> Save .txt</button><button class="button-secondary button-copy-all" type="button" data-copy-all><span aria-hidden="true">▢</span> Copy all</button></div>
             </div>
-            <div class="result-meta"><span class="result-status"><i></i> PROMPT KIT READY</span><span>TEXT ONLY · NO VIDEO GENERATED</span></div>
+            <div class="result-meta"><span class="result-status"><i></i> <span data-ready-label>PROMPT KIT READY</span></span><span>TEXT ONLY · NO VIDEO GENERATED</span></div>
+            <div class="history-result-notice" data-history-notice role="status" aria-live="polite" hidden></div>
             <div class="output-content" data-output-content></div>
         </section>
 
