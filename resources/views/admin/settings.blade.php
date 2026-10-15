@@ -7,14 +7,14 @@
 @php($selectedProvider = old('provider', $settings->provider))
 <div class="admin-page">
     <section class="admin-hero">
-        <div><span class="section-index">ADMINISTRATOR <i>/</i> CONNECTION SETTINGS</span><h1>Control room</h1><p>Choose the AI that powers prompt generation. Provider credentials are encrypted in the database and only used by the server.</p></div>
+        <div><span class="section-index">ADMINISTRATOR <i>/</i> CONNECTION SETTINGS</span><h1>Control room</h1><p>Choose the AI that powers prompt generation. Load models for your key, test a model with a tiny text request, then save when it works.</p></div>
         <div class="admin-ready {{ $aiReady ? '' : 'is-offline' }}"><i></i>{{ $aiReady ? 'GENERATION ENABLED' : 'CONNECTION NOT CONFIGURED' }}</div>
     </section>
 
     <section class="admin-card" aria-labelledby="connection-heading">
         <header class="admin-card-header"><span class="admin-card-icon"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M10 2.8 3.5 5.5v4.3c0 3.8 2.8 6.2 6.5 7.4 3.7-1.2 6.5-3.6 6.5-7.4V5.5L10 2.8Z"/><path d="m7.4 10 1.8 1.8 3.6-3.7"/></svg></span><div><h2 id="connection-heading">AI provider connection</h2><p>Keys stay server-side. The prompt studio never receives your credential.</p></div></header>
 
-        <form class="admin-form" action="{{ route('admin.settings.update', [], false) }}" method="post">
+        <form class="admin-form" action="{{ route('admin.settings.update', [], false) }}" method="post" data-provider-settings-form data-models-url="{{ route('admin.models', [], false) }}" data-test-url="{{ route('admin.connection.test', [], false) }}">
             @csrf
             @method('PUT')
             <div class="admin-form-grid">
@@ -26,10 +26,23 @@
                     </select>
                     @error('provider')<p class="admin-error">{{ $message }}</p>@enderror
                 </div>
-                <div class="admin-field">
-                    <label class="field-label" for="model">Model ID</label>
-                    <input class="text-input" id="model" name="model" type="text" maxlength="150" required value="{{ old('model', $settings->model) }}" data-model-input data-gemini-default="gemini-2.5-flash" data-openai-default="gpt-4.1-mini" placeholder="gemini-2.5-flash">
-                    <span class="field-hint" data-model-hint>Use a model available to this API key. Example: <code>gemini-2.5-flash</code>.</span>
+                <div class="admin-field admin-model-field">
+                    @php($currentModel = old('model', $settings->model ?: ($selectedProvider === 'openai' ? 'gpt-4.1-mini' : 'gemini-2.5-flash')))
+                    <label class="field-label" for="model">Available model</label>
+                    <select class="text-input select-input" id="model" name="model" required data-model-input data-gemini-default="gemini-2.5-flash" data-openai-default="gpt-4.1-mini">
+                        <option value="{{ $currentModel }}" selected>{{ $currentModel }} — current selection</option>
+                    </select>
+                    <div class="model-picker-actions">
+                        <button class="button-secondary" type="button" data-load-models>Load available models</button>
+                        <button class="button-secondary" type="button" data-toggle-manual-model>Enter model ID manually</button>
+                        <button class="button-secondary button-model-test" type="button" data-test-connection>Test selected model</button>
+                    </div>
+                    <div class="manual-model-wrap" data-manual-model-wrap hidden>
+                        <label class="field-label" for="manual_model">Model ID</label>
+                        <input class="text-input" id="manual_model" type="text" maxlength="150" value="{{ $currentModel }}" autocomplete="off" disabled>
+                    </div>
+                    <p class="model-feedback" data-model-feedback role="status" aria-live="polite">Enter a key to load its models automatically, or click “Load available models” to use a saved key.</p>
+                    <span class="field-hint" data-model-hint>Model catalogues vary by provider. Test a selection to confirm it can generate text; the test does not save settings or create a prompt.</span>
                     @error('model')<p class="admin-error">{{ $message }}</p>@enderror
                 </div>
                 <div class="admin-field admin-field--wide" data-base-url-field @if($selectedProvider !== 'openai') hidden @endif>
@@ -41,7 +54,7 @@
                 <div class="admin-field admin-field--wide">
                     <label class="field-label" for="api_key">API key <span class="optional">NEVER DISPLAYED AFTER SAVING</span></label>
                     <input class="text-input" id="api_key" name="api_key" type="password" maxlength="4096" autocomplete="new-password" placeholder="{{ $settings->apiKeyConfigured() ? 'Saved key is hidden — paste a new key to rotate it' : 'Paste your provider API key' }}">
-                    <span class="field-hint">{{ $settings->apiKeyConfigured() ? 'A key is already saved. Leave this blank to keep it unchanged.' : 'No key is saved yet. Add one to enable prompt generation.' }} It is encrypted at rest using your Laravel APP_KEY.</span>
+                    <span class="field-hint">{{ $settings->apiKeyConfigured() ? 'A saved key is hidden. Leave this blank to reuse it with the same provider and endpoint.' : 'Add a key to load available models and enable prompt generation.' }} The key is sent only to this server, encrypted at rest, and never sent from your browser directly to the provider.</span>
                     @error('api_key')<p class="admin-error">{{ $message }}</p>@enderror
                 </div>
                 @if($settings->apiKeyConfigured())
@@ -51,7 +64,7 @@
                 @endif
             </div>
 
-            <div class="admin-help"><span aria-hidden="true">ⓘ</span><div><strong>Keep this key private.</strong> The browser never sees it, prompt responses do not include it, and logs do not record its value. Use HTTPS in production and keep <code>APP_KEY</code> backed up; changing it makes existing encrypted credentials unreadable.</div></div>
+            <div class="admin-help"><span aria-hidden="true">ⓘ</span><div><strong>Keep this key private.</strong> It is sent only to this server; provider requests run server-side. The saved key is never re-rendered, prompt responses do not include it, and logs do not record its value. Use HTTPS in production and keep <code>APP_KEY</code> backed up; changing it makes existing encrypted credentials unreadable.</div></div>
             <div class="admin-form-footer"><p>Only administrators can view or update provider configuration.</p><button class="button-primary" type="submit"><span>Save connection</span><span class="button-icon" aria-hidden="true">↗</span></button></div>
         </form>
     </section>

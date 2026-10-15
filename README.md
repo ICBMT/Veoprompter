@@ -59,7 +59,7 @@ Open `http://127.0.0.1:8000`. The default development mailer writes reset emails
    ```
 
    The command asks for a password without echoing it; use at least 12 characters. If the address already belongs to an account, it enables admin access without changing that account's password. Sign in at `/login` and open **Control room**.
-7. In **Control room → AI provider connection**, configure Google Gemini or an OpenAI-compatible provider. The app sends requests from the Laravel server over HTTPS. The optional extension-frame image is forwarded for that request and not retained.
+7. In **Control room → AI provider connection**, choose Google Gemini or an OpenAI-compatible provider and enter its API key. The model list loads after you finish typing; you can also click **Load available models** to use a key already saved for that same provider and endpoint. Select a model, click **Test selected model** to get a short text reply, then save the connection. The test does not save settings or create a prompt-history item. If an API does not expose a model catalogue, you can enter its model ID manually. The key is sent to this app's server for model discovery/testing; the browser never calls the provider directly. The optional extension-frame image is forwarded for prompt generation and not retained.
 
 Public account registration is enabled. Configure your deployment's privacy notice and account-retention policy for your audience. The app does not require registration to use the studio.
 
@@ -80,16 +80,16 @@ VeoPrompter calls Gemini's `generateContent` endpoint from the Laravel server.
 - Model: for example `gpt-4.1-mini`
 - API key: the key for the selected provider
 
-The endpoint must use public HTTPS and may not include embedded credentials. The selected model/provider must support image input if you want to attach a final frame in extension mode.
+The endpoint must use public HTTPS and may not include embedded credentials. The model selector fetches model IDs from the configured provider (Gemini results are filtered to models that support `generateContent`); if the provider does not support discovery, enter its model ID manually. The short test verifies that the selected key, endpoint, model, and text response work before saving. Image input is not required for the test; the selected provider/model must support image input only if you want to attach a final frame in extension mode.
 
-The API key field is write-only in the UI: after saving, VeoPrompter shows only whether a key exists. Stored credentials use Laravel's encrypted cast. **Back up `APP_KEY` securely and do not change it after saving provider keys**; ciphertext cannot be decrypted with a different key.
+The API key field is write-only in the UI: after saving, VeoPrompter shows only whether a key exists. A saved key is reused for model discovery or tests only with its original provider and endpoint; changing providers/endpoints requires re-entering it. Temporary keys entered for discovery/testing are not saved. Stored credentials use Laravel's encrypted cast. **Back up `APP_KEY` securely and do not change it after saving provider keys**; ciphertext cannot be decrypted with a different key.
 
 ## Accounts, history, and data handling
 
 - Registration, sign-in, sign-out, profile updates, password changes, and password reset are available from the account pages. Passwords are hashed by Laravel; reset links are delivered through the configured mail transport.
 - A successful generation is saved only for the signed-in user. Guests receive a link to create an account; their generation is not persisted.
 - Prompt kits contain the submitted text brief, generated text response, provider/model label, and a flag indicating whether a reference frame was used. The uploaded image bytes are **not** stored. Users can open and delete their own kits; another account cannot read or delete them through the application.
-- API keys are sent only from the server to the configured provider over HTTPS. They are not placed in page markup, browser JavaScript, prompts, or normal application responses.
+- The admin setup form sends a key to this server over HTTPS for discovery/testing; provider requests then run from the server over HTTPS. Keys are not placed in page markup or prompts, returned in normal application responses, or written to application logs.
 - Generation, registration, sign-in, and reset-link endpoints are rate-limited. Uploaded extension frames are limited to 8 MB and accepted as JPG, PNG, or WEBP.
 - Use HTTPS in production, keep `APP_DEBUG=false`, restrict database/server access, and protect backups containing user prompt history and `APP_KEY`.
 
@@ -99,7 +99,7 @@ The API key field is write-only in the UI: after saving, VeoPrompter shows only 
 php artisan test
 ```
 
-The test suite covers the master prompt's synchronization with root `prompt.txt`, public studio and account flows, private history ownership, admin-only provider configuration, encrypted credentials, and provider request construction. Run the suite in an environment with PHP, Composer dependencies, and PDO SQLite installed.
+The test suite covers the master prompt's synchronization with root `prompt.txt`, public studio and account flows, private history ownership, admin-only provider configuration, encrypted credentials, model-list discovery, test-connection requests, and provider request construction. Run the suite in an environment with PHP, Composer dependencies, and PDO SQLite installed.
 
 ## Project layout
 

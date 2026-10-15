@@ -44,5 +44,7 @@ Route::prefix('admin')
     ->middleware('admin')
     ->group(function (): void {
         Route::get('/', [AiSettingsController::class, 'edit'])->name('settings');
+        Route::post('/models', [AiSettingsController::class, 'models'])->middleware('throttle:8,1')->name('models');
+        Route::post('/test-connection', [AiSettingsController::class, 'testConnection'])->middleware('throttle:5,1')->name('connection.test');
         Route::put('/settings', [AiSettingsController::class, 'update'])->name('settings.update');
     });

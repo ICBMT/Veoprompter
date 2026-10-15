@@ -411,33 +411,212 @@
 })();
 
 (() => {
-    const provider = document.querySelector('[data-provider-select]');
-    if (!provider) return;
+    const form = document.querySelector('[data-provider-settings-form]');
+    if (!form) return;
 
-    const baseField = document.querySelector('[data-base-url-field]');
-    const baseInput = document.querySelector('#base_url');
-    const modelInput = document.querySelector('[data-model-input]');
-    const modelHint = document.querySelector('[data-model-hint]');
-    let lastSuggested = '';
+    const provider = form.querySelector('[data-provider-select]');
+    const baseField = form.querySelector('[data-base-url-field]');
+    const baseInput = form.querySelector('#base_url');
+    const apiKeyInput = form.querySelector('#api_key');
+    const modelSelect = form.querySelector('[data-model-input]');
+    const modelHint = form.querySelector('[data-model-hint]');
+    const modelFeedback = form.querySelector('[data-model-feedback]');
+    const loadModelsButton = form.querySelector('[data-load-models]');
+    const testButton = form.querySelector('[data-test-connection]');
+    const manualModelWrap = form.querySelector('[data-manual-model-wrap]');
+    const manualModelInput = form.querySelector('#manual_model');
+    const manualToggle = form.querySelector('[data-toggle-manual-model]');
+    const csrfToken = document.querySelector('meta[name="csrf-token"]').content;
+    let providerRequestId = 0;
+    let loadTimer = null;
+    let manualMode = false;
+    let previousBaseUrl = baseInput.value;
 
-    const updateProviderFields = (updateModel = false) => {
+    const currentModelInput = () => manualMode ? manualModelInput : modelSelect;
+
+    const setModelOptions = (models, preferred) => {
+        const values = new Set(models.map((model) => model.id));
+        if (preferred && !values.has(preferred)) {
+            models.unshift({ id: preferred, label: `${preferred} — current model` });
+        }
+
+        modelSelect.replaceChildren();
+        models.forEach((model) => {
+            const option = document.createElement('option');
+            option.value = model.id;
+            option.textContent = model.label;
+            modelSelect.append(option);
+        });
+
+        if (preferred && values.has(preferred)) modelSelect.value = preferred;
+        else if (models[0]) modelSelect.value = models[0].id;
+    };
+
+    const updateProviderFields = (resetModel = false) => {
         const isOpenAi = provider.value === 'openai';
         baseField.hidden = !isOpenAi;
         baseInput.disabled = !isOpenAi;
-        const suggestion = isOpenAi ? modelInput.dataset.openaiDefault : modelInput.dataset.geminiDefault;
-        if (updateModel && (!modelInput.value || modelInput.value === lastSuggested || modelInput.value === modelInput.dataset.geminiDefault || modelInput.value === modelInput.dataset.openaiDefault)) {
-            modelInput.value = suggestion;
+        const suggestion = isOpenAi ? modelSelect.dataset.openaiDefault : modelSelect.dataset.geminiDefault;
+
+        if (resetModel) {
+            setModelOptions([{ id: suggestion, label: `${suggestion} — recommended starting model` }], suggestion);
+            modelFeedback.textContent = 'Enter the key for this provider to load its available models.';
         }
-        lastSuggested = suggestion;
-        modelHint.replaceChildren();
-        modelHint.append(document.createTextNode(isOpenAi ? 'Use a model available to this API. Example: ' : 'Use a model available to this API key. Example: '));
-        const modelExample = document.createElement('code');
-        modelExample.textContent = suggestion;
-        modelHint.append(modelExample, document.createTextNode('.'));
+
+        modelHint.textContent = 'Choose a model returned by your provider, then test it before saving. You can also enter a model ID manually.';
+    };
+
+    const requestBody = () => {
+        const body = new FormData();
+        body.append('_token', csrfToken);
+        body.append('provider', provider.value);
+        body.append('base_url', provider.value === 'openai' ? baseInput.value : '');
+        body.append('api_key', apiKeyInput.value);
+        return body;
+    };
+
+    const postJson = async (url, body) => {
+        const response = await fetch(url, {
+            method: 'POST',
+            body,
+            headers: {
+                'Accept': 'application/json',
+                'X-Requested-With': 'XMLHttpRequest',
+                'X-CSRF-TOKEN': csrfToken,
+            },
+            credentials: 'same-origin',
+        });
+        const payload = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(payload.message || `The request failed (HTTP ${response.status}).`);
+        return payload;
+    };
+
+    const loadModels = async () => {
+        window.clearTimeout(loadTimer);
+        const requestId = ++providerRequestId;
+        loadModelsButton.disabled = true;
+        testButton.disabled = true;
+        modelFeedback.classList.remove('is-success', 'is-error');
+        modelFeedback.textContent = 'Checking the key and loading models securely…';
+
+        try {
+            const payload = await postJson(form.dataset.modelsUrl, requestBody());
+            if (requestId !== providerRequestId) return;
+
+            if (!Array.isArray(payload.models) || payload.models.length === 0) {
+                modelFeedback.classList.add('is-error');
+                modelFeedback.textContent = 'The provider returned no model IDs. Check the provider settings or enter a model ID manually.';
+                return;
+            }
+
+            const previous = currentModelInput().value;
+            setModelOptions(payload.models, previous);
+            modelFeedback.classList.add('is-success');
+            modelFeedback.textContent = `${payload.models.length} model${payload.models.length === 1 ? '' : 's'} found. Select one from the list, then test it.`;
+        } catch (error) {
+            if (requestId !== providerRequestId) return;
+            modelFeedback.classList.add('is-error');
+            modelFeedback.textContent = error.message || 'Could not load the model list. Check the key and endpoint.';
+        } finally {
+            if (requestId === providerRequestId) {
+                loadModelsButton.disabled = false;
+                testButton.disabled = false;
+            }
+        }
+    };
+
+    const scheduleModelLoad = () => {
+        window.clearTimeout(loadTimer);
+        providerRequestId += 1;
+        loadModelsButton.disabled = false;
+        testButton.disabled = false;
+        if (!apiKeyInput.value.trim()) {
+            modelFeedback.classList.remove('is-success', 'is-error');
+            modelFeedback.textContent = 'Enter this provider’s key, or click Load to use a saved key for the same provider and endpoint.';
+            return;
+        }
+        modelFeedback.classList.remove('is-success', 'is-error');
+        modelFeedback.textContent = 'Key entered. Loading available models securely…';
+        loadTimer = window.setTimeout(loadModels, 800);
+    };
+
+    const toggleManualModel = () => {
+        manualMode = !manualMode;
+        if (manualMode) {
+            manualModelInput.value = modelSelect.value;
+            manualModelInput.name = 'model';
+            manualModelInput.disabled = false;
+            manualModelInput.required = true;
+            modelSelect.removeAttribute('name');
+            modelSelect.disabled = true;
+            modelSelect.required = false;
+            manualModelWrap.hidden = false;
+            manualToggle.textContent = 'Choose from model list';
+            manualModelInput.focus();
+            return;
+        }
+
+        const manualValue = manualModelInput.value.trim();
+        if (manualValue && ![...modelSelect.options].some((option) => option.value === manualValue)) {
+            const option = document.createElement('option');
+            option.value = manualValue;
+            option.textContent = `${manualValue} — manual model ID`;
+            modelSelect.append(option);
+        }
+        if (manualValue) modelSelect.value = manualValue;
+        modelSelect.name = 'model';
+        modelSelect.disabled = false;
+        modelSelect.required = true;
+        manualModelInput.removeAttribute('name');
+        manualModelInput.disabled = true;
+        manualModelInput.required = false;
+        manualModelWrap.hidden = true;
+        manualToggle.textContent = 'Enter model ID manually';
+        modelSelect.focus();
+    };
+
+    const testConnection = async () => {
+        window.clearTimeout(loadTimer);
+        const requestId = ++providerRequestId;
+        const body = requestBody();
+        body.append('model', currentModelInput().value.trim());
+        testButton.disabled = true;
+        modelFeedback.classList.remove('is-success', 'is-error');
+        modelFeedback.textContent = 'Sending a short test request to the selected model…';
+
+        try {
+            const payload = await postJson(form.dataset.testUrl, body);
+            if (requestId !== providerRequestId) return;
+            modelFeedback.classList.add('is-success');
+            modelFeedback.textContent = `${payload.message} Test reply: “${payload.reply}”`;
+        } catch (error) {
+            if (requestId !== providerRequestId) return;
+            modelFeedback.classList.add('is-error');
+            modelFeedback.textContent = error.message || 'The model test failed. Check the key, model, and endpoint.';
+        } finally {
+            if (requestId === providerRequestId) testButton.disabled = false;
+        }
     };
 
     updateProviderFields();
-    provider.addEventListener('change', () => updateProviderFields(true));
+    provider.addEventListener('change', () => {
+        apiKeyInput.value = '';
+        if (manualMode) toggleManualModel();
+        updateProviderFields(true);
+        scheduleModelLoad();
+    });
+    apiKeyInput.addEventListener('change', scheduleModelLoad);
+    baseInput.addEventListener('change', () => {
+        if (baseInput.value !== previousBaseUrl) {
+            previousBaseUrl = baseInput.value;
+            apiKeyInput.value = '';
+            modelFeedback.textContent = 'Endpoint changed. Re-enter its API key before loading models or testing.';
+        }
+        scheduleModelLoad();
+    });
+    loadModelsButton.addEventListener('click', loadModels);
+    manualToggle.addEventListener('click', toggleManualModel);
+    testButton.addEventListener('click', testConnection);
 })();
 
 (() => {

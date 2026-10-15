@@ -140,6 +140,22 @@ class PromptStudioTest extends TestCase
             ->assertSee('A stable opening shot.');
     }
 
+    public function test_provider_http_503_is_reported_as_temporary_unavailability_not_as_an_api_key_error(): void
+    {
+        Http::fake([
+            'https://generativelanguage.googleapis.com/*' => Http::response(['error' => ['message' => 'temporary overload']], 503),
+        ]);
+        AiSetting::create([
+            'provider' => 'gemini',
+            'model' => 'gemini-2.5-flash',
+            'api_key' => 'test-provider-secret',
+        ]);
+
+        $this->postJson(route('studio.generate'), $this->storyBrief())
+            ->assertStatus(502)
+            ->assertJsonPath('message', 'The AI provider is temporarily unavailable (HTTP 503). Wait a moment and try again. If it continues, check the provider status and quota; the API key is not necessarily the cause.');
+    }
+
     public function test_only_an_administrator_can_open_the_control_room(): void
     {
         $user = User::factory()->create();

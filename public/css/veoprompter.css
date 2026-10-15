@@ -361,6 +361,16 @@ button { color: inherit; }
 .admin-form-footer p { margin: 0; color: #7c837c; font-size: 9px; }
 .admin-form-footer .button-primary { min-width: 151px; }
 .admin-error { margin: 6px 0 0; color: var(--danger); font-size: 9px; }
+.admin-model-field .text-input { margin-bottom: 0; }
+.model-picker-actions { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.model-picker-actions .button-secondary { min-height: 30px; padding: 0 9px; font-size: 8px; }
+.model-picker-actions .button-model-test { color: #d8e8c6; border-color: #405235; background: #1a2118; }
+.model-picker-actions .button-model-test:hover { color: var(--accent); border-color: #627d45; }
+.model-picker-actions button:disabled { cursor: wait; opacity: .6; }
+.manual-model-wrap { margin-top: 11px; }
+.model-feedback { margin: 9px 0 0; color: #899187; font-size: 9px; line-height: 1.6; }
+.model-feedback.is-success { color: #c3dda7; }
+.model-feedback.is-error { color: #ffb6a5; }
 .admin-divider-label { display: flex; align-items: center; gap: 10px; margin: 25px 0 12px; color: #81877f; font-family: var(--mono); font-size: 8px; letter-spacing: .8px; }
 .admin-divider-label::before, .admin-divider-label::after { height: 1px; flex: 1; background: #282e32; content: ""; }
 .admin-method-card { display: flex; align-items: flex-start; gap: 13px; padding: 15px 16px; border: 1px solid #292f34; border-radius: 8px; background: #101418; }

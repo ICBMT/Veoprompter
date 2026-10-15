@@ -40,7 +40,7 @@ class PromptGenerationService
                 'status' => $response->status(),
             ]);
 
-            throw new PromptGenerationException('The AI provider could not complete this request (HTTP '.$response->status().'). Check the model, endpoint, and API key in the Control room.');
+            throw new PromptGenerationException($this->providerFailureMessage($response->status()));
         }
 
         $text = $settings->provider === 'gemini'
@@ -210,5 +210,18 @@ POLICY;
         }
 
         return '';
+    }
+
+    private function providerFailureMessage(int $status): string
+    {
+        return match (true) {
+            $status === 400 => 'The provider rejected this request. Check that the selected model supports text generation and that your key has access to it.',
+            $status === 401, $status === 403 => 'The provider rejected the API key or denied model access. Re-enter the key in the Control room and check its permissions.',
+            $status === 404 => 'The provider could not find the configured model or endpoint. Verify the model selection and API base URL in the Control room.',
+            $status === 413 => 'The provider rejected the request as too large. If you attached a frame image, try a smaller image.',
+            $status === 429 => 'The provider rate limit or quota was reached. Check billing and quota, then retry after a short wait.',
+            $status >= 500 => 'The AI provider is temporarily unavailable (HTTP '.$status.'). Wait a moment and try again. If it continues, check the provider status and quota; the API key is not necessarily the cause.',
+            default => 'The AI provider returned HTTP '.$status.'. Check the model and provider settings in the Control room, then try again.',
+        };
     }
 }
