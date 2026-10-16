@@ -76,7 +76,7 @@ function fallback(raw, reason) {
 }
 
 /**
- * Split a VeoPrompter result into the context and individually pasteable clips.
+ * Split a VeoPrompter result into the context and individually copy-ready clips.
  * Section 9 onward is attached to the final clip so the Flow handoff notes stay
  * with the clip sequence without becoming a separate chat message.
  *
@@ -111,7 +111,7 @@ export function parsePrompt(raw) {
             };
         }
 
-        return fallback(text, 'This format was not recognized, so the complete prompt will be pasted as one part.');
+        return fallback(text, 'This format was not recognized, so the complete prompt will be copied as one part.');
     }
 
     const firstClipLine = clipHeadings[0].line;
@@ -158,7 +158,7 @@ export function parsePrompt(raw) {
 
     const clipCount = chunks.filter((chunk) => chunk.kind === 'clip').length;
     if (!clipCount) {
-        return fallback(text, 'Clip labels were found, but their prompts were empty. The complete prompt will be pasted as one part.');
+        return fallback(text, 'Clip labels were found, but their prompts were empty. The complete prompt will be copied as one part.');
     }
 
     const hasHandoff = sectionEnd < lines.length;

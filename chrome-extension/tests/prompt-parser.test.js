@@ -52,7 +52,7 @@ test('separates Sections 1–7 and any number of clip prompts, appending handoff
     assert.match(parsed.notice, /4 clip prompts separated/);
 });
 
-test('keeps a one-clip result pasteable and includes trailing continuity sections', () => {
+test('keeps a one-clip result copy-ready and includes trailing continuity sections', () => {
     const parsed = parsePrompt([
         'SECTION 1 — PROJECT OVERVIEW',
         'The idea.',
@@ -85,14 +85,14 @@ test('extracts the self-contained copy block from an extension prompt', () => {
     assert.equal(parsed.chunks[0].text, 'Continue the exact scene from the shown frame. Keep the robot and lighting unchanged.');
 });
 
-test('falls back to one complete paste when the generated output is not in the recognized format', () => {
+test('falls back to one complete copy when the generated output is not in the recognized format', () => {
     const raw = 'A complete single prompt with no numbered clip sections.';
     const parsed = parsePrompt(raw);
 
     assert.equal(parsed.format, 'complete-prompt');
     assert.equal(parsed.chunks.length, 1);
     assert.equal(parsed.chunks[0].text, raw);
-    assert.match(parsed.notice, /complete prompt will be pasted as one part/);
+    assert.match(parsed.notice, /complete prompt will be copied as one part/);
 });
 
 test('reports empty input without throwing', () => {

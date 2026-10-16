@@ -406,7 +406,7 @@
             if (label) label.textContent = response?.ok ? 'Saved in extension' : originalLabel;
             flowTransferStatus.dataset.kind = response?.ok ? 'success' : 'error';
             flowTransferStatus.textContent = response?.ok
-                ? `${response.replacedPrevious ? 'Replaced the previous extension prompt. ' : ''}Saved ${response.chunkCount} pasteable part${response.chunkCount === 1 ? '' : 's'} locally. Open Google Flow and click the extension to paste the first part.`
+                ? `${response.replacedPrevious ? 'Replaced the previous extension prompt. ' : ''}Saved ${response.chunkCount} part${response.chunkCount === 1 ? '' : 's'} locally. Open the extension on any tab to copy the first part; Google Flow can stay closed.`
                 : (response?.message || 'The extension did not respond. Connect it to this site, then try again.');
             flowTransferStatus.hidden = false;
             window.setTimeout(() => {

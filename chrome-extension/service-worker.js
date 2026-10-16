@@ -31,7 +31,7 @@ async function receivePrompt(message, sender) {
 
     const parsed = parsePrompt(message.prompt);
     if (!parsed.chunks.length || parsed.chunks.some((chunk) => !chunk.text.trim())) {
-        return { ok: false, message: 'The prompt could not be divided into pasteable parts.' };
+        return { ok: false, message: 'The prompt could not be divided into copy-ready parts.' };
     }
 
     const { [ACTIVE_PROMPT_KEY]: previousPrompt = null } = await chrome.storage.local.get(ACTIVE_PROMPT_KEY);
@@ -48,7 +48,6 @@ async function receivePrompt(message, sender) {
         notice: parsed.notice,
         chunks: parsed.chunks,
         nextIndex: 0,
-        lastPaste: null,
     };
 
     await chrome.storage.local.set({ [ACTIVE_PROMPT_KEY]: prompt });

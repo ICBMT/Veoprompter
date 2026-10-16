@@ -1,16 +1,13 @@
 {
   "manifest_version": 3,
   "name": "VeoPrompter for Google Flow",
-  "version": "1.0.0",
-  "description": "Paste VeoPrompter context and clip prompts into Google Flow one part at a time.",
+  "version": "1.1.0",
+  "description": "Copy VeoPrompter context and clip prompts in order for Google Flow.",
   "permissions": [
     "activeTab",
+    "clipboardWrite",
     "scripting",
     "storage"
-  ],
-  "host_permissions": [
-    "https://labs.google/*",
-    "https://flow.google/*"
   ],
   "optional_host_permissions": [
     "http://*/*",
@@ -21,17 +18,7 @@
     "type": "module"
   },
   "action": {
-    "default_title": "VeoPrompter Flow handoff",
+    "default_title": "VeoPrompter prompt handoff",
     "default_popup": "popup.html"
-  },
-  "content_scripts": [
-    {
-      "matches": [
-        "https://labs.google/fx/tools/flow*",
-        "https://flow.google/*"
-      ],
-      "js": ["flow-content.js"],
-      "run_at": "document_idle"
-    }
-  ]
+  }
 }
