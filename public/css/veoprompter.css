@@ -1240,3 +1240,9 @@ body {
 .duration-policy-note > span { color: var(--accent); font-size: 14px; line-height: 1.25; }
 .duration-policy-note p { margin: 0; font-size: 9px; line-height: 1.55; }
 .duration-policy-note strong { color: #d7eaf1; font-weight: 620; }
+.button-flow { color: #d8f7ff; border-color: #4c8293; background: #162b36; }
+.button-flow:hover { color: #f1fbff; border-color: #76bdd2; background: #1b3947; }
+.button-flow:disabled { cursor: wait; opacity: .65; }
+.flow-transfer-status { margin: -8px 0 13px; padding: 9px 11px; color: #bde9d4; border: 1px solid #3c6555; border-radius: 6px; background: #14261f; font-size: 9px; line-height: 1.55; }
+.flow-transfer-status[data-kind="error"] { color: #f4c9c0; border-color: #684543; background: #281c20; }
+.flow-transfer-status[data-kind="success"] { color: #bde9d4; border-color: #3c6555; background: #14261f; }

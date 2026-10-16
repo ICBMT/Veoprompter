@@ -31,7 +31,9 @@ class PromptStudioTest extends TestCase
             ->assertOk()
             ->assertSee($project->name)
             ->assertSee('What should we make next?')
-            ->assertSee('Edit project settings');
+            ->assertSee('Edit project settings')
+            ->assertSee('data-send-to-flow', false)
+            ->assertSee('Send to Flow');
     }
 
     public function test_project_creation_uses_a_guided_wizard_while_editing_keeps_the_full_settings_form(): void

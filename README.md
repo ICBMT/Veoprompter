@@ -18,6 +18,20 @@ VeoPrompter is a Laravel 13 prompt studio for creating detailed, continuity-firs
 
 Generated prompts improve the odds of consistency but cannot guarantee that a video model will reproduce every detail exactly. Use reference images and final-frame continuation in Flow where available.
 
+## Chrome extension for Google Flow
+
+The optional Manifest V3 extension lives in [`chrome-extension/`](chrome-extension/). It splits a generated story prompt into the project context (Sections 1–7) and one pasteable message per clip. Sections 9–10 stay attached to the final clip. Prompts without the expected clip format are kept together as a single pasteable part.
+
+For local testing:
+
+1. Open `chrome://extensions`, enable **Developer mode**, and choose **Load unpacked**. Select this repository's `chrome-extension/` folder.
+2. Open the VeoPrompter site in Chrome, open the extension popup, and choose **Connect this site**. Approve the site-specific permission. This enables the Send to Flow button on that origin; you only need to connect once per site origin.
+3. Generate a prompt in a project and click **Send to Flow**. The prompt is stored in the extension's local Chrome storage, not uploaded to another service.
+4. Open [Google Flow](https://labs.google/fx/tools/flow), open the extension, and use its single changing **Paste** action. Paste the project context first, send it in Flow yourself, then repeat for each clip. The extension fills Flow's prompt box but does not submit messages or start video generation.
+5. Use **Undo unsent paste · go back one part** to remove the last extension paste from the composer when it is still there, or rewind and paste that part again. A message already sent in Flow cannot be removed from the Flow conversation. Sending a new prompt from VeoPrompter replaces the active prompt stored in the extension.
+
+The extension requests access only to the VeoPrompter site you connect and the Google Flow host. If Flow changes its composer UI, the extension reports that it could not find the prompt box rather than pasting into a different field.
+
 ## Requirements
 
 - PHP 8.3 or newer, with Laravel's required extensions (including PDO SQLite for the default local database)
