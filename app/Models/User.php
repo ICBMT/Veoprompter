@@ -24,11 +24,30 @@ class User extends Authenticatable
             'email_verified_at' => 'datetime',
             'password' => 'hashed',
             'is_admin' => 'boolean',
+            'expires_at' => 'datetime',
+            'last_seen_at' => 'datetime',
         ];
     }
 
     public function promptProjects(): HasMany
     {
         return $this->hasMany(PromptProject::class);
+    }
+
+    public function studioProjects(): HasMany
+    {
+        return $this->hasMany(StudioProject::class);
+    }
+
+    public function isExpired(): bool
+    {
+        return $this->expires_at !== null && $this->expires_at->lessThanOrEqualTo(now());
+    }
+
+    public function isOnline(): bool
+    {
+        return ! $this->isExpired()
+            && $this->last_seen_at !== null
+            && $this->last_seen_at->greaterThanOrEqualTo(now()->subMinutes(3));
     }
 }

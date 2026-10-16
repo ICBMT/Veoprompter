@@ -58,41 +58,6 @@
     storyTabs.forEach((tab) => tab.addEventListener('click', () => setMode(tab.dataset.modeTab)));
     setMode('story');
 
-    const styleSelect = document.querySelector('#visual_style');
-    const customStyle = document.querySelector('[data-custom-style]');
-    const customStyleInput = document.querySelector('#style_detail');
-    const updateCustomStyle = () => {
-        const show = styleSelect.value === 'custom';
-        customStyle.hidden = !show;
-        customStyleInput.disabled = !show;
-        customStyleInput.required = show;
-    };
-    styleSelect.addEventListener('change', updateCustomStyle);
-    updateCustomStyle();
-
-    document.querySelectorAll('.aspect-choice input').forEach((input) => {
-        input.addEventListener('change', () => {
-            document.querySelectorAll('.aspect-choice').forEach((choice) => {
-                choice.classList.toggle('is-selected', choice.querySelector('input').checked);
-            });
-        });
-    });
-
-    const voiceFields = document.querySelector('[data-voice-fields]');
-    const narrationRadios = [...form.querySelectorAll('input[name="narration"]')];
-    const updateNarration = () => {
-        const enabled = form.querySelector('input[name="narration"]:checked')?.value === '1';
-        voiceFields.hidden = !enabled;
-        voiceFields.querySelectorAll('input, select, textarea').forEach((field) => {
-            field.disabled = !enabled;
-        });
-        narrationRadios.forEach((radio) => {
-            radio.closest('.toggle-choice').classList.toggle('is-active', radio.checked);
-        });
-    };
-    narrationRadios.forEach((radio) => radio.addEventListener('change', updateNarration));
-    updateNarration();
-
     const showMessage = (text) => {
         message.replaceChildren(document.createTextNode(text));
         message.hidden = false;
@@ -306,21 +271,16 @@
         historyNotice.replaceChildren();
         const link = document.createElement('a');
 
-        if (payload.saved_to_history && payload.project?.url) {
+        if (payload.saved_to_history && payload.run?.url) {
             historyNotice.classList.remove('is-warning');
             historyNotice.append(document.createTextNode('Saved to your prompt library. '));
-            link.href = payload.project.url;
-            link.textContent = 'Open project ↗';
-        } else if (payload.history_error) {
+            link.href = payload.run.url;
+            link.textContent = 'Open saved prompt ↗';
+        } else {
             historyNotice.classList.add('is-warning');
-            historyNotice.append(document.createTextNode('Your prompts are ready, but we could not save this kit. Copy or download it now.'));
+            historyNotice.append(document.createTextNode('Your prompt is ready, but could not be saved to this project. Copy or download it now.'));
             historyNotice.hidden = false;
             return;
-        } else {
-            historyNotice.classList.remove('is-warning');
-            historyNotice.append(document.createTextNode('Want to keep this prompt kit? '));
-            link.href = '/register';
-            link.textContent = 'Create a free account ↗';
         }
 
         historyNotice.append(link);
@@ -700,7 +660,7 @@
                 clearProps: 'transform,opacity,visibility',
             }, '-=0.3');
     } else {
-        const pageIntro = document.querySelector('.admin-page, .auth-page, .guide-page, .account-page, .history-page, .history-detail');
+        const pageIntro = document.querySelector('.admin-page, .admin-users-page, .admin-user-detail-page, .auth-page, .guide-page, .account-page, .history-page, .history-detail, .projects-page, .project-settings-page');
         if (pageIntro) {
             gsap.from(pageIntro, {
                 y: 16,
@@ -713,7 +673,7 @@
     }
 
     const revealTargets = gsap.utils.toArray(
-        '.admin-card, .admin-method-card, .guide-item, .history-card, .principles-row > div, .saved-brief-card, .saved-output-card'
+        '.admin-card, .admin-method-card, .admin-prompt-card, .project-run-card, .project-settings-grid .form-panel, .guide-item, .history-card, .principles-row > div, .saved-brief-card, .saved-output-card'
     );
     revealTargets.forEach((element, index) => {
         const reveal = {
@@ -780,4 +740,252 @@
     if (window.ScrollTrigger && document.fonts?.ready) {
         document.fonts.ready.then(() => window.ScrollTrigger.refresh());
     }
+})();
+
+(() => {
+    const form = document.querySelector('.project-settings-form');
+    if (!form) return;
+
+    const styleSelect = form.querySelector('#visual_style');
+    const customStyle = form.querySelector('[data-custom-style]');
+    const customStyleInput = form.querySelector('#style_detail');
+    const voiceFields = form.querySelector('[data-voice-fields]');
+    const narrationRadios = [...form.querySelectorAll('input[name="narration"]')];
+    const characterType = form.querySelector('[data-character-type-select]');
+    const characterDetails = form.querySelector('#character_details');
+
+    const updateCustomStyle = () => {
+        const show = styleSelect?.value === 'custom';
+        if (customStyle) customStyle.hidden = !show;
+        if (customStyleInput) {
+            customStyleInput.disabled = !show;
+            customStyleInput.required = show;
+        }
+    };
+
+    const updateNarration = () => {
+        const enabled = form.querySelector('input[name="narration"]:checked')?.value === '1';
+        if (voiceFields) {
+            voiceFields.hidden = !enabled;
+            voiceFields.querySelectorAll('input, select, textarea').forEach((field) => {
+                field.disabled = !enabled;
+            });
+        }
+        form.querySelectorAll('[data-voice-preview-button]').forEach((button) => {
+            button.disabled = !enabled;
+            button.title = enabled ? '' : 'Turn narration on to preview a voice.';
+        });
+        narrationRadios.forEach((radio) => {
+            radio.closest('.toggle-choice')?.classList.toggle('is-active', radio.checked);
+        });
+    };
+
+    styleSelect?.addEventListener('change', updateCustomStyle);
+    narrationRadios.forEach((radio) => radio.addEventListener('change', updateNarration));
+    characterType?.addEventListener('change', () => {
+        if (characterDetails) characterDetails.required = characterType.value === 'fictional';
+    });
+    form.querySelectorAll('.aspect-choice input').forEach((input) => {
+        input.addEventListener('change', () => {
+            form.querySelectorAll('.aspect-choice').forEach((choice) => {
+                choice.classList.toggle('is-selected', choice.querySelector('input')?.checked ?? false);
+            });
+        });
+    });
+
+    updateCustomStyle();
+    updateNarration();
+
+    document.querySelectorAll('.field-info').forEach((button) => {
+        button.setAttribute('aria-label', `Help: ${button.dataset.tooltip || 'More information'}`);
+        button.setAttribute('aria-expanded', 'false');
+        button.addEventListener('click', (event) => {
+            event.stopPropagation();
+            const willOpen = button.getAttribute('aria-expanded') !== 'true';
+            document.querySelectorAll('.field-info[aria-expanded="true"]').forEach((openButton) => {
+                openButton.setAttribute('aria-expanded', 'false');
+            });
+            button.setAttribute('aria-expanded', willOpen ? 'true' : 'false');
+        });
+    });
+    document.addEventListener('click', (event) => {
+        if (!event.target.closest('.field-info')) {
+            document.querySelectorAll('.field-info[aria-expanded="true"]').forEach((button) => button.setAttribute('aria-expanded', 'false'));
+        }
+    });
+})();
+
+(() => {
+    const sampleLines = {
+        English: 'A tiny seed drifts into the garden. With sunlight, water, and a little patience, it begins a remarkable journey.',
+        Urdu: 'ایک ننھا سا بیج باغ میں گرتا ہے۔ دھوپ، پانی اور تھوڑے صبر سے اس کا حیرت انگیز سفر شروع ہوتا ہے۔',
+        Spanish: 'Una pequeña semilla llega al jardín. Con luz, agua y un poco de paciencia, comienza un viaje extraordinario.',
+        French: 'Une petite graine arrive dans le jardin. Avec du soleil, de l’eau et un peu de patience, une belle aventure commence.',
+        Arabic: 'تصل بذرة صغيرة إلى الحديقة. ومع ضوء الشمس والماء والقليل من الصبر، تبدأ رحلة رائعة.',
+        Hindi: 'एक छोटा सा बीज बगीचे में आता है। धूप, पानी और थोड़े धैर्य के साथ, इसकी अद्भुत यात्रा शुरू होती है।',
+    };
+    const localeForLanguage = { English: 'en-US', Urdu: 'ur-PK', Spanish: 'es-ES', French: 'fr-FR', Arabic: 'ar-SA', Hindi: 'hi-IN' };
+    const accentLocales = {
+        'American English': 'en-US',
+        'British English': 'en-GB',
+        'Pakistani English': 'en-PK',
+        'Australian English': 'en-AU',
+        Neutral: 'en',
+    };
+    const voiceNameHints = {
+        feminine: /female|woman|zira|samantha|victoria|serena|susan|aria|jenny|karen|siri.*female|google.*female/i,
+        masculine: /male|man|david|mark|daniel|alex|fred|george|james|guy|siri.*male|google.*male/i,
+    };
+
+    const readConfig = (button) => {
+        const form = button.closest('.project-settings-form');
+        if (form) {
+            return {
+                language: form.querySelector('#language')?.value || 'English',
+                voice: form.querySelector('#narrator_voice')?.value || 'feminine',
+                accent: form.querySelector('#narrator_accent')?.value || 'American English',
+                tone: form.querySelector('#narrator_tone')?.value || 'warm and friendly',
+                narration: form.querySelector('input[name="narration"]:checked')?.value || '0',
+            };
+        }
+        const source = document.querySelector('[data-voice-config]');
+        return {
+            language: source?.dataset.language || 'English',
+            voice: source?.dataset.narratorVoice || 'feminine',
+            accent: source?.dataset.narratorAccent || 'American English',
+            tone: source?.dataset.narratorTone || 'warm and friendly',
+            narration: '1',
+        };
+    };
+
+    const preferredLocale = (language, accent) => {
+        if (language === 'English') return accentLocales[accent] || localeForLanguage.English;
+        return localeForLanguage[language] || 'en-US';
+    };
+
+    const chooseVoice = (voices, locale, gender) => {
+        const desired = locale.toLowerCase();
+        const language = desired.split('-')[0];
+        const candidates = voices.filter((voice) => voice.lang.toLowerCase().startsWith(language));
+        const localeMatches = candidates.filter((voice) => voice.lang.toLowerCase() === desired);
+        const pool = localeMatches.length ? localeMatches : candidates;
+        const genderMatch = pool.find((voice) => voiceNameHints[gender]?.test(voice.name));
+        return genderMatch || pool[0] || null;
+    };
+
+    const playSample = async (button) => {
+        const status = button.closest('.voice-preview-card, .generated-voice-preview')?.querySelector('[data-voice-preview-status]');
+        const config = readConfig(button);
+        if (config.narration !== '1') {
+            if (status) status.textContent = 'Turn narration on in project settings before previewing a voice.';
+            return;
+        }
+        if (!('speechSynthesis' in window) || !('SpeechSynthesisUtterance' in window)) {
+            if (status) status.textContent = 'This browser does not provide built-in speech preview.';
+            return;
+        }
+
+        const synth = window.speechSynthesis;
+        const locale = preferredLocale(config.language, config.accent);
+        const utterance = new SpeechSynthesisUtterance(sampleLines[config.language] || sampleLines.English);
+        const toneSettings = {
+            'warm and friendly': { rate: 0.94, pitch: 1.03 },
+            'curious and lively': { rate: 1.08, pitch: 1.13 },
+            'calm and thoughtful': { rate: 0.86, pitch: 0.96 },
+            'confident and clear': { rate: 0.98, pitch: 1.0 },
+        };
+        const tone = toneSettings[config.tone] || toneSettings['warm and friendly'];
+        utterance.lang = locale;
+        utterance.rate = tone.rate;
+        utterance.pitch = config.voice === 'feminine' ? Math.min(1.3, tone.pitch + 0.08) : Math.max(0.75, tone.pitch - 0.08);
+
+        const voices = synth.getVoices();
+        const selectedVoice = chooseVoice(voices, locale, config.voice);
+        if (selectedVoice) {
+            utterance.voice = selectedVoice;
+            utterance.lang = selectedVoice.lang || locale;
+        }
+        utterance.onstart = () => {
+            if (status) status.textContent = `Playing a local ${config.language} sample${selectedVoice ? ` with ${selectedVoice.name}` : ''}.`;
+        };
+        utterance.onend = () => {
+            if (status) status.textContent = 'Preview finished. Device voices and accents may differ from your final video.';
+        };
+        utterance.onerror = () => {
+            if (status) status.textContent = 'The device could not play this speech sample. Try another installed voice or language.';
+        };
+        synth.cancel();
+        if (status) status.textContent = `Preparing a ${config.language} preview; the browser will use its closest installed accent and voice.`;
+        synth.speak(utterance);
+    };
+
+    document.querySelectorAll('[data-voice-preview-button]').forEach((button) => {
+        button.addEventListener('click', () => playSample(button));
+    });
+})();
+
+(() => {
+    const expiryMeta = document.querySelector('meta[name="account-expires-at"]');
+    if (expiryMeta) {
+        const millisecondsUntilExpiry = new Date(expiryMeta.content).getTime() - Date.now();
+        if (millisecondsUntilExpiry <= 0) {
+            window.location.assign('/login');
+        } else {
+            window.setTimeout(() => window.location.assign('/login'), millisecondsUntilExpiry);
+        }
+    }
+
+    const presenceMeta = document.querySelector('meta[name="presence-url"]');
+    const csrf = document.querySelector('meta[name="csrf-token"]')?.content;
+    if (presenceMeta && csrf) {
+        let lastPing = 0;
+        const ping = async () => {
+            if (document.visibilityState !== 'visible' || Date.now() - lastPing < 55000) return;
+            lastPing = Date.now();
+            try {
+                const response = await fetch(presenceMeta.content, {
+                    method: 'POST',
+                    headers: { 'Accept': 'application/json', 'X-CSRF-TOKEN': csrf, 'X-Requested-With': 'XMLHttpRequest' },
+                    credentials: 'same-origin',
+                });
+                if (response.status === 401) window.location.assign('/login');
+            } catch {
+                // Presence is best-effort; a network hiccup must not interrupt the workspace.
+            }
+        };
+        window.setInterval(ping, 60000);
+        document.addEventListener('visibilitychange', ping);
+    }
+
+    const adminUsers = document.querySelector('[data-admin-presence-url]');
+    if (!adminUsers) return;
+
+    const refreshPresence = async () => {
+        try {
+            const response = await fetch(adminUsers.dataset.adminPresenceUrl, {
+                headers: { 'Accept': 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
+                credentials: 'same-origin',
+            });
+            if (!response.ok) return;
+            const payload = await response.json();
+            document.querySelectorAll('[data-user-presence][data-user-id]').forEach((indicator) => {
+                const activity = payload.users?.[indicator.dataset.userId];
+                if (!activity) return;
+                const online = Boolean(activity.online);
+                indicator.classList.toggle('is-online', online);
+                indicator.classList.toggle('is-offline', !online);
+                const label = indicator.querySelector('[data-presence-label]');
+                if (label) label.textContent = online ? 'Online' : 'Offline';
+                const time = indicator.parentElement?.querySelector('[data-presence-time]');
+                if (time) {
+                    time.textContent = online ? 'Active now' : (activity.last_seen_at ? `Last seen ${new Date(activity.last_seen_at).toLocaleString()}` : 'No recent activity');
+                }
+            });
+        } catch {
+            // Keep the server-rendered last-seen state if polling fails.
+        }
+    };
+
+    refreshPresence();
+    window.setInterval(refreshPresence, 45000);
 })();

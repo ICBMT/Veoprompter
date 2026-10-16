@@ -25,7 +25,7 @@
                 <button class="button-primary" type="submit"><span>Sign in</span><span class="button-icon" aria-hidden="true">↗</span></button>
             </form>
             <div class="auth-signup-prompt">New to VeoPrompter? <a href="{{ route('register', [], false) }}">Create your free account <span aria-hidden="true">↗</span></a></div>
-            <a class="auth-back" href="{{ route('studio', [], false) }}"><span aria-hidden="true">←</span> Back to the prompt studio</a>
+            <a class="auth-back" href="{{ route('guide', [], false) }}"><span aria-hidden="true">←</span> Read the continuity guide</a>
         </section>
     </div>
 </div>

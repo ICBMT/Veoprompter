@@ -2,6 +2,8 @@
 
 use App\Http\Middleware\EnsureAdmin;
 use App\Http\Middleware\EnsureAuthenticatedUser;
+use App\Http\Middleware\EnsureAccountIsActive;
+use App\Http\Middleware\TrackUserPresence;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
@@ -17,6 +19,10 @@ return Application::configure(basePath: dirname(__DIR__))
         $middleware->alias([
             'admin' => EnsureAdmin::class,
             'user.auth' => EnsureAuthenticatedUser::class,
+        ]);
+        $middleware->appendToGroup('web', [
+            EnsureAccountIsActive::class,
+            TrackUserPresence::class,
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {

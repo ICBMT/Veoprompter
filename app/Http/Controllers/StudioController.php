@@ -3,8 +3,10 @@
 namespace App\Http\Controllers;
 
 use App\Models\AiSetting;
+use App\Models\StudioProject;
 use App\Services\PromptGenerationException;
 use App\Services\PromptGenerationService;
+use App\Support\ProjectSettings;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Arr;
@@ -14,18 +16,16 @@ use Throwable;
 
 class StudioController extends Controller
 {
-    public function index()
+    public function generate(Request $request, StudioProject $studioProject, PromptGenerationService $generator): JsonResponse
     {
-        $settings = AiSetting::query()->find(1);
+        abort_unless($studioProject->user_id === $request->user()?->id, 404);
 
-        return view('studio.index', [
-            'aiReady' => $settings?->isReady() ?? false,
-            'isAdmin' => (bool) auth()->user()?->is_admin,
-        ]);
-    }
+        $projectSettings = array_replace(ProjectSettings::defaults(), $studioProject->settings ?? []);
+        if ($request->input('mode') === 'extend') {
+            $projectSettings['clip_duration'] = $projectSettings['extend_duration'];
+        }
+        $request->merge($projectSettings);
 
-    public function generate(Request $request, PromptGenerationService $generator): JsonResponse
-    {
         $validated = $request->validate([
             'mode' => ['required', Rule::in(['story', 'extend'])],
             'project_title' => ['nullable', 'string', 'max:120'],
@@ -36,6 +36,8 @@ class StudioController extends Controller
             'audience' => ['required', 'string', 'max:160'],
             'visual_style' => ['required', Rule::in(['3d-family-animation', '2d-illustration', 'cinematic-realism', 'stop-motion', 'custom'])],
             'style_detail' => ['nullable', 'required_if:visual_style,custom', 'string', 'max:500'],
+            'character_type' => ['required', Rule::in(['ai-choice', 'human-male', 'human-female', 'robot', 'fictional'])],
+            'character_details' => ['nullable', 'required_if:character_type,fictional', 'string', 'max:500'],
             'character_idea' => ['nullable', 'string', 'max:500'],
             'clip_count' => ['nullable', 'required_if:mode,story', 'integer', 'min:2', 'max:8'],
             'clip_duration' => ['required', 'integer', 'min:4', 'max:20'],
@@ -73,41 +75,42 @@ class StudioController extends Controller
             ], 500);
         }
 
-        $project = null;
+        $run = null;
         $historyError = false;
 
-        if ($request->user()) {
-            try {
-                $brief = Arr::except($validated, ['reference_frame']);
-                $title = trim((string) ($validated['project_title'] ?? ''));
-                $title = $title !== ''
-                    ? $title
-                    : (string) ($validated['mode'] === 'extend' ? ($validated['next_action'] ?? 'Video extension') : ($validated['topic'] ?? 'Educational video'));
+        try {
+            $brief = Arr::except($validated, ['reference_frame']);
+            $title = trim((string) ($validated['project_title'] ?? ''));
+            $title = $title !== ''
+                ? $title
+                : (string) ($validated['mode'] === 'extend' ? ($validated['next_action'] ?? 'Video extension') : ($validated['topic'] ?? 'Educational video'));
 
-                $project = $request->user()->promptProjects()->create([
-                    'title' => Str::limit($title, 160, ''),
-                    'mode' => $validated['mode'],
-                    'brief' => $brief,
-                    'content' => $content,
-                    'provider' => $settings->provider,
-                    'model' => $settings->model,
-                    'reference_frame_attached' => $referenceFrame !== null,
-                ]);
-            } catch (Throwable $exception) {
-                report($exception);
-                $historyError = true;
-            }
+            $run = $request->user()->promptProjects()->create([
+                'studio_project_id' => $studioProject->id,
+                'title' => Str::limit($title, 160, ''),
+                'mode' => $validated['mode'],
+                'brief' => $brief,
+                'content' => $content,
+                'provider' => $settings->provider,
+                'model' => $settings->model,
+                'reference_frame_attached' => $referenceFrame !== null,
+            ]);
+
+            $studioProject->touch();
+        } catch (Throwable $exception) {
+            report($exception);
+            $historyError = true;
         }
 
         return response()->json([
             'content' => $content,
             'mode' => $validated['mode'],
-            'saved_to_history' => $project !== null,
+            'saved_to_history' => $run !== null,
             'history_error' => $historyError,
-            'project' => $project ? [
-                'id' => $project->id,
-                'title' => $project->title,
-                'url' => route('history.show', $project, false),
+            'run' => $run ? [
+                'id' => $run->id,
+                'title' => $run->title,
+                'url' => route('history.show', $run, false),
             ] : null,
         ]);
     }

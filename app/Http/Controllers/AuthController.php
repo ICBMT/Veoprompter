@@ -38,6 +38,16 @@ class AuthController extends Controller
             ])->onlyInput('email');
         }
 
+        if ($request->user()?->isExpired()) {
+            Auth::logout();
+            $request->session()->invalidate();
+            $request->session()->regenerateToken();
+
+            return redirect()->to(route('login', [], false))->withErrors([
+                'email' => 'This temporary test account has expired. Ask an administrator for a new account.',
+            ])->onlyInput('email');
+        }
+
         $request->session()->regenerate();
 
         return redirect()->intended(route('studio', [], false));
@@ -75,7 +85,7 @@ class AuthController extends Controller
         Auth::login($user);
         $request->session()->regenerate();
 
-        return redirect()->to(route('studio', [], false))->with('success', 'Welcome to VeoPrompter. Your prompt history is ready.');
+        return redirect()->to(route('studio', [], false))->with('success', 'Welcome to VeoPrompter. Your project workspace is ready.');
     }
 
     public function logout(Request $request): RedirectResponse

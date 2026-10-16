@@ -17,6 +17,7 @@ class PromptHistoryController extends Controller
         ]);
         $search = trim((string) ($validated['q'] ?? ''));
         $projects = $request->user()->promptProjects()
+            ->with('studioProject')
             ->when($search !== '', fn ($query) => $query->where('title', 'like', '%'.$search.'%'))
             ->latest()
             ->paginate(12)
@@ -32,6 +33,8 @@ class PromptHistoryController extends Controller
     public function show(Request $request, PromptProject $project): View
     {
         abort_unless((int) $project->user_id === (int) $request->user()->id, 404);
+
+        $project->load('studioProject');
 
         return view('history.show', [
             'project' => $project,

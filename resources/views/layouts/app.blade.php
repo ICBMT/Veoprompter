@@ -4,6 +4,10 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="csrf-token" content="{{ csrf_token() }}">
+    @auth
+        <meta name="presence-url" content="{{ route('presence.ping', [], false) }}">
+        @if(auth()->user()->expires_at)<meta name="account-expires-at" content="{{ auth()->user()->expires_at->toIso8601String() }}">@endif
+    @endauth
     <meta name="theme-color" content="#0a0e13">
     <title>@yield('title', 'VeoPrompter — Prompt studio')</title>
     <link rel="preload" href="/fonts/inter-latin-wght-normal.woff2" as="font" type="font/woff2" crossorigin>
@@ -29,9 +33,9 @@
 
         <div class="sidebar-caption">YOUR CREATIVE SPACE</div>
         <nav class="sidebar-nav">
-            <a href="{{ route('studio', [], false) }}" class="nav-link {{ request()->routeIs('studio') ? 'is-active' : '' }}">
+            <a href="{{ $currentUser ? route('projects.index', [], false) : route('login', [], false) }}" class="nav-link {{ request()->routeIs('studio') || request()->routeIs('projects.*') ? 'is-active' : '' }}">
                 <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M3 5.4A2.4 2.4 0 0 1 5.4 3h9.2A2.4 2.4 0 0 1 17 5.4v9.2a2.4 2.4 0 0 1-2.4 2.4H5.4A2.4 2.4 0 0 1 3 14.6V5.4Z"/><path d="m8 6.6 5.1 3.4L8 13.4V6.6Z"/></svg>
-                <span>Prompt studio</span><span class="nav-pulse" aria-hidden="true"></span>
+                <span>{{ $currentUser ? 'My projects' : 'Sign in to start' }}</span><span class="nav-pulse" aria-hidden="true"></span>
             </a>
             @if($currentUser)
                 <a href="{{ route('history.index', [], false) }}" class="nav-link {{ request()->routeIs('history.*') ? 'is-active' : '' }}">
@@ -42,6 +46,9 @@
                     <svg viewBox="0 0 20 20" aria-hidden="true"><circle cx="10" cy="6.2" r="3.2"/><path d="M3.5 17c.7-3.5 2.8-5.2 6.5-5.2s5.8 1.7 6.5 5.2"/></svg>
                     <span>Account</span>
                 </a>
+                @if($isAdmin)
+                    <a href="{{ route('admin.users.index', [], false) }}" class="nav-link admin-users-nav {{ request()->routeIs('admin.users.*') ? 'is-active' : '' }}"><svg viewBox="0 0 20 20" aria-hidden="true"><circle cx="7" cy="7" r="3"/><circle cx="14.5" cy="8" r="2.3"/><path d="M1.7 16.7c.5-3 2.2-4.5 5.3-4.5s4.8 1.5 5.3 4.5m.2-4c2.8-.1 4.3 1.2 4.8 3.5"/></svg><span>User management</span></a>
+                @endif
             @else
                 <a href="{{ route('login', [], false) }}" class="nav-link {{ request()->routeIs('login') || request()->routeIs('register') ? 'is-active' : '' }}">
                     <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M10 2.7 3.5 5.5v4.2c0 3.7 2.8 6.1 6.5 7.5 3.7-1.4 6.5-3.8 6.5-7.5V5.5L10 2.7Z"/><path d="M10 7v5m-2.5-2.5h5"/></svg>
@@ -75,7 +82,7 @@
                 <a class="account-action" href="{{ $isAdmin ? route('admin.settings', [], false) : route('account.edit', [], false) }}" aria-label="{{ $isAdmin ? 'Open Control room' : 'Open account settings' }}" title="{{ $isAdmin ? 'Control room' : 'Account settings' }}">{{ $isAdmin ? '⚙' : '↗' }}</a>
             @else
                 <span class="account-avatar account-avatar--guest">V</span>
-                <div class="account-copy"><strong>Your creative space</strong><small>Sign in to save prompt kits</small></div>
+                <div class="account-copy"><strong>Your creative space</strong><small>Sign in to start a project</small></div>
                 <a class="account-action" href="{{ route('register', [], false) }}" aria-label="Create an account" title="Create an account">↗</a>
             @endif
         </div>
@@ -87,10 +94,12 @@
             <div class="topbar-actions">
                 <span class="topbar-status"><span class="status-dot {{ $aiReady ? 'dot-ready' : '' }}"></span>{{ $aiReady ? 'SYSTEM READY' : 'SETUP REQUIRED' }}</span>
                 @if($isAdmin)
+                    <a class="topbar-control" href="{{ route('admin.users.index', [], false) }}"><span aria-hidden="true">◎</span> Users</a>
                     <a class="topbar-control" href="{{ route('admin.settings', [], false) }}"><span aria-hidden="true">⚙</span> Control room</a>
                 @endif
                 @if($currentUser)
-                    <a class="topbar-library" href="{{ route('history.index', [], false) }}">My library</a>
+                    <a class="topbar-library" href="{{ route('projects.index', [], false) }}">My projects</a>
+                    <a class="topbar-library" href="{{ route('history.index', [], false) }}">Prompt library</a>
                     <form action="{{ route('logout', [], false) }}" method="post" class="logout-form">@csrf<button type="submit" class="topbar-logout">Sign out</button></form>
                 @else
                     <a class="topbar-quiet" href="{{ route('login', [], false) }}">Sign in</a>

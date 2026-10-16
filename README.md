@@ -7,8 +7,11 @@ VeoPrompter is a Laravel 13 prompt studio for creating detailed, continuity-firs
 - Creates educational story plans with an accuracy check, character and world bibles, a character-reference **image prompt**, a continuity map, and independently copyable clip prompts.
 - Continues a video from a written final-frame description and, optionally, a supplied still image.
 - Carries character, scene, camera, object, lighting, and sound details across clips; continuation prompts include the required verbatim handoff instruction from the master specification.
-- Offers controls for clip count and duration, audience, educational depth, visual style, aspect ratio, narration, language, accent, and sound.
-- Lets visitors generate prompts without an account. Registered users can have successful generations saved automatically to their private, owner-scoped prompt library, where they can search, copy, download, revisit, and delete prompt kits.
+- Requires sign-in before opening the prompt workspace or generating a prompt.
+- Lets signed-in users create projects with reusable preferences for audience, visual style, character type/profile, clip count, story and extension duration, aspect ratio, learning depth, narration, language, voice, accent, tone, music, and sound effects. Preferences can be edited later and are applied server-side to every generation in that project.
+- Saves each completed generation to the selected project and the user's private prompt library, where users can search, copy, download, revisit, and delete prompt kits.
+- Provides a best-effort voice sample using the browser/device's built-in speech synthesis. It approximates selected language, voice, accent, and tone when a matching installed voice exists; it does not synthesize the final video narration and varies by device.
+- Gives administrators a registered-user directory with recent online/offline presence and access to each user's saved prompt outputs. Administrators can create customer or admin test accounts that expire three hours after creation.
 - Keeps provider configuration in an administrator-only Control room. Regular users cannot add or change AI providers.
 - Stores provider credentials encrypted with Laravel's `APP_KEY`; the key is never returned to the browser.
 
@@ -61,7 +64,7 @@ Open `http://127.0.0.1:8000`. The default development mailer writes reset emails
    The command asks for a password without echoing it; use at least 12 characters. If the address already belongs to an account, it enables admin access without changing that account's password. Sign in at `/login` and open **Control room**.
 7. In **Control room → AI provider connection**, choose Google Gemini or an OpenAI-compatible provider and enter its API key. The model list loads after you finish typing; you can also click **Load available models** to use a key already saved for that same provider and endpoint. Select a model, click **Test selected model** to get a short text reply, then save the connection. The test does not save settings or create a prompt-history item. If an API does not expose a model catalogue, you can enter its model ID manually. The key is sent to this app's server for model discovery/testing; the browser never calls the provider directly. The optional extension-frame image is forwarded for prompt generation and not retained.
 
-Public account registration is enabled. Configure your deployment's privacy notice and account-retention policy for your audience. The app does not require registration to use the studio.
+Public account registration is enabled. Sign-in is required to open projects and generate prompts. Configure your deployment's privacy notice and account-retention policy for your audience. Administrators can review user activity and create three-hour temporary test accounts from **User management**.
 
 ## Configure an AI provider
 
@@ -87,8 +90,10 @@ The API key field is write-only in the UI: after saving, VeoPrompter shows only 
 ## Accounts, history, and data handling
 
 - Registration, sign-in, sign-out, profile updates, password changes, and password reset are available from the account pages. Passwords are hashed by Laravel; reset links are delivered through the configured mail transport.
-- A successful generation is saved only for the signed-in user. Guests receive a link to create an account; their generation is not persisted.
-- Prompt kits contain the submitted text brief, generated text response, provider/model label, and a flag indicating whether a reference frame was used. The uploaded image bytes are **not** stored. Users can open and delete their own kits; another account cannot read or delete them through the application.
+- A valid signed-in account is required to create projects and generate prompts. Project preferences are stored separately from generation history, and each saved prompt kit is linked to its project. Users can edit project preferences without rewriting older generations.
+- Prompt kits contain the submitted text brief, generated text response, provider/model label, and a flag indicating whether a reference frame was used. The uploaded image bytes are **not** stored. Users can open and delete their own kits; another customer cannot read or delete them through the application. Administrators can view saved prompts from the user-management area.
+- Administrator-created test accounts (customer or admin role) have a server-enforced expiration exactly three hours after creation. Expired test accounts are logged out and cannot sign in again. Their generated password is shown only on the one-time account-creation result.
+- Presence is a best-effort activity indicator: the browser refreshes the signed-in user's last-seen timestamp periodically, and admins see “online” when a user has been active within the last three minutes. It is not a guarantee that a person is watching the page.
 - The admin setup form sends a key to this server over HTTPS for discovery/testing; provider requests then run from the server over HTTPS. Keys are not placed in page markup or prompts, returned in normal application responses, or written to application logs.
 - Generation, registration, sign-in, and reset-link endpoints are rate-limited. Uploaded extension frames are limited to 8 MB and accepted as JPG, PNG, or WEBP.
 - Use HTTPS in production, keep `APP_DEBUG=false`, restrict database/server access, and protect backups containing user prompt history and `APP_KEY`.
@@ -99,15 +104,16 @@ The API key field is write-only in the UI: after saving, VeoPrompter shows only 
 php artisan test
 ```
 
-The test suite covers the master prompt's synchronization with root `prompt.txt`, public studio and account flows, private history ownership, admin-only provider configuration, encrypted credentials, model-list discovery, test-connection requests, and provider request construction. Run the suite in an environment with PHP, Composer dependencies, and PDO SQLite installed.
+The test suite covers the master prompt's synchronization with root `prompt.txt`, sign-in-gated project workflows, reusable owner-scoped settings, private generation history, three-hour test-account expiry, presence reporting, admin-only provider configuration, encrypted credentials, model-list discovery, test-connection requests, and provider request construction. Run the suite in an environment with PHP, Composer dependencies, and PDO SQLite installed.
 
 ## Project layout
 
 - `prompt.txt` — the source master prompting method.
 - `resources/prompts/master-spec.txt` — the runtime copy of that specification, covered by a synchronization test.
 - `app/Services/PromptGenerationService.php` — server-side prompt instructions and Gemini/OpenAI-compatible adapters.
-- `app/Http/Controllers/StudioController.php` — input validation, generation, and best-effort history persistence.
-- `app/Http/Controllers/AuthController.php`, `PasswordResetController.php`, `AccountController.php` — account lifecycle and recovery.
+- `app/Http/Controllers/StudioController.php` — authenticated project-scoped input validation, generation, and history persistence.
+- `app/Http/Controllers/StudioProjectController.php` and `app/Support/ProjectSettings.php` — saved project preferences and owner-scoped project workflows.
+- `app/Http/Controllers/AuthController.php`, `PasswordResetController.php`, `AccountController.php`, and `PresenceController.php` — account lifecycle, recovery, and activity heartbeats.
 - `app/Http/Controllers/PromptHistoryController.php` — private prompt library, search, and owner-checked detail/deletion.
-- `app/Http/Controllers/Admin/AiSettingsController.php` — administrator-only provider configuration.
+- `app/Http/Controllers/Admin/AiSettingsController.php` and `UserManagementController.php` — administrator-only provider setup, registered-user activity, prompt review, and temporary test accounts.
 - `resources/views/` and `public/css`, `public/js` — responsive studio, account, and history interface with copy/download helpers. GSAP 3.15.0 and ScrollTrigger are self-hosted under `public/js/vendor`; Inter 5.3.0 variable fonts are self-hosted under `public/fonts` with their OFL license. The motion layer respects reduced-motion preferences.

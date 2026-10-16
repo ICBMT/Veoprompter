@@ -8,7 +8,7 @@
 <div class="admin-page">
     <section class="admin-hero">
         <div><span class="section-index">ADMINISTRATOR <i>/</i> CONNECTION SETTINGS</span><h1>Control room</h1><p>Choose the AI that powers prompt generation. Load models for your key, test a model with a tiny text request, then save when it works.</p></div>
-        <div class="admin-ready {{ $aiReady ? '' : 'is-offline' }}"><i></i>{{ $aiReady ? 'GENERATION ENABLED' : 'CONNECTION NOT CONFIGURED' }}</div>
+        <div class="admin-hero-actions"><div class="admin-ready {{ $aiReady ? '' : 'is-offline' }}"><i></i>{{ $aiReady ? 'GENERATION ENABLED' : 'CONNECTION NOT CONFIGURED' }}</div><a class="button-secondary" href="{{ route('admin.users.index', [], false) }}">Manage users <span aria-hidden="true">↗</span></a></div>
     </section>
 
     <section class="admin-card" aria-labelledby="connection-heading">

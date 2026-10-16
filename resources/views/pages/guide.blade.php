@@ -21,6 +21,6 @@
 
     <blockquote class="guide-quote">“The goal is not impressive-sounding prose. The goal is prompts a video model can follow reliably.”<small>THE VEO PROMPTER QUALITY STANDARD</small></blockquote>
 
-    <div class="guide-cta"><div><strong>Ready to shape a story?</strong><p>Bring a topic or final frame. We'll build the continuity plan around it.</p></div><a class="button-primary" href="{{ route('studio', [], false) }}"><span>Open prompt studio</span><span class="button-icon" aria-hidden="true">↗</span></a></div>
+    <div class="guide-cta"><div><strong>Ready to shape a story?</strong><p>Bring a topic or final frame. We'll build the continuity plan around it.</p></div><a class="button-primary" href="{{ route('projects.create', [], false) }}"><span>Start a project</span><span class="button-icon" aria-hidden="true">↗</span></a></div>
 </div>
 @endsection
