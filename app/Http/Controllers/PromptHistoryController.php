@@ -55,7 +55,7 @@ class PromptHistoryController extends Controller
         $brief = $project->brief ?? [];
         $subject = $project->mode === 'extend'
             ? ($brief['next_action'] ?? 'Video extension')
-            : ($brief['topic'] ?? 'Educational video');
+            : ($brief['topic'] ?? 'Video prompt');
 
         return Str::limit(trim((string) $subject), 180);
     }

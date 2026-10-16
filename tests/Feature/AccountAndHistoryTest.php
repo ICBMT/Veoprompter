@@ -32,7 +32,7 @@ class AccountAndHistoryTest extends TestCase
         $this->get(route('history.index'))
             ->assertOk()
             ->assertSee('Your prompt library')
-            ->assertSee('Your next story starts here.');
+            ->assertSee('Your next video starts here.');
     }
 
     public function test_private_library_and_account_pages_require_authentication(): void

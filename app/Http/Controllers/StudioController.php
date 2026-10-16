@@ -21,16 +21,25 @@ class StudioController extends Controller
         abort_unless($studioProject->user_id === $request->user()?->id, 404);
 
         $projectSettings = array_replace(ProjectSettings::defaults(), $studioProject->settings ?? []);
-        if ($request->input('mode') === 'extend') {
+        $requestMode = $request->input('mode');
+        $hasVideoTypeOverride = $requestMode === 'story' && $request->exists('video_type');
+        $videoTypeOverride = $request->input('video_type');
+
+        if ($requestMode === 'extend') {
             $projectSettings['clip_duration'] = $projectSettings['extend_duration'];
         }
         $request->merge($projectSettings);
+        if ($hasVideoTypeOverride) {
+            $request->merge(['video_type' => $videoTypeOverride]);
+        }
 
         $validated = $request->validate([
             'mode' => ['required', Rule::in(['story', 'extend'])],
             'project_title' => ['nullable', 'string', 'max:120'],
+            'video_type' => ['required', Rule::in(array_keys(ProjectSettings::videoTypes()))],
             'topic' => ['nullable', 'required_if:mode,story', 'string', 'max:250'],
             'learning_objective' => ['nullable', 'string', 'max:500'],
+            'creative_direction' => ['nullable', 'string', 'max:1500'],
             'next_action' => ['nullable', 'required_if:mode,extend', 'string', 'max:800'],
             'visible_start' => ['nullable', 'string', 'max:1500'],
             'audience' => ['required', 'string', 'max:160'],
@@ -83,7 +92,7 @@ class StudioController extends Controller
             $title = trim((string) ($validated['project_title'] ?? ''));
             $title = $title !== ''
                 ? $title
-                : (string) ($validated['mode'] === 'extend' ? ($validated['next_action'] ?? 'Video extension') : ($validated['topic'] ?? 'Educational video'));
+                : (string) ($validated['mode'] === 'extend' ? ($validated['next_action'] ?? 'Video extension') : ($validated['topic'] ?? 'Video prompt'));
 
             $run = $request->user()->promptProjects()->create([
                 'studio_project_id' => $studioProject->id,

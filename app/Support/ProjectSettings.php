@@ -7,11 +7,26 @@ use Illuminate\Validation\Rule;
 
 final class ProjectSettings
 {
+    /** @return array<string, string> */
+    public static function videoTypes(): array
+    {
+        return [
+            'educational' => 'Educational explainer',
+            'cinematic-story' => 'Cinematic story / short film',
+            'documentary' => 'Documentary / true story',
+            'brand-promo' => 'Product or brand film',
+            'music-video' => 'Music video',
+            'travel' => 'Travel / mood reel',
+            'custom' => 'Other / custom video',
+        ];
+    }
+
     /** @return array<string, mixed> */
     public static function defaults(): array
     {
         return [
             'audience' => 'Curious kids and families',
+            'video_type' => 'educational',
             'visual_style' => '3d-family-animation',
             'style_detail' => '',
             'character_type' => 'ai-choice',
@@ -36,6 +51,7 @@ final class ProjectSettings
     {
         return [
             'audience' => ['required', 'string', 'max:160'],
+            'video_type' => ['required', Rule::in(array_keys(self::videoTypes()))],
             'visual_style' => ['required', Rule::in(['3d-family-animation', '2d-illustration', 'cinematic-realism', 'stop-motion', 'custom'])],
             'style_detail' => ['nullable', 'required_if:visual_style,custom', 'string', 'max:500'],
             'character_type' => ['required', Rule::in(['ai-choice', 'human-male', 'human-female', 'robot', 'fictional'])],

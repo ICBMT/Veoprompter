@@ -6,6 +6,7 @@
 @section('content')
 @php
     $characterLabels = ['ai-choice' => 'AI chooses', 'human-male' => 'Human male', 'human-female' => 'Human female', 'robot' => 'Robot', 'fictional' => 'Fictional character'];
+    $videoTypeLabel = \App\Support\ProjectSettings::videoTypes()[$project->brief['video_type'] ?? 'educational'] ?? 'Other / custom video';
     $clipFormat = $project->mode === 'extend'
         ? 'Next clip · '.($project->brief['clip_duration'] ?? '—').' seconds · '.($project->brief['aspect_ratio'] ?? '—')
         : ($project->brief['clip_count'] ?? '—').' clips · '.($project->brief['clip_duration'] ?? '—').' seconds · '.($project->brief['aspect_ratio'] ?? '—');
@@ -13,7 +14,7 @@
 <div class="history-detail">
     <a href="{{ route('history.index', [], false) }}" class="history-back"><span aria-hidden="true">←</span> Back to your library</a>
     <section class="history-detail-hero">
-        <div><span class="history-mode {{ $project->mode === 'extend' ? 'mode-extend' : '' }}">{{ $project->mode === 'extend' ? '↗ EXTEND VIDEO' : '▶ NEW STORY' }}</span><h1>{{ $project->title }}</h1><p>{{ $summary }}</p>@if($project->studioProject)<p class="history-project-origin">Generated in <a href="{{ route('projects.show', $project->studioProject, false) }}">{{ $project->studioProject->name }}</a></p>@endif</div>
+        <div><span class="history-mode {{ $project->mode === 'extend' ? 'mode-extend' : '' }}">{{ $project->mode === 'extend' ? '↗ EXTEND VIDEO' : '▶ NEW VIDEO' }}</span><h1>{{ $project->title }}</h1><p>{{ $summary }}</p>@if($project->studioProject)<p class="history-project-origin">Generated in <a href="{{ route('projects.show', $project->studioProject, false) }}">{{ $project->studioProject->name }}</a></p>@endif</div>
         <div class="detail-actions">
             <button class="button-secondary" type="button" data-copy-target="#saved-prompt-output"><span aria-hidden="true">▢</span> Copy all</button>
             <button class="button-secondary" type="button" data-download-target="#saved-prompt-output" data-download-name="{{ \Illuminate\Support\Str::slug($project->title) }}.txt"><span aria-hidden="true">↓</span> Save .txt</button>
@@ -26,12 +27,14 @@
     <section class="saved-brief-card">
         <div class="saved-brief-heading"><span class="section-index">THE ORIGINAL BRIEF</span><span class="saved-readonly">SAVED WITH THIS KIT</span></div>
         <div class="saved-brief-grid">
+            <div><span>Video type</span><strong>{{ $videoTypeLabel }}</strong></div>
             @if($project->mode === 'extend')
                 <div><span>Next action</span><strong>{{ $project->brief['next_action'] ?? '—' }}</strong></div>
                 @if(!empty($project->brief['visible_start']))<div><span>Visible starting state</span><strong>{{ $project->brief['visible_start'] }}</strong></div>@endif
             @else
-                <div><span>Topic</span><strong>{{ $project->brief['topic'] ?? '—' }}</strong></div>
-                @if(!empty($project->brief['learning_objective']))<div><span>Learning objective</span><strong>{{ $project->brief['learning_objective'] }}</strong></div>@endif
+                <div><span>Video idea</span><strong>{{ $project->brief['topic'] ?? '—' }}</strong></div>
+                @if(($project->brief['video_type'] ?? 'educational') === 'educational' && !empty($project->brief['learning_objective']))<div><span>Learning objective</span><strong>{{ $project->brief['learning_objective'] }}</strong></div>@endif
+                @if(!empty($project->brief['creative_direction']))<div><span>Creative direction</span><strong>{{ $project->brief['creative_direction'] }}</strong></div>@endif
             @endif
             <div><span>Audience</span><strong>{{ $project->brief['audience'] ?? '—' }}</strong></div>
             <div><span>Visual style</span><strong>{{ ($project->brief['visual_style'] ?? '') === 'custom' ? ($project->brief['style_detail'] ?? 'Custom') : str_replace('-', ' ', $project->brief['visual_style'] ?? '—') }}</strong></div>

@@ -1153,3 +1153,46 @@ body {
 .wizard-question h2:focus-visible { outline: 2px solid var(--accent); outline-offset: 5px; border-radius: 2px; }
 .wizard-choice:has(input:checked) { border-color: #5995aa; background: linear-gradient(135deg, #193441, #172431); box-shadow: inset 0 0 0 1px rgb(152 231 255 / 10%), 0 0 20px rgb(94 193 224 / 6%); }
 .wizard-choice:has(input:checked)::after { border-color: #a9edff; background: #a9edff; content: "✓"; }
+
+/* Reference art lets new creators compare the project's visual language at a glance. */
+.wizard-choice--visual { min-height: 0; justify-content: flex-start; padding: 9px; gap: 8px; }
+.wizard-choice-media { position: relative; display: block; width: 100%; overflow: hidden; aspect-ratio: 16 / 8.4; border: 1px solid #345364; border-radius: 5px; background: #101922; box-shadow: inset 0 1px 0 rgb(255 255 255 / 4%), 0 5px 14px rgb(0 0 0 / 16%); max-height: 180px; transform: translateZ(8px); }
+.wizard-choice-media::after { position: absolute; inset: 0; background: linear-gradient(180deg, rgb(8 15 23 / 0%) 50%, rgb(8 15 23 / 36%) 100%); content: ""; pointer-events: none; }
+.wizard-choice-media img { display: block; width: 100%; height: 100%; object-fit: cover; object-position: center; transition: transform .45s cubic-bezier(.2,.7,.2,1), filter .35s ease; }
+.wizard-choice--visual .wizard-choice-title { font-size: 10px; }
+.wizard-choice--visual .wizard-choice-description { padding-right: 2px; }
+.wizard-choice--format { min-height: 100px; justify-content: flex-start; padding-top: 12px; }
+.wizard-choice--format .wizard-choice-icon { transform: translateZ(5px); }
+.wizard-choice--format .wizard-choice-title { max-width: calc(100% - 9px); }
+
+/* A restrained 3D lift gives interactive surfaces depth without changing their layout. */
+.storyboard-card, .mode-tab, .wizard-choice, .history-card, .project-run-card, .account-library-link { transform-style: preserve-3d; backface-visibility: hidden; }
+.storyboard-card { transition: transform .35s cubic-bezier(.2,.7,.2,1), border-color .25s, box-shadow .3s; }
+.project-run-card { transition: transform .25s cubic-bezier(.2,.7,.2,1), border-color .25s, box-shadow .25s; }
+.mode-tab, .history-card, .account-library-link { transition-timing-function: cubic-bezier(.2,.7,.2,1); }
+.wizard-choice-icon { transition: transform .25s cubic-bezier(.2,.7,.2,1), box-shadow .25s; }
+@media (hover: hover) and (prefers-reduced-motion: no-preference) {
+    .storyboard-card:hover { transform: perspective(1200px) translate3d(0, -3px, 8px) rotateX(.65deg); border-color: #456477; box-shadow: 0 28px 68px rgb(0 0 0 / 32%), 0 0 26px rgb(102 190 218 / 8%); }
+    .mode-tab:hover { transform: perspective(950px) translate3d(0, -2px, 4px) rotateX(.9deg) rotateY(-.45deg); box-shadow: 0 12px 25px rgb(0 0 0 / 20%); }
+    .wizard-choice:hover { transform: perspective(950px) translate3d(0, -2px, 5px) rotateX(1deg) rotateY(-.35deg); box-shadow: 0 15px 28px rgb(0 0 0 / 22%); }
+    .wizard-choice--visual:hover .wizard-choice-media img { transform: scale(1.055); filter: saturate(1.08) brightness(1.06); }
+    .wizard-choice--visual.is-selected .wizard-choice-media { border-color: #7ec8df; box-shadow: 0 0 0 1px rgb(126 200 223 / 16%), 0 7px 20px rgb(71 165 196 / 17%); }
+    .wizard-choice--format:hover .wizard-choice-icon { transform: translate3d(0, -1px, 8px) rotate(-4deg); box-shadow: 0 7px 16px rgb(75 180 214 / 18%); }
+    .history-card:hover, .project-run-card:hover, .account-library-link:hover { transform: perspective(1050px) translate3d(0, -3px, 6px) rotateX(.55deg); box-shadow: 0 18px 36px rgb(0 0 0 / 24%); }
+    .history-card:hover { border-color: #466176; }
+    .project-run-card:hover { border-color: #4b6d81; }
+}
+@media (max-width: 760px) {
+    .wizard-choice--visual { padding: 8px; }
+    .wizard-choice-media { max-height: 155px; }
+    .wizard-choice--visual .wizard-choice-description { font-size: 8px; }
+}
+@media (prefers-reduced-motion: reduce) {
+    .wizard-choice-media img, .wizard-choice-icon, .storyboard-card, .mode-tab, .wizard-choice, .history-card, .project-run-card, .account-library-link { transition: none !important; }
+}
+
+/* Consistent inset highlights and soft shadows carry the same rainy depth across pages. */
+.admin-card, .auth-card, .guide-card, .saved-brief-card, .saved-output-card, .admin-prompt-card {
+    box-shadow: inset 0 1px 0 rgb(219 242 255 / 3%), 0 16px 38px rgb(0 0 0 / 16%);
+    transform-style: preserve-3d;
+}

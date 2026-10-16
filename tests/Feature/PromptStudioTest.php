@@ -46,6 +46,12 @@ class PromptStudioTest extends TestCase
             ->assertSee('data-wizard-step', false)
             ->assertSee('data-wizard-when="narration:1"', false)
             ->assertSee('data-voice-preview-button', false)
+            ->assertSee('data-wizard-title="Choose a video type"', false)
+            ->assertSee('Cinematic story / short film')
+            ->assertSee('style-3d.jpg')
+            ->assertSee('style-2d.jpg')
+            ->assertSee('style-cinematic.jpg')
+            ->assertSee('style-stop-motion.jpg')
             ->assertSee('Preview this language')
             ->assertSee('Preview this voice')
             ->assertSee('Preview this accent')
@@ -113,6 +119,50 @@ class PromptStudioTest extends TestCase
                 && ! str_contains($brief, 'Untrusted browser override')
                 && str_contains($brief, 'Main character type: Robot or animated machine');
         });
+    }
+
+    public function test_cinematic_story_mode_uses_a_general_video_brief_without_changing_the_project_default(): void
+    {
+        Http::fake([
+            'https://generativelanguage.googleapis.com/*' => Http::response([
+                'candidates' => [['content' => ['parts' => [['text' => "## VIDEO OVERVIEW\nA quiet mystery.\n\n### COPY CLIP 1 PROMPT\n```text\nA lighthouse beam cuts through the rain.\n```"]]]]],
+            ], 200),
+        ]);
+        AiSetting::create([
+            'provider' => 'gemini',
+            'model' => 'gemini-2.5-flash',
+            'api_key' => 'test-provider-secret',
+        ]);
+        $owner = User::factory()->create();
+        $project = $this->makeProject($owner, ['video_type' => 'educational']);
+        $payload = [
+            ...$this->storyBrief(),
+            'video_type' => 'cinematic-story',
+            'topic' => 'A lighthouse keeper finds an impossible signal',
+            'creative_direction' => 'Quiet coastal mystery, restrained dialogue, blue-hour rain.',
+        ];
+
+        $this->actingAs($owner)
+            ->postJson(route('studio.generate', $project), $payload)
+            ->assertOk()
+            ->assertJsonPath('saved_to_history', true);
+
+        Http::assertSent(function (ClientRequest $request): bool {
+            $body = $request->data();
+            $systemInstruction = data_get($body, 'systemInstruction.parts.0.text', '');
+            $brief = data_get($body, 'contents.0.parts.0.text', '');
+
+            return str_contains($systemInstruction, 'NON-EDUCATIONAL VIDEO MODE — SELECTED FORMAT: Cinematic story / short film')
+                && str_contains($systemInstruction, 'clear goal, obstacle, escalation, and satisfying ending')
+                && str_contains($brief, 'Video type: Cinematic story / short film')
+                && str_contains($brief, 'Video idea / subject: A lighthouse keeper finds an impossible signal')
+                && str_contains($brief, 'Creative direction: Quiet coastal mystery')
+                && ! str_contains($brief, 'Learning objective:')
+                && ! str_contains($brief, 'Educational depth:');
+        });
+
+        $this->assertSame('educational', $project->fresh()->settings['video_type']);
+        $this->assertSame('cinematic-story', $owner->promptProjects()->firstOrFail()->brief['video_type']);
     }
 
     public function test_openai_compatible_provider_uses_the_admin_configured_endpoint_and_bearer_key(): void

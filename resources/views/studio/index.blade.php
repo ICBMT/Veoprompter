@@ -7,13 +7,14 @@
 @php
     $characterLabels = ['ai-choice' => 'AI chooses', 'human-male' => 'Human male', 'human-female' => 'Human female', 'robot' => 'Robot', 'fictional' => 'Fictional character'];
     $characterLabel = $characterLabels[$settings['character_type'] ?? 'ai-choice'] ?? 'Custom character';
+    $videoTypeLabel = $videoTypes[$settings['video_type'] ?? 'educational'] ?? 'Educational explainer';
 @endphp
 <div class="studio-page" data-studio data-project-id="{{ $project->id }}">
     <section class="studio-hero project-workspace-hero">
         <div class="hero-copy">
             <div class="eyebrow-label"><span class="eyebrow-spark">✳</span> YOUR PROJECT / FLOW-READY PROMPTS</div>
             <h1>{{ $project->name }}<br><em>one world, many stories.</em></h1>
-            <p>Your character, visual style, clip format, and sound preferences are saved here. Bring a new idea each time; the project settings stay consistent.</p>
+            <p>Your default video type, key subject, visual style, clip format, and sound preferences are saved here. Bring a new idea each time; the project settings stay consistent.</p>
             <div class="hero-qualities"><span><i>01</i> Saved preferences</span><b></b><span><i>02</i> Connected prompts</span><b></b><span><i>03</i> Private history</span></div>
         </div>
         <div class="storyboard-card" aria-label="Example of connected video frames">
@@ -21,7 +22,7 @@
             <div class="storyboard-art">
                 <div class="art-stars" aria-hidden="true"></div><div class="art-glow" aria-hidden="true"></div><div class="art-planet" aria-hidden="true"><span></span></div><div class="art-orbit art-orbit--one" aria-hidden="true"></div><div class="art-orbit art-orbit--two" aria-hidden="true"></div>
                 <div class="art-character" aria-hidden="true"><span class="character-antenna"></span><span class="character-head"><i class="robot-eye robot-eye--left"></i><i class="robot-eye robot-eye--right"></i><i class="robot-mouth"></i></span><span class="character-body"><i class="robot-core"></i></span><span class="character-arm character-arm--left"></span><span class="character-arm character-arm--right"></span><span class="character-leg character-leg--left"></span><span class="character-leg character-leg--right"></span></div>
-                <div class="art-location"><span>PROJECT CHARACTER</span><strong>{{ $characterLabel }}</strong></div><div class="art-lock"><span class="lock-check">✓</span> CHARACTER LOCKED</div><div class="art-frame-number">01 <span>/</span> {{ str_pad((string) $settings['clip_count'], 2, '0', STR_PAD_LEFT) }}</div><div class="art-sun" aria-hidden="true"></div><div class="art-horizon" aria-hidden="true"></div>
+                <div class="art-location"><span>SUBJECT / CHARACTER</span><strong>{{ $characterLabel }}</strong></div><div class="art-lock"><span class="lock-check">✓</span> CONTINUITY LOCKED</div><div class="art-frame-number">01 <span>/</span> {{ str_pad((string) $settings['clip_count'], 2, '0', STR_PAD_LEFT) }}</div><div class="art-sun" aria-hidden="true"></div><div class="art-horizon" aria-hidden="true"></div>
             </div>
             <div class="storyboard-footer"><div class="frame-track" aria-hidden="true"><span class="frame-thumb is-current"><i></i></span><span class="frame-link"></span><span class="frame-thumb"><i></i></span><span class="frame-link"></span><span class="frame-thumb"><i></i></span><span class="frame-link"></span><span class="frame-thumb"><i></i></span></div><div class="storyboard-caption"><span>YOUR PROJECT / SAVED SETTINGS</span><span>↗</span></div></div>
         </div>
@@ -45,7 +46,7 @@
         </div>
 
         <div class="mode-tabs" role="tablist" aria-label="Choose a prompt workflow">
-            <button class="mode-tab is-selected" type="button" role="tab" aria-selected="true" data-mode-tab="story"><span class="mode-icon"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M3 5.2A2.2 2.2 0 0 1 5.2 3h9.6A2.2 2.2 0 0 1 17 5.2v9.6a2.2 2.2 0 0 1-2.2 2.2H5.2A2.2 2.2 0 0 1 3 14.8V5.2Z"/><path d="m8 6.6 5.3 3.4L8 13.4V6.6Z"/></svg></span><span><strong>New story</strong><small>Plan a connected educational video</small></span><span class="tab-check">✓</span></button>
+            <button class="mode-tab is-selected" type="button" role="tab" aria-selected="true" data-mode-tab="story"><span class="mode-icon"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M3 5.2A2.2 2.2 0 0 1 5.2 3h9.6A2.2 2.2 0 0 1 17 5.2v9.6a2.2 2.2 0 0 1-2.2 2.2H5.2A2.2 2.2 0 0 1 3 14.8V5.2Z"/><path d="m8 6.6 5.3 3.4L8 13.4V6.6Z"/></svg></span><span><strong>New video</strong><small>Explainer, film, promo, and more</small></span><span class="tab-check">✓</span></button>
             <button class="mode-tab" type="button" role="tab" aria-selected="false" data-mode-tab="extend"><span class="mode-icon"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M5 4v12l10-6L5 4Z"/><path d="M3 3v14"/></svg></span><span><strong>Extend a video</strong><small>Continue from a final frame</small></span><span class="tab-check">✓</span></button>
         </div>
 
@@ -60,14 +61,26 @@
                     <span class="field-hint field-hint--bottom">Leave it blank and we’ll use the topic or next action.</span>
 
                     <div class="mode-fields" data-story-fields>
-                        <label class="field-label field-label--spaced" for="topic">What should the video teach? <span class="required-star">*</span></label>
-                        <input class="text-input input-large" id="topic" name="topic" type="text" maxlength="250" required placeholder="For example, how bees help flowers grow" autocomplete="off">
-                        <span class="field-hint">A topic, question, or idea is plenty. The AI will shape it into a story.</span>
-                        <label class="field-label field-label--spaced" for="learning_objective">Learning objective <span class="optional">OPTIONAL</span></label>
-                        <textarea class="text-input textarea-small" id="learning_objective" name="learning_objective" rows="2" maxlength="500" placeholder="What should viewers understand by the end?"></textarea>
-                        <label class="field-label field-label--spaced" for="character_idea">Extra character direction <span class="optional">OPTIONAL</span></label>
-                        <input class="text-input" id="character_idea" name="character_idea" type="text" maxlength="500" placeholder="A tiny bee with a yellow scarf, or leave it to the project settings">
-                        <span class="field-hint">The project’s saved character type and description are included automatically.</span>
+                        <label class="field-label field-label--spaced" for="video_type">Video format</label>
+                        <select class="text-input select-input" id="video_type" name="video_type" data-video-type-select required>
+                            @foreach($videoTypes as $type => $label)
+                                <option value="{{ $type }}" @selected(($settings['video_type'] ?? 'educational') === $type)>{{ $label }}</option>
+                            @endforeach
+                        </select>
+                        <span class="field-hint">Starts with your project default. You can switch formats for this prompt only.</span>
+
+                        <label class="field-label field-label--spaced" for="topic">What is this video about? <span class="required-star">*</span></label>
+                        <input class="text-input input-large" id="topic" name="topic" type="text" maxlength="250" required placeholder="A subject, film premise, product, place, or idea" autocomplete="off">
+                        <span class="field-hint">A subject, premise, product, place, or idea is enough. The selected format shapes the sequence.</span>
+                        <div data-learning-objective-fields @if(($settings['video_type'] ?? 'educational') !== 'educational') hidden @endif>
+                            <label class="field-label field-label--spaced" for="learning_objective">Learning objective <span class="optional">OPTIONAL</span></label>
+                            <textarea class="text-input textarea-small" id="learning_objective" name="learning_objective" rows="2" maxlength="500" placeholder="What should viewers understand by the end?"></textarea>
+                        </div>
+                        <label class="field-label field-label--spaced" for="creative_direction">Creative direction <span class="optional">OPTIONAL</span></label>
+                        <textarea class="text-input textarea-small" id="creative_direction" name="creative_direction" rows="3" maxlength="1500" placeholder="Genre, mood, pacing, a product detail, or an important moment"></textarea>
+                        <label class="field-label field-label--spaced" for="character_idea">Character or subject direction <span class="optional">OPTIONAL</span></label>
+                        <input class="text-input" id="character_idea" name="character_idea" type="text" maxlength="500" placeholder="A recurring hero, product detail, destination, or visual motif">
+                        <span class="field-hint">Your saved character profile is used when a recurring character suits the video.</span>
                     </div>
 
                     <div class="mode-fields" data-extend-fields hidden>
@@ -84,12 +97,14 @@
                 <section class="form-panel recipe-panel project-recipe-panel">
                     <div class="panel-heading"><span class="panel-step">B</span><div><h3>Project recipe</h3><p>These saved preferences stay the same for every prompt.</p></div></div>
                     <div class="project-recipe-list">
+                        <div><span>Default video type</span><strong>{{ $videoTypeLabel }}</strong></div>
                         <div><span>Audience</span><strong>{{ $settings['audience'] }}</strong></div>
                         <div><span>Visual style</span><strong>{{ $settings['visual_style'] === 'custom' ? $settings['style_detail'] : str_replace('-', ' ', $settings['visual_style']) }}</strong></div>
                         <div><span>Character type</span><strong>{{ $characterLabel }}@if(!empty($settings['character_details'])) · {{ \Illuminate\Support\Str::limit($settings['character_details'], 100) }}@endif</strong></div>
-                        <div><span>New-story length</span><strong>{{ $settings['clip_count'] }} clips · {{ $settings['clip_duration'] }} seconds each</strong></div>
+                        <div><span>New-video length</span><strong>{{ $settings['clip_count'] }} clips · {{ $settings['clip_duration'] }} seconds each</strong></div>
                         <div><span>Extension length</span><strong>{{ $settings['extend_duration'] }} seconds for the next clip</strong></div>
-                        <div><span>Frame shape / learning depth</span><strong>{{ $settings['aspect_ratio'] }} · {{ str_replace('-', ' ', $settings['educational_depth']) }}</strong></div>
+                        <div><span>Frame shape</span><strong>{{ $settings['aspect_ratio'] }}</strong></div>
+                        @if(($settings['video_type'] ?? 'educational') === 'educational')<div><span>Learning depth</span><strong>{{ str_replace('-', ' ', $settings['educational_depth']) }}</strong></div>@endif
                         <div><span>Narration</span><strong>{{ $settings['narration'] === '1' ? $settings['language'].' · '.$settings['narrator_voice'].' · '.$settings['narrator_accent'].' · '.$settings['narrator_tone'] : 'Off' }}</strong></div>
                         <div><span>Sound direction</span><strong>{{ $settings['music'] ? 'Music' : 'No music' }} · {{ $settings['sound_effects'] ? 'Sound effects' : 'No sound effects' }}</strong></div>
                     </div>
@@ -109,7 +124,7 @@
 
         <div class="generation-message" data-generation-message role="alert" hidden></div>
         <section class="results-section" data-results hidden aria-labelledby="results-heading">
-            <div class="results-header"><div><span class="section-index">02 <i>/</i> YOUR COPY-READY PLAN</span><h2 id="results-heading">The story is in frame.</h2><p>Each prompt is self-contained. Copy a section, then take it straight to Flow.</p></div><div class="results-actions"><button class="button-secondary" type="button" data-download-output><span aria-hidden="true">↓</span> Save .txt</button><button class="button-secondary button-copy-all" type="button" data-copy-all><span aria-hidden="true">▢</span> Copy all</button></div></div>
+            <div class="results-header"><div><span class="section-index">02 <i>/</i> YOUR COPY-READY PLAN</span><h2 id="results-heading">The video plan is in frame.</h2><p>Each prompt is self-contained. Copy a section, then take it straight to Flow.</p></div><div class="results-actions"><button class="button-secondary" type="button" data-download-output><span aria-hidden="true">↓</span> Save .txt</button><button class="button-secondary button-copy-all" type="button" data-copy-all><span aria-hidden="true">▢</span> Copy all</button></div></div>
             <div class="result-meta"><span class="result-status"><i></i> <span data-ready-label>PROMPT KIT READY</span></span><span>TEXT ONLY · NO VIDEO GENERATED</span></div>
             <div class="history-result-notice" data-history-notice role="status" aria-live="polite" hidden></div>
             <div class="output-content" data-output-content></div>
@@ -124,12 +139,12 @@
             <div class="project-runs-list">
                 @foreach($runs as $run)
                     @php($runBrief = $run->brief ?? [])
-                    <article class="project-run-card"><div class="project-run-icon">{{ $run->mode === 'extend' ? '↗' : '▶' }}</div><div class="project-run-copy"><span class="history-date">{{ $run->created_at->format('M j, Y · g:i A') }}</span><h3><a href="{{ route('history.show', $run, false) }}">{{ $run->title }}</a></h3><p>{{ $run->mode === 'extend' ? ($runBrief['next_action'] ?? 'Video extension') : ($runBrief['topic'] ?? 'Educational video') }}</p></div><a class="project-run-open" href="{{ route('history.show', $run, false) }}" aria-label="Open {{ $run->title }}">↗</a></article>
+                    <article class="project-run-card"><div class="project-run-icon">{{ $run->mode === 'extend' ? '↗' : '▶' }}</div><div class="project-run-copy"><span class="history-date">{{ $run->created_at->format('M j, Y · g:i A') }}</span><h3><a href="{{ route('history.show', $run, false) }}">{{ $run->title }}</a></h3><p>{{ $run->mode === 'extend' ? ($runBrief['next_action'] ?? 'Video extension') : ($runBrief['topic'] ?? 'Video prompt') }}</p></div><a class="project-run-open" href="{{ route('history.show', $run, false) }}" aria-label="Open {{ $run->title }}">↗</a></article>
                 @endforeach
             </div>
             {{ $runs->links('components.pagination') }}
         @else
-            <section class="history-empty project-runs-empty"><h3>Your first prompt is ready to begin.</h3><p>Choose New story or Extend a video above. Your generated kits will appear here.</p></section>
+            <section class="history-empty project-runs-empty"><h3>Your first prompt is ready to begin.</h3><p>Choose New video or Extend a video above. Your generated kits will appear here.</p></section>
         @endif
     </section>
 </div>

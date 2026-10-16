@@ -15,8 +15,19 @@
     const uploadLabel = form.querySelector('[data-upload-label]');
     const uploadClear = form.querySelector('[data-upload-clear]');
     const storyTabs = [...document.querySelectorAll('[data-mode-tab]')];
+    const videoTypeSelect = form.querySelector('[data-video-type-select]');
+    const learningObjectiveFields = form.querySelector('[data-learning-objective-fields]');
     let activeMode = 'story';
     let latestOutput = '';
+
+    const updateLearningObjectiveFields = () => {
+        if (!learningObjectiveFields) return;
+        const show = activeMode === 'story' && videoTypeSelect?.value === 'educational';
+        learningObjectiveFields.hidden = !show;
+        learningObjectiveFields.querySelectorAll('input, select, textarea').forEach((field) => {
+            field.disabled = !show;
+        });
+    };
 
     const hideMessage = () => {
         message.hidden = true;
@@ -43,6 +54,7 @@
         document.querySelectorAll('[data-extend-fields]').forEach((group) => setGroupEnabled(group, mode === 'extend'));
         document.querySelectorAll('[data-story-only]').forEach((group) => setGroupEnabled(group, mode === 'story'));
         document.querySelectorAll('[data-extend-only]').forEach((group) => setGroupEnabled(group, mode === 'extend'));
+        updateLearningObjectiveFields();
 
         const durationCopy = document.querySelector('[data-duration-copy]');
         if (durationCopy) durationCopy.name = mode === 'extend' ? 'clip_duration' : '';
@@ -56,6 +68,7 @@
     };
 
     storyTabs.forEach((tab) => tab.addEventListener('click', () => setMode(tab.dataset.modeTab)));
+    videoTypeSelect?.addEventListener('change', updateLearningObjectiveFields);
     setMode('story');
 
     const showMessage = (text) => {
@@ -329,7 +342,7 @@
             latestOutput = payload.content || '';
             renderOutput(latestOutput);
             resultSection.hidden = false;
-            document.querySelector('#results-heading').textContent = payload.mode === 'extend' ? 'The next shot is in frame.' : 'The story is in frame.';
+            document.querySelector('#results-heading').textContent = payload.mode === 'extend' ? 'The next shot is in frame.' : 'The video plan is in frame.';
             readyLabel.textContent = payload.mode === 'extend' ? 'EXTENSION PROMPT READY' : 'PROMPT KIT READY';
             renderHistoryNotice(payload);
             resultSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -651,7 +664,7 @@
         intro.from('.hero-copy .eyebrow-label', { y: 12, autoAlpha: 0, duration: 0.45 })
             .from('.hero-copy h1', { y: 24, autoAlpha: 0, duration: 0.72, ease: 'power4.out' }, '-=0.24')
             .from('.hero-copy > p, .hero-qualities', { y: 14, autoAlpha: 0, duration: 0.52, stagger: 0.08 }, '-=0.36')
-            .from('.storyboard-card', { y: 20, autoAlpha: 0, scale: 0.985, duration: 0.72 }, '-=0.56')
+            .from('.storyboard-card', { y: 20, autoAlpha: 0, scale: 0.985, rotationY: -3.5, rotationX: 1.5, transformPerspective: 1100, duration: 0.72 }, '-=0.56')
             .from('.workspace-section .section-heading-row, .workspace-section .mode-tabs, .workspace-section .prompt-form', {
                 y: 18,
                 autoAlpha: 0,
@@ -678,6 +691,10 @@
     revealTargets.forEach((element, index) => {
         const reveal = {
             y: 18,
+            z: 10,
+            rotationX: -1.8,
+            transformPerspective: 1000,
+            transformOrigin: 'center bottom',
             autoAlpha: 0,
             duration: 0.58,
             delay: (index % 3) * 0.055,
@@ -1121,10 +1138,12 @@
         const visualStyle = chosenValue('visual_style');
         const characterType = chosenValue('character_type');
         const narration = chosenValue('narration');
+        const videoType = chosenValue('video_type');
         const hiddenRows = new Set();
         const reviewVoicePreview = form.querySelector('[data-wizard-review-voice-preview]');
         if (reviewVoicePreview) reviewVoicePreview.hidden = narration !== '1';
         if (visualStyle !== 'custom') hiddenRows.add('style_detail');
+        if (videoType !== 'educational') hiddenRows.add('educational_depth');
         if (characterType !== 'fictional') hiddenRows.add('character_details');
         if (narration !== '1') {
             ['language', 'narrator_voice', 'narrator_accent', 'narrator_tone'].forEach((key) => hiddenRows.add(key));
@@ -1230,7 +1249,7 @@
         updateChoiceStyles();
         updateReview();
         if (validationMessage) validationMessage.hidden = true;
-        if (['visual_style', 'character_type', 'narration'].includes(event.target.name)) render();
+        if (['visual_style', 'character_type', 'narration', 'video_type'].includes(event.target.name)) render();
     });
 
     form.addEventListener('submit', (event) => {

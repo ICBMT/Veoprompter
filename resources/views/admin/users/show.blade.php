@@ -24,9 +24,9 @@
                 @foreach($runs as $run)
                     @php($brief = $run->brief ?? [])
                     <article class="admin-prompt-card">
-                        <div class="admin-prompt-card-header"><div><span class="history-mode {{ $run->mode === 'extend' ? 'mode-extend' : '' }}">{{ $run->mode === 'extend' ? '↗ EXTENSION' : '▶ NEW STORY' }}</span><span class="history-date">{{ $run->created_at->format('M j, Y · g:i A') }}</span></div><span class="admin-prompt-model">{{ $run->provider === 'gemini' ? 'GEMINI' : 'OPENAI-COMPATIBLE' }} · {{ $run->model }}</span></div>
+                        <div class="admin-prompt-card-header"><div><span class="history-mode {{ $run->mode === 'extend' ? 'mode-extend' : '' }}">{{ $run->mode === 'extend' ? '↗ EXTENSION' : '▶ NEW VIDEO' }}</span><span class="history-date">{{ $run->created_at->format('M j, Y · g:i A') }}</span></div><span class="admin-prompt-model">{{ $run->provider === 'gemini' ? 'GEMINI' : 'OPENAI-COMPATIBLE' }} · {{ $run->model }}</span></div>
                         <h3>{{ $run->title }}</h3>
-                        <p class="admin-prompt-subject">{{ $run->mode === 'extend' ? ($brief['next_action'] ?? 'Video extension') : ($brief['topic'] ?? 'Educational video') }}</p>
+                        <p class="admin-prompt-subject">{{ $run->mode === 'extend' ? ($brief['next_action'] ?? 'Video extension') : ($brief['topic'] ?? 'Video prompt') }}</p>
                         @if($run->studioProject)<span class="admin-prompt-project-link">Project: {{ $run->studioProject->name }}</span>@endif
                         <details class="admin-prompt-output"><summary>View full saved prompt output</summary><pre>{{ $run->content }}</pre></details>
                     </article>

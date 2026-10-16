@@ -18,12 +18,18 @@ class StudioProjectController extends Controller
             ->latest('updated_at')
             ->paginate(9);
 
-        return view('projects.index', compact('projects'));
+        return view('projects.index', [
+            'projects' => $projects,
+            'videoTypes' => ProjectSettings::videoTypes(),
+        ]);
     }
 
     public function create(): View
     {
-        return view('projects.create', ['settings' => ProjectSettings::defaults()]);
+        return view('projects.create', [
+            'settings' => ProjectSettings::defaults(),
+            'videoTypes' => ProjectSettings::videoTypes(),
+        ]);
     }
 
     public function store(Request $request): RedirectResponse
@@ -50,6 +56,7 @@ class StudioProjectController extends Controller
         return view('studio.index', [
             'project' => $studioProject,
             'settings' => array_replace(ProjectSettings::defaults(), $studioProject->settings ?? []),
+            'videoTypes' => ProjectSettings::videoTypes(),
             'runs' => $runs,
             'aiReady' => \App\Models\AiSetting::query()->find(1)?->isReady() ?? false,
             'isAdmin' => (bool) $request->user()->is_admin,
@@ -63,6 +70,7 @@ class StudioProjectController extends Controller
         return view('projects.edit', [
             'project' => $studioProject,
             'settings' => array_replace(ProjectSettings::defaults(), $studioProject->settings ?? []),
+            'videoTypes' => ProjectSettings::videoTypes(),
         ]);
     }
 

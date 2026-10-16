@@ -18,6 +18,7 @@ class ProjectAndTemporaryAccountTest extends TestCase
         $payload = [
             'name' => 'Urdu space stories',
             'audience' => 'Urdu-speaking young learners',
+            'video_type' => 'educational',
             'visual_style' => 'custom',
             'style_detail' => 'Soft paper-cut planets with warm light',
             'character_type' => 'fictional',
@@ -44,6 +45,7 @@ class ProjectAndTemporaryAccountTest extends TestCase
         $this->assertSame('Urdu space stories', $project->name);
         $this->assertSame('A shy moon fox with a silver tail', $project->settings['character_details']);
         $this->assertSame('Urdu', $project->settings['language']);
+        $this->assertSame('educational', $project->settings['video_type']);
         $this->assertSame(6, $project->settings['extend_duration']);
         $this->assertTrue($project->settings['music']);
         $this->assertFalse($project->settings['sound_effects']);
@@ -54,7 +56,7 @@ class ProjectAndTemporaryAccountTest extends TestCase
             ->assertSee('Urdu space stories')
             ->assertSee('A shy moon fox with a silver tail');
 
-        $updated = [...$payload, 'name' => 'Moon fox learning', 'clip_duration' => '12', 'narration' => '0'];
+        $updated = [...$payload, 'name' => 'Moon fox learning', 'video_type' => 'cinematic-story', 'clip_duration' => '12', 'narration' => '0'];
         unset($updated['language'], $updated['narrator_voice'], $updated['narrator_accent'], $updated['narrator_tone']);
         $this->actingAs($owner)
             ->put(route('projects.settings.update', $project), $updated)
@@ -64,6 +66,7 @@ class ProjectAndTemporaryAccountTest extends TestCase
         $this->assertSame('Moon fox learning', $project->name);
         $this->assertSame(12, $project->settings['clip_duration']);
         $this->assertSame('0', $project->settings['narration']);
+        $this->assertSame('cinematic-story', $project->settings['video_type']);
         $this->assertSame('Urdu', $project->settings['language'], 'Disabled voice controls keep their saved values when narration is turned off.');
     }
 

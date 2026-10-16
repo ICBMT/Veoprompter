@@ -71,7 +71,7 @@
 
     <div class="admin-divider-label">YOUR PROMPTING STANDARD</div>
     <section class="admin-method-card">
-        <span class="method-icon" aria-hidden="true">✳</span><div><strong>Master specification is loaded on every request</strong><p>The complete continuity method from <code>prompt.txt</code> is sent as server-side system instructions: fixed character and world bibles, exact clip-to-clip handoffs, a verbatim continuation rule, educational accuracy checks, and copy-ready Flow prompts. It is not editable by ordinary users.</p></div>
+        <span class="method-icon" aria-hidden="true">✳</span><div><strong>Master specification is loaded on every request</strong><p>The complete continuity method from <code>prompt.txt</code> is sent as server-side system instructions: stable subject and world details, exact clip-to-clip handoffs, a verbatim continuation rule, mode-appropriate factual checks, and copy-ready Flow prompts. It is not editable by ordinary users.</p></div>
     </section>
 </div>
 @endsection

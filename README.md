@@ -1,14 +1,14 @@
 # VeoPrompter
 
-VeoPrompter is a Laravel 13 prompt studio for creating detailed, continuity-first educational video prompts for Google Flow and compatible video tools. It creates **text prompts only**—never images or videos—and follows the prompting method in the repository's root [`prompt.txt`](prompt.txt). The runtime copy at `resources/prompts/master-spec.txt` is tested against that source so the master specification stays in sync.
+VeoPrompter is a Laravel 13 prompt studio for creating detailed, continuity-first video prompts for Google Flow and compatible video tools. It supports educational explainers, cinematic stories and short films, documentaries, product or brand videos, music videos, travel reels, and custom creative briefs. It creates **text prompts only**—never images or videos—and preserves the prompting method in the repository's root [`prompt.txt`](prompt.txt). The runtime copy at `resources/prompts/master-spec.txt` is tested against that source so the master specification stays in sync.
 
 ## What it does
 
-- Creates educational story plans with an accuracy check, character and world bibles, a character-reference **image prompt**, a continuity map, and independently copyable clip prompts.
+- Creates educational story plans with the existing accuracy check, character and world bibles, a character-reference **image prompt**, continuity maps, and independently copyable clip prompts; non-educational modes use format-aware treatments without forcing lessons or mascots.
 - Continues a video from a written final-frame description and, optionally, a supplied still image.
 - Carries character, scene, camera, object, lighting, and sound details across clips; continuation prompts include the required verbatim handoff instruction from the master specification.
 - Requires sign-in before opening the prompt workspace or generating a prompt.
-- Lets signed-in users create projects with reusable preferences for audience, visual style, character type/profile, clip count, story and extension duration, aspect ratio, learning depth, narration, language, voice, accent, tone, music, and sound effects. Preferences can be edited later and are applied server-side to every generation in that project.
+- Lets signed-in users create projects with reusable preferences for default video type, audience, visual style, character type/profile, clip count, video and extension duration, aspect ratio, learning depth for explainers, narration, language, voice, accent, tone, music, and sound effects. Preferences can be edited later and are applied server-side to every generation in that project.
 - Saves each completed generation to the selected project and the user's private prompt library, where users can search, copy, download, revisit, and delete prompt kits.
 - Provides a best-effort voice sample using the browser/device's built-in speech synthesis. It approximates selected language, voice, accent, and tone when a matching installed voice exists; it does not synthesize the final video narration and varies by device.
 - Gives administrators a registered-user directory with recent online/offline presence and access to each user's saved prompt outputs. Administrators can create customer or admin test accounts that expire three hours after creation.
