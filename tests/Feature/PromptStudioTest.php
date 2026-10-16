@@ -34,6 +34,25 @@ class PromptStudioTest extends TestCase
             ->assertSee('Edit project settings');
     }
 
+    public function test_project_creation_uses_a_guided_wizard_while_editing_keeps_the_full_settings_form(): void
+    {
+        $owner = User::factory()->create();
+        $project = $this->makeProject($owner);
+
+        $this->actingAs($owner)
+            ->get(route('projects.create'))
+            ->assertOk()
+            ->assertSee('data-project-wizard', false)
+            ->assertSee('data-wizard-step', false)
+            ->assertSee('data-wizard-when="narration:1"', false);
+
+        $this->get(route('projects.settings.edit', $project))
+            ->assertOk()
+            ->assertDontSee('data-project-wizard', false)
+            ->assertSee('project-settings-grid', false)
+            ->assertSee('Save project settings');
+    }
+
     public function test_prompt_generation_explains_when_an_admin_has_not_configured_an_ai(): void
     {
         $owner = User::factory()->create();

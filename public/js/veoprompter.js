@@ -746,21 +746,28 @@
     const form = document.querySelector('.project-settings-form');
     if (!form) return;
 
-    const styleSelect = form.querySelector('#visual_style');
+    const styleControl = form.querySelector('#visual_style');
+    const styleChoices = [...form.querySelectorAll('input[name="visual_style"]')];
     const customStyle = form.querySelector('[data-custom-style]');
     const customStyleInput = form.querySelector('#style_detail');
     const voiceFields = form.querySelector('[data-voice-fields]');
     const narrationRadios = [...form.querySelectorAll('input[name="narration"]')];
-    const characterType = form.querySelector('[data-character-type-select]');
+    const characterTypeControl = form.querySelector('[data-character-type-select]');
+    const characterTypeChoices = [...form.querySelectorAll('input[name="character_type"]')];
     const characterDetails = form.querySelector('#character_details');
+    const selectedValue = (name, control) => form.querySelector(`input[name="${name}"]:checked`)?.value || control?.value || '';
 
     const updateCustomStyle = () => {
-        const show = styleSelect?.value === 'custom';
+        const show = selectedValue('visual_style', styleControl) === 'custom';
         if (customStyle) customStyle.hidden = !show;
         if (customStyleInput) {
             customStyleInput.disabled = !show;
             customStyleInput.required = show;
         }
+    };
+
+    const updateCharacterDetails = () => {
+        if (characterDetails) characterDetails.required = selectedValue('character_type', characterTypeControl) === 'fictional';
     };
 
     const updateNarration = () => {
@@ -780,11 +787,11 @@
         });
     };
 
-    styleSelect?.addEventListener('change', updateCustomStyle);
+    styleChoices.forEach((choice) => choice.addEventListener('change', updateCustomStyle));
+    styleControl?.addEventListener('change', updateCustomStyle);
     narrationRadios.forEach((radio) => radio.addEventListener('change', updateNarration));
-    characterType?.addEventListener('change', () => {
-        if (characterDetails) characterDetails.required = characterType.value === 'fictional';
-    });
+    characterTypeChoices.forEach((choice) => choice.addEventListener('change', updateCharacterDetails));
+    if (!characterTypeChoices.length) characterTypeControl?.addEventListener('change', updateCharacterDetails);
     form.querySelectorAll('.aspect-choice input').forEach((input) => {
         input.addEventListener('change', () => {
             form.querySelectorAll('.aspect-choice').forEach((choice) => {
@@ -794,6 +801,7 @@
     });
 
     updateCustomStyle();
+    updateCharacterDetails();
     updateNarration();
 
     document.querySelectorAll('.field-info').forEach((button) => {
@@ -988,4 +996,200 @@
 
     refreshPresence();
     window.setInterval(refreshPresence, 45000);
+})();
+
+(() => {
+    const form = document.querySelector('[data-project-wizard]');
+    if (!form) return;
+    form.classList.add('is-enhanced');
+
+    const allSteps = [...form.querySelectorAll('[data-wizard-step]')];
+    const backButton = form.querySelector('[data-wizard-back]');
+    const nextButton = form.querySelector('[data-wizard-next]');
+    const submitButton = form.querySelector('[data-wizard-submit]');
+    const progressLabel = form.querySelector('[data-wizard-step-count]');
+    const progressGroup = form.querySelector('[data-wizard-step-group]');
+    const progressBar = form.querySelector('[data-wizard-progress]');
+    const progressTrack = form.querySelector('[role="progressbar"]');
+    const progressNote = form.querySelector('[data-wizard-progress-note]');
+    const announcement = form.querySelector('[data-wizard-announcement]');
+    const validationMessage = form.querySelector('[data-wizard-validation]');
+    let currentStep = allSteps[0];
+
+    const chosenValue = (name) => form.querySelector(`input[name="${name}"]:checked`)?.value
+        ?? form.querySelector(`select[name="${name}"]`)?.value
+        ?? '';
+
+    const isRelevant = (step) => {
+        const condition = step.dataset.wizardWhen;
+        if (!condition) return true;
+        const [name, expected] = condition.split(':');
+        return chosenValue(name) === expected;
+    };
+
+    const activeSteps = () => allSteps.filter(isRelevant);
+
+    const labelForValue = (field) => {
+        const checked = form.querySelector(`input[name="${field}"]:checked`);
+        if (checked) {
+            return checked.dataset.summaryLabel
+                || checked.closest('.wizard-choice')?.querySelector('.wizard-choice-title')?.textContent.trim()
+                || checked.closest('.aspect-choice')?.querySelector('span:not(.ratio-icon):not(.sr-only)')?.textContent.trim()
+                || checked.value;
+        }
+        const select = form.querySelector(`select[name="${field}"]`);
+        if (select) return select.selectedOptions[0]?.textContent.trim() || '';
+        const input = form.querySelector(`[name="${field}"]:not([type="radio"]):not([type="checkbox"]):not([type="hidden"])`);
+        return input?.value.trim() || '';
+    };
+
+    const updateReview = () => {
+        const visualStyle = chosenValue('visual_style');
+        const characterType = chosenValue('character_type');
+        const narration = chosenValue('narration');
+        const hiddenRows = new Set();
+        if (visualStyle !== 'custom') hiddenRows.add('style_detail');
+        if (characterType !== 'fictional') hiddenRows.add('character_details');
+        if (narration !== '1') {
+            ['language', 'narrator_voice', 'narrator_accent', 'narrator_tone'].forEach((key) => hiddenRows.add(key));
+        }
+
+        form.querySelectorAll('[data-wizard-summary-for]').forEach((summary) => {
+            const key = summary.dataset.wizardSummaryFor;
+            const row = summary.closest('[data-wizard-review-row]');
+            if (row) row.hidden = hiddenRows.has(key);
+            let value = labelForValue(key);
+            if (key === 'visual_style' && visualStyle === 'custom') value = 'Custom visual style';
+            if (key === 'character_type' && characterType === 'fictional') value = 'Fictional character';
+            summary.textContent = value || '—';
+        });
+    };
+
+    const updateChoiceStyles = () => {
+        form.querySelectorAll('.wizard-choice').forEach((choice) => {
+            choice.classList.toggle('is-selected', Boolean(choice.querySelector('input')?.checked));
+        });
+    };
+
+    const render = (focusStep = false) => {
+        const steps = activeSteps();
+        if (!steps.length) return;
+        if (!steps.includes(currentStep)) {
+            const previousIndex = Math.max(0, allSteps.indexOf(currentStep));
+            currentStep = steps.find((step) => allSteps.indexOf(step) >= previousIndex) || steps[steps.length - 1];
+        }
+        const currentIndex = steps.indexOf(currentStep);
+        steps.forEach((step, index) => {
+            const number = step.querySelector('[data-wizard-number]');
+            if (number) number.textContent = String(index + 1).padStart(2, '0');
+        });
+        allSteps.forEach((step) => {
+            const isCurrent = step === currentStep && isRelevant(step);
+            step.hidden = !isCurrent;
+            step.setAttribute('aria-current', isCurrent ? 'step' : 'false');
+        });
+
+        const humanStep = currentIndex + 1;
+        const isReview = Boolean(currentStep.hasAttribute('data-wizard-review'));
+        progressLabel.textContent = `STEP ${humanStep} OF ${steps.length}`;
+        progressGroup.textContent = currentStep.dataset.wizardGroup || 'PROJECT SETUP';
+        progressTrack.setAttribute('aria-valuemax', String(steps.length));
+        progressTrack.setAttribute('aria-valuenow', String(humanStep));
+        progressBar.style.width = `${steps.length <= 1 ? 100 : (currentIndex / (steps.length - 1)) * 100}%`;
+        progressNote.textContent = isReview
+            ? 'Everything here is saved as your project default. You can edit it later.'
+            : 'One small choice at a time. You can go back whenever you like.';
+        backButton.hidden = currentIndex === 0;
+        nextButton.hidden = isReview;
+        submitButton.hidden = !isReview;
+        if (announcement) announcement.textContent = `Step ${humanStep} of ${steps.length}: ${currentStep.dataset.wizardTitle || 'Project setup'}`;
+        updateReview();
+        updateChoiceStyles();
+
+        if (focusStep) {
+            currentStep.scrollIntoView({ behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth', block: 'start' });
+            window.requestAnimationFrame(() => currentStep.querySelector('.wizard-question h2')?.focus({ preventScroll: true }));
+        }
+    };
+
+    const validateStep = (step, focusInvalid = true) => {
+        const fields = [...step.querySelectorAll('input:not([type="hidden"]), select, textarea')]
+            .filter((field) => !field.disabled);
+        const invalid = fields.find((field) => !field.checkValidity());
+        if (!invalid) return true;
+        if (validationMessage) {
+            validationMessage.textContent = 'Please answer this question before continuing.';
+            validationMessage.hidden = false;
+        }
+        if (focusInvalid) invalid.reportValidity();
+        return false;
+    };
+
+    nextButton.addEventListener('click', () => {
+        if (!validateStep(currentStep)) return;
+        if (validationMessage) validationMessage.hidden = true;
+        const steps = activeSteps();
+        const nextIndex = steps.indexOf(currentStep) + 1;
+        if (nextIndex < steps.length) {
+            currentStep = steps[nextIndex];
+            render(true);
+        }
+    });
+
+    backButton.addEventListener('click', () => {
+        const steps = activeSteps();
+        const previousIndex = steps.indexOf(currentStep) - 1;
+        if (previousIndex >= 0) {
+            currentStep = steps[previousIndex];
+            if (validationMessage) validationMessage.hidden = true;
+            render(true);
+        }
+    });
+
+    form.addEventListener('input', () => {
+        updateReview();
+        if (validationMessage) validationMessage.hidden = true;
+    });
+    form.addEventListener('change', (event) => {
+        updateChoiceStyles();
+        updateReview();
+        if (validationMessage) validationMessage.hidden = true;
+        if (['visual_style', 'character_type', 'narration'].includes(event.target.name)) render();
+    });
+
+    form.addEventListener('submit', (event) => {
+        if (!currentStep.hasAttribute('data-wizard-review')) {
+            event.preventDefault();
+            if (!validateStep(currentStep)) return;
+            if (validationMessage) validationMessage.hidden = true;
+            const steps = activeSteps();
+            const nextIndex = steps.indexOf(currentStep) + 1;
+            if (nextIndex < steps.length) {
+                currentStep = steps[nextIndex];
+                render(true);
+            }
+            return;
+        }
+
+        const steps = activeSteps();
+        const invalidStep = steps.find((step) => !validateStep(step, false));
+        if (invalidStep) {
+            event.preventDefault();
+            currentStep = invalidStep;
+            render(true);
+            window.requestAnimationFrame(() => validateStep(invalidStep));
+            return;
+        }
+        if (validationMessage) validationMessage.hidden = true;
+    });
+
+    render();
+    if (document.querySelector('.validation-summary')) {
+        const steps = activeSteps();
+        const invalidStep = steps.find((step) => !validateStep(step, false));
+        if (invalidStep) {
+            currentStep = invalidStep;
+            render();
+        }
+    }
 })();
