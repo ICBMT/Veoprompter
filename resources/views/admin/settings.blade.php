@@ -69,6 +69,26 @@
         </form>
     </section>
 
+    <section class="admin-card duration-options-card" aria-labelledby="duration-options-heading">
+        <header class="admin-card-header"><span class="admin-card-icon" aria-hidden="true">◷</span><div><h2 id="duration-options-heading">Project duration choices</h2><p>Control whether users can customize clip and extension length in project setup.</p></div></header>
+        <form class="admin-form" action="{{ route('admin.duration-options.update', [], false) }}" method="post">
+            @csrf
+            @method('PUT')
+            <div class="admin-form-grid">
+                <div class="admin-field admin-field--wide">
+                    <input type="hidden" name="allow_clip_duration_choice" value="0">
+                    <label class="switch-row"><span><strong>Allow users to choose each video clip’s length</strong><small>When off, new and existing projects use 8 seconds per clip.</small></span><input type="checkbox" name="allow_clip_duration_choice" value="1" @checked($settings->allow_clip_duration_choice)><i class="switch-track"></i></label>
+                </div>
+                <div class="admin-field admin-field--wide">
+                    <input type="hidden" name="allow_extension_duration_choice" value="0">
+                    <label class="switch-row"><span><strong>Allow users to choose video extension length</strong><small>When off, every extension uses the 8-second default.</small></span><input type="checkbox" name="allow_extension_duration_choice" value="1" @checked($settings->allow_extension_duration_choice)><i class="switch-track"></i></label>
+                </div>
+            </div>
+            <div class="admin-help"><span aria-hidden="true">ⓘ</span><div><strong>These are global controls.</strong> Turning a choice off hides its setup question and forces 8 seconds during project creation, editing, and prompt generation. You can further disable either choice for an individual account in User management; an individual setting cannot bypass a global off switch.</div></div>
+            <div class="admin-form-footer"><p>New accounts keep both choices on unless changed here or for that account.</p><button class="button-primary" type="submit"><span>Save duration options</span><span class="button-icon" aria-hidden="true">↗</span></button></div>
+        </form>
+    </section>
+
     <section class="admin-card voice-admin-card" aria-labelledby="voice-settings-heading">
         <header class="admin-card-header"><span class="admin-card-icon" aria-hidden="true">♫</span><div><h2 id="voice-settings-heading">Voice sample generation</h2><p>Gemini TTS creates consistent preview audio for the selected language, voice, accent, and tone.</p></div><div class="admin-ready {{ $ttsReady ? '' : 'is-offline' }}"><i></i>{{ $ttsReady ? 'VOICE PREVIEWS ENABLED' : 'TTS NOT CONFIGURED' }}</div></header>
 

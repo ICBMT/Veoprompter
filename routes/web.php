@@ -59,10 +59,12 @@ Route::prefix('admin')
         Route::post('/models', [AiSettingsController::class, 'models'])->middleware('throttle:8,1')->name('models');
         Route::post('/test-connection', [AiSettingsController::class, 'testConnection'])->middleware('throttle:5,1')->name('connection.test');
         Route::put('/settings', [AiSettingsController::class, 'update'])->name('settings.update');
+        Route::put('/duration-options', [AiSettingsController::class, 'updateDurationOptions'])->name('duration-options.update');
         Route::put('/voice-settings', [AiSettingsController::class, 'updateVoice'])->name('voice-settings.update');
 
         Route::get('/users', [UserManagementController::class, 'index'])->name('users.index');
         Route::get('/users/presence', [UserManagementController::class, 'presence'])->middleware('throttle:10,1')->name('users.presence');
         Route::post('/users/test-accounts', [UserManagementController::class, 'createTestAccount'])->name('users.test-accounts.store');
+        Route::put('/users/{user}/duration-options', [UserManagementController::class, 'updateDurationOptions'])->name('users.duration-options.update');
         Route::get('/users/{user}', [UserManagementController::class, 'show'])->name('users.show');
     });

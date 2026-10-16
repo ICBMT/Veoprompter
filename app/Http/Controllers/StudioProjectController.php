@@ -12,6 +12,7 @@ class StudioProjectController extends Controller
 {
     public function index(Request $request): View
     {
+        $durationOptions = ProjectSettings::durationOptionsFor($request->user());
         $projects = $request->user()
             ->studioProjects()
             ->withCount('promptProjects')
@@ -21,27 +22,33 @@ class StudioProjectController extends Controller
         return view('projects.index', [
             'projects' => $projects,
             'videoTypes' => ProjectSettings::videoTypes(),
+            'durationOptions' => $durationOptions,
         ]);
     }
 
-    public function create(): View
+    public function create(Request $request): View
     {
+        $durationOptions = ProjectSettings::durationOptionsFor($request->user());
+
         return view('projects.create', [
-            'settings' => ProjectSettings::defaults(),
+            'settings' => ProjectSettings::applyDurationOptions(ProjectSettings::defaults(), $durationOptions),
+            'durationOptions' => $durationOptions,
             'videoTypes' => ProjectSettings::videoTypes(),
         ]);
     }
 
     public function store(Request $request): RedirectResponse
     {
+        $durationOptions = ProjectSettings::durationOptionsFor($request->user());
+        $request->merge(ProjectSettings::forcedDurationFields($durationOptions));
         $validated = $request->validate([
             'name' => ['required', 'string', 'min:2', 'max:100'],
-            ...ProjectSettings::rules(),
+            ...ProjectSettings::rules($durationOptions),
         ]);
 
         $project = $request->user()->studioProjects()->create([
             'name' => trim($validated['name']),
-            'settings' => ProjectSettings::fromValidated($validated),
+            'settings' => ProjectSettings::fromValidated($validated, [], $durationOptions),
         ]);
 
         return redirect()->to(route('projects.show', $project, false))
@@ -52,10 +59,12 @@ class StudioProjectController extends Controller
     {
         $this->ensureOwner($request, $studioProject);
         $runs = $studioProject->promptProjects()->latest()->paginate(5);
+        $durationOptions = ProjectSettings::durationOptionsFor($request->user());
 
         return view('studio.index', [
             'project' => $studioProject,
-            'settings' => array_replace(ProjectSettings::defaults(), $studioProject->settings ?? []),
+            'settings' => ProjectSettings::applyDurationOptions($studioProject->settings ?? [], $durationOptions),
+            'durationOptions' => $durationOptions,
             'videoTypes' => ProjectSettings::videoTypes(),
             'runs' => $runs,
             'aiReady' => \App\Models\AiSetting::query()->find(1)?->isReady() ?? false,
@@ -66,10 +75,12 @@ class StudioProjectController extends Controller
     public function edit(Request $request, StudioProject $studioProject): View
     {
         $this->ensureOwner($request, $studioProject);
+        $durationOptions = ProjectSettings::durationOptionsFor($request->user());
 
         return view('projects.edit', [
             'project' => $studioProject,
-            'settings' => array_replace(ProjectSettings::defaults(), $studioProject->settings ?? []),
+            'settings' => ProjectSettings::applyDurationOptions($studioProject->settings ?? [], $durationOptions),
+            'durationOptions' => $durationOptions,
             'videoTypes' => ProjectSettings::videoTypes(),
         ]);
     }
@@ -77,15 +88,17 @@ class StudioProjectController extends Controller
     public function update(Request $request, StudioProject $studioProject): RedirectResponse
     {
         $this->ensureOwner($request, $studioProject);
+        $durationOptions = ProjectSettings::durationOptionsFor($request->user());
+        $request->merge(ProjectSettings::forcedDurationFields($durationOptions));
 
         $validated = $request->validate([
             'name' => ['required', 'string', 'min:2', 'max:100'],
-            ...ProjectSettings::rules(),
+            ...ProjectSettings::rules($durationOptions),
         ]);
 
         $studioProject->update([
             'name' => trim($validated['name']),
-            'settings' => ProjectSettings::fromValidated($validated, $studioProject->settings ?? []),
+            'settings' => ProjectSettings::fromValidated($validated, $studioProject->settings ?? [], $durationOptions),
         ]);
 
         return redirect()->to(route('projects.show', $studioProject, false))

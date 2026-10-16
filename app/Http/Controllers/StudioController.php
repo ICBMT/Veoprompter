@@ -20,7 +20,8 @@ class StudioController extends Controller
     {
         abort_unless($studioProject->user_id === $request->user()?->id, 404);
 
-        $projectSettings = array_replace(ProjectSettings::defaults(), $studioProject->settings ?? []);
+        $durationOptions = ProjectSettings::durationOptionsFor($request->user());
+        $projectSettings = ProjectSettings::applyDurationOptions($studioProject->settings ?? [], $durationOptions);
         $requestMode = $request->input('mode');
         $hasVideoTypeOverride = $requestMode === 'story' && $request->exists('video_type');
         $videoTypeOverride = $request->input('video_type');

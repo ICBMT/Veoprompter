@@ -14,6 +14,8 @@ class AiSetting extends Model
         'api_key',
         'tts_model',
         'tts_api_key',
+        'allow_clip_duration_choice',
+        'allow_extension_duration_choice',
     ];
 
     protected function casts(): array
@@ -21,6 +23,8 @@ class AiSetting extends Model
         return [
             'api_key' => 'encrypted',
             'tts_api_key' => 'encrypted',
+            'allow_clip_duration_choice' => 'boolean',
+            'allow_extension_duration_choice' => 'boolean',
         ];
     }
 

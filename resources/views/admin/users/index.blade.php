@@ -42,7 +42,7 @@
                         <td><span class="presence-indicator {{ $user->isOnline() ? 'is-online' : 'is-offline' }}" data-user-presence data-user-id="{{ $user->id }}"><i></i><span data-presence-label>{{ $user->isOnline() ? 'Online' : 'Offline' }}</span></span><small data-presence-time>{{ $user->last_seen_at ? 'Last seen '.$user->last_seen_at->diffForHumans() : 'No recent activity' }}</small></td>
                         <td><span class="user-counts">{{ $user->studio_projects_count }} {{ \Illuminate\Support\Str::plural('project', $user->studio_projects_count) }}</span><small>{{ $user->prompt_projects_count }} {{ \Illuminate\Support\Str::plural('prompt kit', $user->prompt_projects_count) }}</small></td>
                         <td>@if($user->isExpired())<span class="user-status-pill is-expired">Expired</span>@elseif($user->expires_at)<span class="user-status-pill is-temporary">Test account</span><small>Expires {{ $user->expires_at->format('M j · g:i A') }}</small>@else<span class="user-status-pill is-permanent">Active</span><small>Permanent account</small>@endif</td>
-                        <td><a class="admin-user-view" href="{{ route('admin.users.show', $user, false) }}">View prompts <span aria-hidden="true">↗</span></a></td>
+                        <td><a class="admin-user-view" href="{{ route('admin.users.show', $user, false) }}">Manage account <span aria-hidden="true">↗</span></a></td>
                     </tr>
                 @endforeach
             </tbody></table></div>

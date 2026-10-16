@@ -2,6 +2,8 @@
 
 namespace App\Support;
 
+use App\Models\AiSetting;
+use App\Models\User;
 use Illuminate\Support\Arr;
 use Illuminate\Validation\Rule;
 
@@ -46,8 +48,65 @@ final class ProjectSettings
         ];
     }
 
-    /** @return array<string, array<int, mixed>> */
-    public static function rules(): array
+    /** @return array{clip_duration: bool, extend_duration: bool} */
+    public static function globalDurationOptions(): array
+    {
+        $settings = AiSetting::query()->find(1);
+
+        return [
+            'clip_duration' => (bool) ($settings?->allow_clip_duration_choice ?? true),
+            'extend_duration' => (bool) ($settings?->allow_extension_duration_choice ?? true),
+        ];
+    }
+
+    /** @return array{clip_duration: bool, extend_duration: bool} */
+    public static function durationOptionsFor(User $user): array
+    {
+        $globalOptions = self::globalDurationOptions();
+
+        return [
+            'clip_duration' => $globalOptions['clip_duration'] && (bool) ($user->can_choose_clip_duration ?? true),
+            'extend_duration' => $globalOptions['extend_duration'] && (bool) ($user->can_choose_extension_duration ?? true),
+        ];
+    }
+
+    /** @param array{clip_duration?: bool, extend_duration?: bool} $durationOptions
+     *  @return array<string, int>
+     */
+    public static function forcedDurationFields(array $durationOptions): array
+    {
+        $forced = [];
+        if (! ($durationOptions['clip_duration'] ?? true)) {
+            $forced['clip_duration'] = 8;
+        }
+        if (! ($durationOptions['extend_duration'] ?? true)) {
+            $forced['extend_duration'] = 8;
+        }
+
+        return $forced;
+    }
+
+    /** @param array<string, mixed> $settings
+     *  @param array{clip_duration?: bool, extend_duration?: bool} $durationOptions
+     *  @return array<string, mixed>
+     */
+    public static function applyDurationOptions(array $settings, array $durationOptions = []): array
+    {
+        $settings = array_replace(self::defaults(), $settings);
+        $settings['clip_duration'] = ($durationOptions['clip_duration'] ?? true)
+            ? (int) ($settings['clip_duration'] ?? 8)
+            : 8;
+        $settings['extend_duration'] = ($durationOptions['extend_duration'] ?? true)
+            ? (int) ($settings['extend_duration'] ?? 8)
+            : 8;
+
+        return $settings;
+    }
+
+    /** @param array{clip_duration?: bool, extend_duration?: bool} $durationOptions
+     *  @return array<string, array<int, mixed>>
+     */
+    public static function rules(array $durationOptions = []): array
     {
         return [
             'audience' => ['required', 'string', 'max:160'],
@@ -57,8 +116,12 @@ final class ProjectSettings
             'character_type' => ['required', Rule::in(['ai-choice', 'human-male', 'human-female', 'robot', 'fictional'])],
             'character_details' => ['nullable', 'required_if:character_type,fictional', 'string', 'max:500'],
             'clip_count' => ['required', 'integer', 'min:2', 'max:8'],
-            'clip_duration' => ['required', 'integer', 'min:4', 'max:20'],
-            'extend_duration' => ['required', 'integer', 'min:4', 'max:20'],
+            'clip_duration' => ($durationOptions['clip_duration'] ?? true)
+                ? ['required', 'integer', 'min:4', 'max:20']
+                : ['required', 'integer', Rule::in([8])],
+            'extend_duration' => ($durationOptions['extend_duration'] ?? true)
+                ? ['required', 'integer', 'min:4', 'max:20']
+                : ['required', 'integer', Rule::in([8])],
             'aspect_ratio' => ['required', Rule::in(['16:9', '9:16', '1:1', '4:3'])],
             'educational_depth' => ['required', Rule::in(['clear', 'balanced', 'deep-dive'])],
             'narration' => ['required', Rule::in(['1', '0'])],
@@ -74,7 +137,7 @@ final class ProjectSettings
     /** @param array<string, mixed> $validated @param array<string, mixed> $existing
      *  @return array<string, mixed>
      */
-    public static function fromValidated(array $validated, array $existing = []): array
+    public static function fromValidated(array $validated, array $existing = [], array $durationOptions = []): array
     {
         $settings = array_replace(self::defaults(), $existing, Arr::only($validated, array_keys(self::defaults())));
         $settings['clip_count'] = (int) $settings['clip_count'];
@@ -83,6 +146,6 @@ final class ProjectSettings
         $settings['music'] = in_array($settings['music'], [true, 1, '1'], true);
         $settings['sound_effects'] = in_array($settings['sound_effects'], [true, 1, '1'], true);
 
-        return $settings;
+        return self::applyDurationOptions($settings, $durationOptions);
     }
 }

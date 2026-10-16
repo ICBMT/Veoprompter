@@ -6,6 +6,7 @@
 @section('content')
 @php
     $videoTypeIcons = ['educational' => '✳', 'cinematic-story' => '▶', 'documentary' => '◉', 'brand-promo' => '◇', 'music-video' => '♫', 'travel' => '↗', 'custom' => '✦'];
+    $durationStepOffset = (int) (!$durationOptions['clip_duration']) + (int) (!$durationOptions['extend_duration']);
     $videoTypeDescriptions = [
         'educational' => 'Clear, accurate explainers with a useful takeaway.',
         'cinematic-story' => 'Fiction, short films, character arcs, and movie scenes.',
@@ -29,6 +30,9 @@
             <div class="wizard-progress-track" role="progressbar" aria-label="Project setup progress" aria-valuemin="1" aria-valuemax="20" aria-valuenow="1"><span data-wizard-progress></span></div>
             <p data-wizard-progress-note>One small choice at a time. You can go back whenever you like.</p>
         </div>
+        @if(!$durationOptions['clip_duration'] || !$durationOptions['extend_duration'])
+            <div class="duration-policy-note" role="status"><span aria-hidden="true">◷</span><p><strong>Some duration choices are fixed at 8 seconds.</strong> @if(!$durationOptions['clip_duration'] && !$durationOptions['extend_duration'])Video clips and extensions use the 8-second default.@elseif(!$durationOptions['clip_duration'])Video clips use the 8-second default.@else Video extensions use the 8-second default.@endif</p></div>
+        @endif
         <p class="wizard-validation" data-wizard-validation role="alert" aria-live="assertive" hidden></p>
         <span class="sr-only" data-wizard-announcement aria-live="polite"></span>
 
@@ -93,26 +97,34 @@
                 </div>
             </section>
 
-            <section class="wizard-step" data-wizard-step data-wizard-group="VIDEO FORMAT" data-wizard-title="Choose video clip duration">
-                <div class="wizard-question"><span class="wizard-question-number" data-wizard-number>09</span><h2 tabindex="-1">How long should each video clip be?</h2><p>This is the target duration for each scene in a new video.</p></div>
-                <div class="wizard-choice-grid wizard-choice-grid--four wizard-choice-grid--compact">
-                    @foreach([4,6,8,10,12,15,20] as $duration)
-                        <label class="wizard-choice wizard-choice--number"><input type="radio" name="clip_duration" value="{{ $duration }}" data-summary-label="{{ $duration }} seconds per video clip" @checked((int) old('clip_duration', $settings['clip_duration']) === $duration) @if($duration === 4) required @endif><span class="wizard-choice-title">{{ $duration }}</span><span class="wizard-choice-description">seconds</span></label>
-                    @endforeach
-                </div>
-            </section>
+            @if($durationOptions['clip_duration'])
+                <section class="wizard-step" data-wizard-step data-wizard-group="VIDEO FORMAT" data-wizard-title="Choose video clip duration">
+                    <div class="wizard-question"><span class="wizard-question-number" data-wizard-number>09</span><h2 tabindex="-1">How long should each video clip be?</h2><p>This is the target duration for each scene in a new video.</p></div>
+                    <div class="wizard-choice-grid wizard-choice-grid--four wizard-choice-grid--compact">
+                        @foreach([4,6,8,10,12,15,20] as $duration)
+                            <label class="wizard-choice wizard-choice--number"><input type="radio" name="clip_duration" value="{{ $duration }}" data-summary-label="{{ $duration }} seconds per video clip" @checked((int) old('clip_duration', $settings['clip_duration']) === $duration) @if($duration === 4) required @endif><span class="wizard-choice-title">{{ $duration }}</span><span class="wizard-choice-description">seconds</span></label>
+                        @endforeach
+                    </div>
+                </section>
+            @else
+                <input type="hidden" name="clip_duration" value="8" data-summary-label="8 seconds per video clip">
+            @endif
 
-            <section class="wizard-step" data-wizard-step data-wizard-group="VIDEO FORMAT" data-wizard-title="Choose extension length">
-                <div class="wizard-question"><span class="wizard-question-number" data-wizard-number>10</span><h2 tabindex="-1">How long should a video extension be?</h2><p>This can be different from the clips in a new video.</p></div>
-                <div class="wizard-choice-grid wizard-choice-grid--four wizard-choice-grid--compact">
-                    @foreach([4,6,8,10,12,15,20] as $duration)
-                        <label class="wizard-choice wizard-choice--number"><input type="radio" name="extend_duration" value="{{ $duration }}" data-summary-label="{{ $duration }} seconds per extension" @checked((int) old('extend_duration', $settings['extend_duration']) === $duration) @if($duration === 4) required @endif><span class="wizard-choice-title">{{ $duration }}</span><span class="wizard-choice-description">seconds</span></label>
-                    @endforeach
-                </div>
-            </section>
+            @if($durationOptions['extend_duration'])
+                <section class="wizard-step" data-wizard-step data-wizard-group="VIDEO FORMAT" data-wizard-title="Choose extension length">
+                    <div class="wizard-question"><span class="wizard-question-number" data-wizard-number>{{ str_pad((string) (10 - (int) (!$durationOptions['clip_duration'])), 2, '0', STR_PAD_LEFT) }}</span><h2 tabindex="-1">How long should a video extension be?</h2><p>This can be different from the clips in a new video.</p></div>
+                    <div class="wizard-choice-grid wizard-choice-grid--four wizard-choice-grid--compact">
+                        @foreach([4,6,8,10,12,15,20] as $duration)
+                            <label class="wizard-choice wizard-choice--number"><input type="radio" name="extend_duration" value="{{ $duration }}" data-summary-label="{{ $duration }} seconds per extension" @checked((int) old('extend_duration', $settings['extend_duration']) === $duration) @if($duration === 4) required @endif><span class="wizard-choice-title">{{ $duration }}</span><span class="wizard-choice-description">seconds</span></label>
+                        @endforeach
+                    </div>
+                </section>
+            @else
+                <input type="hidden" name="extend_duration" value="8" data-summary-label="8 seconds per extension">
+            @endif
 
             <section class="wizard-step" data-wizard-step data-wizard-group="VIDEO FORMAT" data-wizard-title="Choose a frame shape">
-                <div class="wizard-question"><span class="wizard-question-number" data-wizard-number>11</span><h2 tabindex="-1">Where will people watch your videos?</h2><p>Choose a frame shape that fits the screen or platform you have in mind.</p></div>
+                <div class="wizard-question"><span class="wizard-question-number" data-wizard-number>{{ str_pad((string) (11 - $durationStepOffset), 2, '0', STR_PAD_LEFT) }}</span><h2 tabindex="-1">Where will people watch your videos?</h2><p>Choose a frame shape that fits the screen or platform you have in mind.</p></div>
                 <div class="aspect-options wizard-aspect-options" role="group" aria-label="Video aspect ratio">
                     @foreach(['16:9' => ['ratio-wide', 'Landscape', 'Wide frame for standard landscape video and desktop viewing.'], '9:16' => ['ratio-tall', 'Vertical', 'Tall frame for phone-first shorts and stories.'], '1:1' => ['ratio-square', 'Square', 'Balanced square frame for social feeds and flexible crops.'], '4:3' => ['ratio-classic', 'Classic', 'Classic television-style frame with a slightly taller image.']] as $ratio => [$icon, $label, $description])
                         <label class="aspect-choice @if(old('aspect_ratio', $settings['aspect_ratio']) === $ratio) is-selected @endif" data-tooltip="{{ $description }}" title="{{ $description }}"><input type="radio" name="aspect_ratio" value="{{ $ratio }}" data-summary-label="{{ $ratio }} · {{ $label }}" @checked(old('aspect_ratio', $settings['aspect_ratio']) === $ratio) @if($ratio === '16:9') required @endif><span class="ratio-icon {{ $icon }}"></span><span>{{ $ratio }}</span><span class="sr-only">{{ $label }}. {{ $description }}</span></label>
@@ -121,7 +133,7 @@
             </section>
 
             <section class="wizard-step" data-wizard-step data-wizard-group="LEARNING STYLE" data-wizard-title="Choose learning depth" data-wizard-when="video_type:educational">
-                <div class="wizard-question"><span class="wizard-question-number" data-wizard-number>12</span><h2 tabindex="-1">How much detail should the explanations include?</h2><p>You can keep the explanation simple or add a little more depth.</p></div>
+                <div class="wizard-question"><span class="wizard-question-number" data-wizard-number>{{ str_pad((string) (12 - $durationStepOffset), 2, '0', STR_PAD_LEFT) }}</span><h2 tabindex="-1">How much detail should the explanations include?</h2><p>You can keep the explanation simple or add a little more depth.</p></div>
                 <div class="wizard-choice-grid wizard-choice-grid--three">
                     <label class="wizard-choice"><input type="radio" name="educational_depth" value="clear" data-summary-label="Simple and accessible" @checked(old('educational_depth', $settings['educational_depth']) === 'clear') required><span class="wizard-choice-title">Simple &amp; accessible</span><span class="wizard-choice-description">An introductory explanation with familiar words and one clear learning point.</span></label>
                     <label class="wizard-choice"><input type="radio" name="educational_depth" value="balanced" data-summary-label="Balanced detail" @checked(old('educational_depth', $settings['educational_depth']) === 'balanced')><span class="wizard-choice-title">Balanced detail</span><span class="wizard-choice-description">Accessible language with useful context and a little more explanation.</span></label>
@@ -130,7 +142,7 @@
             </section>
 
             <section class="wizard-step" data-wizard-step data-wizard-group="SOUND &amp; VOICE" data-wizard-title="Choose narration">
-                <div class="wizard-question"><span class="wizard-question-number" data-wizard-number>13</span><h2 tabindex="-1">Would you like a narrator?</h2><p>This tells the video prompt whether to include a voiceover. It does not add audio to a video.</p></div>
+                <div class="wizard-question"><span class="wizard-question-number" data-wizard-number>{{ str_pad((string) (13 - $durationStepOffset), 2, '0', STR_PAD_LEFT) }}</span><h2 tabindex="-1">Would you like a narrator?</h2><p>This tells the video prompt whether to include a voiceover. It does not add audio to a video.</p></div>
                 <div class="wizard-choice-grid wizard-choice-grid--two">
                     <label class="wizard-choice"><input type="radio" name="narration" value="1" data-summary-label="Narration on" @checked(old('narration', $settings['narration']) === '1') required><span class="wizard-choice-icon">◖</span><span class="wizard-choice-title">Yes, include narration</span><span class="wizard-choice-description">Choose a language and voice style in the next few steps.</span></label>
                     <label class="wizard-choice"><input type="radio" name="narration" value="0" data-summary-label="Narration off" @checked(old('narration', $settings['narration']) === '0')><span class="wizard-choice-icon">◌</span><span class="wizard-choice-title">No narration</span><span class="wizard-choice-description">Keep the prompts focused on visuals and sound effects.</span></label>
@@ -139,7 +151,7 @@
 
             <div class="wizard-voice-steps voice-fields" data-voice-fields>
                 <section class="wizard-step" data-wizard-step data-wizard-group="SOUND &amp; VOICE" data-wizard-title="Choose a language" data-wizard-when="narration:1">
-                    <div class="wizard-question"><span class="wizard-question-number" data-wizard-number>14</span><h2 tabindex="-1">What language should the narrator speak?</h2><p>Gemini TTS can generate consistent previews in every supported language.</p></div>
+                    <div class="wizard-question"><span class="wizard-question-number" data-wizard-number>{{ str_pad((string) (14 - $durationStepOffset), 2, '0', STR_PAD_LEFT) }}</span><h2 tabindex="-1">What language should the narrator speak?</h2><p>Gemini TTS can generate consistent previews in every supported language.</p></div>
                     <div class="wizard-choice-grid wizard-choice-grid--three">
                         @foreach(['English', 'Urdu', 'Spanish', 'French', 'Arabic', 'Hindi'] as $language)
                             <label class="wizard-choice wizard-choice--language"><input type="radio" name="language" value="{{ $language }}" data-summary-label="{{ $language }}" @checked(old('language', $settings['language']) === $language) @if($language === 'English') required @endif><span class="wizard-choice-icon">Aa</span><span class="wizard-choice-title">{{ $language }}</span><span class="wizard-choice-description">{{ $language === 'Urdu' ? 'Urdu voice sample' : $language.' voice sample' }}</span></label>
@@ -149,7 +161,7 @@
                 </section>
 
                 <section class="wizard-step" data-wizard-step data-wizard-group="SOUND &amp; VOICE" data-wizard-title="Choose a voice" data-wizard-when="narration:1">
-                    <div class="wizard-question"><span class="wizard-question-number" data-wizard-number>15</span><h2 tabindex="-1">Which voice style do you prefer?</h2><p>The final voice depends on the video tool. This choice guides its narration prompt.</p></div>
+                    <div class="wizard-question"><span class="wizard-question-number" data-wizard-number>{{ str_pad((string) (15 - $durationStepOffset), 2, '0', STR_PAD_LEFT) }}</span><h2 tabindex="-1">Which voice style do you prefer?</h2><p>The final voice depends on the video tool. This choice guides its narration prompt.</p></div>
                     <div class="wizard-choice-grid wizard-choice-grid--two">
                         <label class="wizard-choice"><input type="radio" name="narrator_voice" value="feminine" data-summary-label="Feminine voice" @checked(old('narrator_voice', $settings['narrator_voice']) === 'feminine') required><span class="wizard-choice-icon">◖</span><span class="wizard-choice-title">Feminine</span><span class="wizard-choice-description">A feminine-presenting sample voice generated by Gemini TTS.</span></label>
                         <label class="wizard-choice"><input type="radio" name="narrator_voice" value="masculine" data-summary-label="Masculine voice" @checked(old('narrator_voice', $settings['narrator_voice']) === 'masculine')><span class="wizard-choice-icon">◗</span><span class="wizard-choice-title">Masculine</span><span class="wizard-choice-description">A masculine-presenting sample voice generated by Gemini TTS.</span></label>
@@ -158,7 +170,7 @@
                 </section>
 
                 <section class="wizard-step" data-wizard-step data-wizard-group="SOUND &amp; VOICE" data-wizard-title="Choose an accent" data-wizard-when="narration:1">
-                    <div class="wizard-question"><span class="wizard-question-number" data-wizard-number>16</span><h2 tabindex="-1">Which accent should the narrator use?</h2><p>Accent choices guide English pronunciation. For other languages, the preview uses the closest available voice for that language.</p></div>
+                    <div class="wizard-question"><span class="wizard-question-number" data-wizard-number>{{ str_pad((string) (16 - $durationStepOffset), 2, '0', STR_PAD_LEFT) }}</span><h2 tabindex="-1">Which accent should the narrator use?</h2><p>Accent choices guide English pronunciation. For other languages, the preview uses the closest available voice for that language.</p></div>
                     <div class="wizard-choice-grid wizard-choice-grid--three">
                         @foreach(['American English', 'British English', 'Pakistani English', 'Australian English', 'Neutral'] as $accent)
                             <label class="wizard-choice wizard-choice--compact"><input type="radio" name="narrator_accent" value="{{ $accent }}" data-summary-label="{{ $accent }}" @checked(old('narrator_accent', $settings['narrator_accent']) === $accent) @if($accent === 'American English') required @endif><span class="wizard-choice-title">{{ $accent }}</span><span class="wizard-choice-description">{{ $accent === 'Pakistani English' ? 'Pakistani pronunciation for English narration.' : $accent.' pronunciation' }}</span></label>
@@ -168,7 +180,7 @@
                 </section>
 
                 <section class="wizard-step" data-wizard-step data-wizard-group="SOUND &amp; VOICE" data-wizard-title="Choose a tone" data-wizard-when="narration:1">
-                    <div class="wizard-question"><span class="wizard-question-number" data-wizard-number>17</span><h2 tabindex="-1">What should the narrator sound like?</h2><p>Tone shapes the final prompt and the generated sample’s delivery.</p></div>
+                    <div class="wizard-question"><span class="wizard-question-number" data-wizard-number>{{ str_pad((string) (17 - $durationStepOffset), 2, '0', STR_PAD_LEFT) }}</span><h2 tabindex="-1">What should the narrator sound like?</h2><p>Tone shapes the final prompt and the generated sample’s delivery.</p></div>
                     <div class="wizard-choice-grid wizard-choice-grid--two">
                         @foreach(['warm and friendly' => 'Gentle and welcoming, with a softer pace.', 'curious and lively' => 'Energetic and bright, with a quicker pace.', 'calm and thoughtful' => 'Slower and reflective for careful explanations.', 'confident and clear' => 'Steady and assured, with clear phrasing.'] as $tone => $description)
                             <label class="wizard-choice"><input type="radio" name="narrator_tone" value="{{ $tone }}" data-summary-label="{{ ucfirst($tone) }}" @checked(old('narrator_tone', $settings['narrator_tone']) === $tone) @if($tone === 'warm and friendly') required @endif><span class="wizard-choice-title">{{ ucfirst($tone) }}</span><span class="wizard-choice-description">{{ $description }}</span></label>
@@ -179,7 +191,7 @@
             </div>
 
             <section class="wizard-step" data-wizard-step data-wizard-group="SOUND &amp; VOICE" data-wizard-title="Choose background music">
-                <div class="wizard-question"><span class="wizard-question-number" data-wizard-number>18</span><h2 tabindex="-1">Should the videos include background music?</h2><p>This adds a music direction to your prompts. No audio is generated here.</p></div>
+                <div class="wizard-question"><span class="wizard-question-number" data-wizard-number>{{ str_pad((string) (18 - $durationStepOffset), 2, '0', STR_PAD_LEFT) }}</span><h2 tabindex="-1">Should the videos include background music?</h2><p>This adds a music direction to your prompts. No audio is generated here.</p></div>
                 <div class="wizard-choice-grid wizard-choice-grid--two">
                     <label class="wizard-choice"><input type="radio" name="music" value="1" data-summary-label="Include subtle background music" @checked((bool) old('music', $settings['music'])) required><span class="wizard-choice-icon">♫</span><span class="wizard-choice-title">Yes, add subtle music</span><span class="wizard-choice-description">Keep it soft and never let it compete with narration.</span></label>
                     <label class="wizard-choice"><input type="radio" name="music" value="0" data-summary-label="No background music" @checked(!(bool) old('music', $settings['music']))><span class="wizard-choice-icon">♪</span><span class="wizard-choice-title">No background music</span><span class="wizard-choice-description">Leave music out of the video prompt.</span></label>
@@ -187,7 +199,7 @@
             </section>
 
             <section class="wizard-step" data-wizard-step data-wizard-group="SOUND &amp; VOICE" data-wizard-title="Choose sound effects">
-                <div class="wizard-question"><span class="wizard-question-number" data-wizard-number>19</span><h2 tabindex="-1">Should the videos include sound effects?</h2><p>You can ask for small sounds that match the action, or leave them out.</p></div>
+                <div class="wizard-question"><span class="wizard-question-number" data-wizard-number>{{ str_pad((string) (19 - $durationStepOffset), 2, '0', STR_PAD_LEFT) }}</span><h2 tabindex="-1">Should the videos include sound effects?</h2><p>You can ask for small sounds that match the action, or leave them out.</p></div>
                 <div class="wizard-choice-grid wizard-choice-grid--two">
                     <label class="wizard-choice"><input type="radio" name="sound_effects" value="1" data-summary-label="Include sound effects" @checked((bool) old('sound_effects', $settings['sound_effects'])) required><span class="wizard-choice-icon">⌁</span><span class="wizard-choice-title">Yes, use fitting effects</span><span class="wizard-choice-description">Use restrained sounds only when they match what is happening.</span></label>
                     <label class="wizard-choice"><input type="radio" name="sound_effects" value="0" data-summary-label="No sound effects" @checked(!(bool) old('sound_effects', $settings['sound_effects']))><span class="wizard-choice-icon">◌</span><span class="wizard-choice-title">No sound effects</span><span class="wizard-choice-description">Leave sound effects out of the video prompt.</span></label>

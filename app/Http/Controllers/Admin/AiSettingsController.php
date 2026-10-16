@@ -28,6 +28,22 @@ class AiSettingsController extends Controller
         ]);
     }
 
+    public function updateDurationOptions(Request $request): RedirectResponse
+    {
+        $validated = $request->validate([
+            'allow_clip_duration_choice' => ['required', 'boolean'],
+            'allow_extension_duration_choice' => ['required', 'boolean'],
+        ]);
+
+        $settings = AiSetting::current();
+        $settings->allow_clip_duration_choice = (bool) $validated['allow_clip_duration_choice'];
+        $settings->allow_extension_duration_choice = (bool) $validated['allow_extension_duration_choice'];
+        $settings->save();
+
+        return redirect()->to(route('admin.settings', [], false))
+            ->with('success', 'Duration choice controls saved. Disabled choices now use the 8-second default.');
+    }
+
     public function models(Request $request, AiProviderSetupService $providerSetup): JsonResponse
     {
         $validator = Validator::make($request->all(), [

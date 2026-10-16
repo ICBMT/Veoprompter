@@ -16,7 +16,7 @@
         <div class="history-grid projects-grid">
             @foreach($projects as $project)
                 @php
-                    $settings = $project->settings ?? [];
+                    $settings = \App\Support\ProjectSettings::applyDurationOptions($project->settings ?? [], $durationOptions);
                     $characterLabels = ['ai-choice' => 'AI-chosen character', 'human-male' => 'Human male', 'human-female' => 'Human female', 'robot' => 'Robot', 'fictional' => 'Fictional character'];
                     $videoTypeLabel = $videoTypes[$settings['video_type'] ?? 'educational'] ?? 'Educational explainer';
                 @endphp

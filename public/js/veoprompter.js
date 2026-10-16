@@ -1050,6 +1050,8 @@
         }
         const select = form.querySelector(`select[name="${field}"]`);
         if (select) return select.selectedOptions[0]?.textContent.trim() || '';
+        const hidden = form.querySelector(`input[type="hidden"][name="${field}"]`);
+        if (hidden) return hidden.dataset.summaryLabel || hidden.value || '';
         const input = form.querySelector(`[name="${field}"]:not([type="radio"]):not([type="checkbox"]):not([type="hidden"])`);
         return input?.value.trim() || '';
     };

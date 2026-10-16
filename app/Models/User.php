@@ -26,6 +26,8 @@ class User extends Authenticatable
             'is_admin' => 'boolean',
             'expires_at' => 'datetime',
             'last_seen_at' => 'datetime',
+            'can_choose_clip_duration' => 'boolean',
+            'can_choose_extension_duration' => 'boolean',
         ];
     }
 
