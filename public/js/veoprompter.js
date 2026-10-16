@@ -824,6 +824,7 @@
 })();
 
 (() => {
+    // Generate local samples on demand so every supported preference combination can be auditioned without stored API keys or audio files.
     const sampleLines = {
         English: 'A tiny seed drifts into the garden. With sunlight, water, and a little patience, it begins a remarkable journey.',
         Urdu: 'ایک ننھا سا بیج باغ میں گرتا ہے۔ دھوپ، پانی اور تھوڑے صبر سے اس کا حیرت انگیز سفر شروع ہوتا ہے۔',
@@ -833,26 +834,39 @@
         Hindi: 'एक छोटा सा बीज बगीचे में आता है। धूप, पानी और थोड़े धैर्य के साथ, इसकी अद्भुत यात्रा शुरू होती है।',
     };
     const localeForLanguage = { English: 'en-US', Urdu: 'ur-PK', Spanish: 'es-ES', French: 'fr-FR', Arabic: 'ar-SA', Hindi: 'hi-IN' };
-    const accentLocales = {
-        'American English': 'en-US',
-        'British English': 'en-GB',
-        'Pakistani English': 'en-PK',
-        'Australian English': 'en-AU',
-        Neutral: 'en',
+    const localesForAccent = {
+        'American English': ['en-US', 'en-CA', 'en-GB', 'en-AU'],
+        'British English': ['en-GB', 'en-AU', 'en-US', 'en-CA'],
+        'Pakistani English': ['en-PK', 'en-IN', 'en-GB', 'en-US'],
+        'Australian English': ['en-AU', 'en-GB', 'en-US'],
+        Neutral: ['en', 'en-US', 'en-GB', 'en-AU'],
     };
     const voiceNameHints = {
-        feminine: /female|woman|zira|samantha|victoria|serena|susan|aria|jenny|karen|siri.*female|google.*female/i,
-        masculine: /male|man|david|mark|daniel|alex|fred|george|james|guy|siri.*male|google.*male/i,
+        feminine: /\b(?:female|woman|feminine)\b|zira|samantha|victoria|serena|susan|aria|jenny|karen|monica|sofia|lucia|paulina|amelie|julie|heera|lekha|neha|sangeeta|joana|maria|ana|siri.*female|google.*female/i,
+        masculine: /\b(?:male|man|masculine)\b|david|mark|daniel|alex|fred|george|james|guy|jorge|pablo|thomas|antoine|henri|mathieu|diego|marco|rajesh|ravi|siri.*\bmale\b|google.*\bmale\b/i,
+    };
+    const toneSettings = {
+        'warm and friendly': { rate: 0.94, pitch: 1.03 },
+        'curious and lively': { rate: 1.08, pitch: 1.13 },
+        'calm and thoughtful': { rate: 0.86, pitch: 0.96 },
+        'confident and clear': { rate: 0.98, pitch: 1.0 },
+    };
+    let previewToken = 0;
+
+    const valueFor = (form, name, fallback) => {
+        const checked = form.querySelector(`input[type="radio"][name="${name}"]:checked`);
+        if (checked) return checked.value;
+        return form.querySelector(`#${name}`)?.value || fallback;
     };
 
     const readConfig = (button) => {
         const form = button.closest('.project-settings-form');
         if (form) {
             return {
-                language: form.querySelector('#language')?.value || 'English',
-                voice: form.querySelector('#narrator_voice')?.value || 'feminine',
-                accent: form.querySelector('#narrator_accent')?.value || 'American English',
-                tone: form.querySelector('#narrator_tone')?.value || 'warm and friendly',
+                language: valueFor(form, 'language', 'English'),
+                voice: valueFor(form, 'narrator_voice', 'feminine'),
+                accent: valueFor(form, 'narrator_accent', 'American English'),
+                tone: valueFor(form, 'narrator_tone', 'warm and friendly'),
                 narration: form.querySelector('input[name="narration"]:checked')?.value || '0',
             };
         }
@@ -866,23 +880,63 @@
         };
     };
 
-    const preferredLocale = (language, accent) => {
-        if (language === 'English') return accentLocales[accent] || localeForLanguage.English;
-        return localeForLanguage[language] || 'en-US';
+    const preferredLocales = (language, accent) => language === 'English'
+        ? (localesForAccent[accent] || localesForAccent['American English'])
+        : [localeForLanguage[language] || 'en-US'];
+
+    const voiceMatchesGender = (voice, gender) => voiceNameHints[gender]?.test(`${voice.name} ${voice.voiceURI || ''}`) || false;
+
+    const chooseVoice = (voices, locales, language, gender) => {
+        const languageCode = (localeForLanguage[language] || locales[0] || 'en-US').split('-')[0].toLowerCase();
+        const languageVoices = voices.filter((voice) => voice.lang.toLowerCase() === languageCode || voice.lang.toLowerCase().startsWith(`${languageCode}-`));
+
+        for (const locale of locales) {
+            const exactLocale = languageVoices.filter((voice) => voice.lang.toLowerCase() === locale.toLowerCase());
+            const genderMatch = exactLocale.find((voice) => voiceMatchesGender(voice, gender));
+            if (genderMatch) return genderMatch;
+            if (exactLocale.length) return exactLocale[0];
+        }
+
+        return languageVoices.find((voice) => voiceMatchesGender(voice, gender)) || languageVoices[0] || null;
     };
 
-    const chooseVoice = (voices, locale, gender) => {
-        const desired = locale.toLowerCase();
-        const language = desired.split('-')[0];
-        const candidates = voices.filter((voice) => voice.lang.toLowerCase().startsWith(language));
-        const localeMatches = candidates.filter((voice) => voice.lang.toLowerCase() === desired);
-        const pool = localeMatches.length ? localeMatches : candidates;
-        const genderMatch = pool.find((voice) => voiceNameHints[gender]?.test(voice.name));
-        return genderMatch || pool[0] || null;
+    const getInstalledVoices = (synth) => {
+        const current = synth.getVoices();
+        if (current.length || typeof synth.addEventListener !== 'function') return Promise.resolve(current);
+
+        return new Promise((resolve) => {
+            let settled = false;
+            let timeoutId;
+            const finish = (voices) => {
+                if (settled) return;
+                settled = true;
+                window.clearTimeout(timeoutId);
+                synth.removeEventListener('voiceschanged', onVoicesChanged);
+                resolve(voices);
+            };
+            const onVoicesChanged = () => {
+                const voices = synth.getVoices();
+                if (voices.length) finish(voices);
+            };
+            timeoutId = window.setTimeout(() => finish(synth.getVoices()), 1000);
+            synth.addEventListener('voiceschanged', onVoicesChanged);
+            onVoicesChanged();
+        });
+    };
+
+    const stopPreview = (form) => {
+        previewToken += 1;
+        if ('speechSynthesis' in window) window.speechSynthesis.cancel();
+        form.querySelectorAll('[data-voice-preview-status]').forEach((status) => {
+            if (/^(Playing|Preparing)/.test(status.textContent)) {
+                status.textContent = 'Voice settings changed. Preview again to hear the updated choices.';
+            }
+        });
     };
 
     const playSample = async (button) => {
-        const status = button.closest('.voice-preview-card, .generated-voice-preview')?.querySelector('[data-voice-preview-status]');
+        const card = button.closest('.voice-preview-card, .generated-voice-preview');
+        const status = card?.querySelector('[data-voice-preview-status]');
         const config = readConfig(button);
         if (config.narration !== '1') {
             if (status) status.textContent = 'Turn narration on in project settings before previewing a voice.';
@@ -894,38 +948,58 @@
         }
 
         const synth = window.speechSynthesis;
-        const locale = preferredLocale(config.language, config.accent);
+        const token = ++previewToken;
+        synth.cancel();
+        const locales = preferredLocales(config.language, config.accent);
+        const locale = locales[0];
         const utterance = new SpeechSynthesisUtterance(sampleLines[config.language] || sampleLines.English);
-        const toneSettings = {
-            'warm and friendly': { rate: 0.94, pitch: 1.03 },
-            'curious and lively': { rate: 1.08, pitch: 1.13 },
-            'calm and thoughtful': { rate: 0.86, pitch: 0.96 },
-            'confident and clear': { rate: 0.98, pitch: 1.0 },
-        };
         const tone = toneSettings[config.tone] || toneSettings['warm and friendly'];
         utterance.lang = locale;
         utterance.rate = tone.rate;
         utterance.pitch = config.voice === 'feminine' ? Math.min(1.3, tone.pitch + 0.08) : Math.max(0.75, tone.pitch - 0.08);
 
-        const voices = synth.getVoices();
-        const selectedVoice = chooseVoice(voices, locale, config.voice);
+        if (status) status.textContent = `Preparing a ${config.language} sample with your selected voice preferences.`;
+        const voices = await getInstalledVoices(synth);
+        if (token !== previewToken) return;
+
+        const selectedVoice = chooseVoice(voices, locales, config.language, config.voice);
         if (selectedVoice) {
             utterance.voice = selectedVoice;
             utterance.lang = selectedVoice.lang || locale;
         }
+        const accentMatched = config.language !== 'English' || (selectedVoice && locale.toLowerCase() === selectedVoice.lang.toLowerCase());
+        const genderMatched = selectedVoice && voiceMatchesGender(selectedVoice, config.voice);
         utterance.onstart = () => {
-            if (status) status.textContent = `Playing a local ${config.language} sample${selectedVoice ? ` with ${selectedVoice.name}` : ''}.`;
+            if (token !== previewToken || !status) return;
+            const selectedVoiceText = selectedVoice ? `${selectedVoice.name} (${selectedVoice.lang})` : 'your device’s default voice';
+            const notes = [];
+            if (!selectedVoice) notes.push(`No installed ${config.language} voice was found, so the browser may use a default voice.`);
+            else if (!accentMatched) notes.push(`The closest installed accent is ${selectedVoice.lang}.`);
+            if (selectedVoice && !genderMatched) notes.push('The device voice gender could not be identified; pitch is adjusted approximately.');
+            if (config.language !== 'English') notes.push('The English accent setting does not change pronunciation for this language.');
+            const accentDescription = config.language === 'English' ? `, ${config.accent}` : '';
+            status.textContent = `Playing ${config.language}${accentDescription}, ${config.voice}, ${config.tone} with ${selectedVoiceText}. ${notes.join(' ')} Device samples may differ from the final video voice.`;
         };
         utterance.onend = () => {
-            if (status) status.textContent = 'Preview finished. Device voices and accents may differ from your final video.';
+            if (token === previewToken && status) status.textContent = 'Preview finished. Device voices and accents may differ from your final video.';
         };
         utterance.onerror = () => {
-            if (status) status.textContent = 'The device could not play this speech sample. Try another installed voice or language.';
+            if (token === previewToken && status) status.textContent = 'The device could not play this speech sample. Try another installed voice or language.';
         };
-        synth.cancel();
-        if (status) status.textContent = `Preparing a ${config.language} preview; the browser will use its closest installed accent and voice.`;
-        synth.speak(utterance);
+        try {
+            synth.speak(utterance);
+        } catch {
+            if (status) status.textContent = 'The device could not play this speech sample. Try another installed voice or language.';
+        }
     };
+
+    document.querySelectorAll('.project-settings-form').forEach((form) => {
+        form.addEventListener('change', (event) => {
+            if (['language', 'narrator_voice', 'narrator_accent', 'narrator_tone', 'narration'].includes(event.target.name)) {
+                stopPreview(form);
+            }
+        });
+    });
 
     document.querySelectorAll('[data-voice-preview-button]').forEach((button) => {
         button.addEventListener('click', () => playSample(button));
@@ -1048,6 +1122,8 @@
         const characterType = chosenValue('character_type');
         const narration = chosenValue('narration');
         const hiddenRows = new Set();
+        const reviewVoicePreview = form.querySelector('[data-wizard-review-voice-preview]');
+        if (reviewVoicePreview) reviewVoicePreview.hidden = narration !== '1';
         if (visualStyle !== 'custom') hiddenRows.add('style_detail');
         if (characterType !== 'fictional') hiddenRows.add('character_details');
         if (narration !== '1') {

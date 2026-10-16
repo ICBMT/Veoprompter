@@ -124,6 +124,7 @@
                             <label class="wizard-choice wizard-choice--language"><input type="radio" name="language" value="{{ $language }}" data-summary-label="{{ $language }}" @checked(old('language', $settings['language']) === $language) @if($language === 'English') required @endif><span class="wizard-choice-icon">Aa</span><span class="wizard-choice-title">{{ $language }}</span><span class="wizard-choice-description">{{ $language === 'Urdu' ? 'Urdu voice sample' : $language.' voice sample' }}</span></label>
                         @endforeach
                     </div>
+                    <div class="voice-preview-card wizard-voice-preview"><div><strong>Preview this language</strong><p>Hear your selected language with the current preferences, using your browser’s installed speech voice.</p></div><button class="button-secondary voice-preview-button" type="button" data-voice-preview-button><span aria-hidden="true">▶</span> Preview sample</button><span class="voice-preview-status" data-voice-preview-status role="status" aria-live="polite"></span></div>
                 </section>
 
                 <section class="wizard-step" data-wizard-step data-wizard-group="SOUND &amp; VOICE" data-wizard-title="Choose a voice" data-wizard-when="narration:1">
@@ -132,15 +133,17 @@
                         <label class="wizard-choice"><input type="radio" name="narrator_voice" value="feminine" data-summary-label="Feminine voice" @checked(old('narrator_voice', $settings['narrator_voice']) === 'feminine') required><span class="wizard-choice-icon">◖</span><span class="wizard-choice-title">Feminine</span><span class="wizard-choice-description">A feminine-sounding narrator, matched approximately for the local preview.</span></label>
                         <label class="wizard-choice"><input type="radio" name="narrator_voice" value="masculine" data-summary-label="Masculine voice" @checked(old('narrator_voice', $settings['narrator_voice']) === 'masculine')><span class="wizard-choice-icon">◗</span><span class="wizard-choice-title">Masculine</span><span class="wizard-choice-description">A masculine-sounding narrator, matched approximately for the local preview.</span></label>
                     </div>
+                    <div class="voice-preview-card wizard-voice-preview"><div><strong>Preview this voice</strong><p>Compare the selected voice with your language. The browser voice may differ from your final video voice.</p></div><button class="button-secondary voice-preview-button" type="button" data-voice-preview-button><span aria-hidden="true">▶</span> Preview sample</button><span class="voice-preview-status" data-voice-preview-status role="status" aria-live="polite"></span></div>
                 </section>
 
                 <section class="wizard-step" data-wizard-step data-wizard-group="SOUND &amp; VOICE" data-wizard-title="Choose an accent" data-wizard-when="narration:1">
-                    <div class="wizard-question"><span class="wizard-question-number" data-wizard-number>15</span><h2 tabindex="-1">Which accent should the narrator use?</h2><p>If your device does not have the exact accent, the preview uses a close language match.</p></div>
+                    <div class="wizard-question"><span class="wizard-question-number" data-wizard-number>15</span><h2 tabindex="-1">Which accent should the narrator use?</h2><p>Accent choices guide English pronunciation. For other languages, the preview uses the closest available voice for that language.</p></div>
                     <div class="wizard-choice-grid wizard-choice-grid--three">
                         @foreach(['American English', 'British English', 'Pakistani English', 'Australian English', 'Neutral'] as $accent)
-                            <label class="wizard-choice wizard-choice--compact"><input type="radio" name="narrator_accent" value="{{ $accent }}" data-summary-label="{{ $accent }}" @checked(old('narrator_accent', $settings['narrator_accent']) === $accent) @if($accent === 'American English') required @endif><span class="wizard-choice-title">{{ $accent }}</span><span class="wizard-choice-description">{{ $accent === 'Pakistani English' ? 'Pakistani English; a fallback may be used for Urdu.' : $accent.' pronunciation' }}</span></label>
+                            <label class="wizard-choice wizard-choice--compact"><input type="radio" name="narrator_accent" value="{{ $accent }}" data-summary-label="{{ $accent }}" @checked(old('narrator_accent', $settings['narrator_accent']) === $accent) @if($accent === 'American English') required @endif><span class="wizard-choice-title">{{ $accent }}</span><span class="wizard-choice-description">{{ $accent === 'Pakistani English' ? 'Pakistani pronunciation for English narration.' : $accent.' pronunciation' }}</span></label>
                         @endforeach
                     </div>
+                    <div class="voice-preview-card wizard-voice-preview"><div><strong>Preview this accent</strong><p>English accent choices use the closest matching voice installed on your device.</p></div><button class="button-secondary voice-preview-button" type="button" data-voice-preview-button><span aria-hidden="true">▶</span> Preview sample</button><span class="voice-preview-status" data-voice-preview-status role="status" aria-live="polite"></span></div>
                 </section>
 
                 <section class="wizard-step" data-wizard-step data-wizard-group="SOUND &amp; VOICE" data-wizard-title="Choose a tone" data-wizard-when="narration:1">
@@ -150,7 +153,7 @@
                             <label class="wizard-choice"><input type="radio" name="narrator_tone" value="{{ $tone }}" data-summary-label="{{ ucfirst($tone) }}" @checked(old('narrator_tone', $settings['narrator_tone']) === $tone) @if($tone === 'warm and friendly') required @endif><span class="wizard-choice-title">{{ ucfirst($tone) }}</span><span class="wizard-choice-description">{{ $description }}</span></label>
                         @endforeach
                     </div>
-                    <div class="voice-preview-card wizard-voice-preview"><div><strong>Try a voice sample</strong><p>This sample uses your device’s built-in speech voice; it is not your final video voice.</p></div><button class="button-secondary voice-preview-button" type="button" data-voice-preview-button><span aria-hidden="true">▶</span> Preview voice</button><span class="voice-preview-status" data-voice-preview-status role="status" aria-live="polite"></span></div>
+                    <div class="voice-preview-card wizard-voice-preview"><div><strong>Preview the complete setup</strong><p>Try your selected language, voice, accent, and tone together before continuing.</p></div><button class="button-secondary voice-preview-button" type="button" data-voice-preview-button><span aria-hidden="true">▶</span> Preview sample</button><span class="voice-preview-status" data-voice-preview-status role="status" aria-live="polite"></span></div>
                 </section>
             </div>
 
@@ -177,6 +180,7 @@
                         <div data-wizard-review-row="{{ $field }}"><dt>{{ $label }}</dt><dd data-wizard-summary-for="{{ $field }}">—</dd></div>
                     @endforeach
                 </dl>
+                <div class="voice-preview-card wizard-voice-preview" data-wizard-review-voice-preview><div><strong>Hear your complete voice setup</strong><p>Play your finished voice combination with the browser’s installed speech voice; it may differ from the final video voice.</p></div><button class="button-secondary voice-preview-button" type="button" data-voice-preview-button><span aria-hidden="true">▶</span> Preview sample</button><span class="voice-preview-status" data-voice-preview-status role="status" aria-live="polite"></span></div>
             </section>
         </div>
 

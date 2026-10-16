@@ -44,7 +44,13 @@ class PromptStudioTest extends TestCase
             ->assertOk()
             ->assertSee('data-project-wizard', false)
             ->assertSee('data-wizard-step', false)
-            ->assertSee('data-wizard-when="narration:1"', false);
+            ->assertSee('data-wizard-when="narration:1"', false)
+            ->assertSee('data-voice-preview-button', false)
+            ->assertSee('Preview this language')
+            ->assertSee('Preview this voice')
+            ->assertSee('Preview this accent')
+            ->assertSee('Preview the complete setup')
+            ->assertSee('data-wizard-review-voice-preview', false);
 
         $this->get(route('projects.settings.edit', $project))
             ->assertOk()
