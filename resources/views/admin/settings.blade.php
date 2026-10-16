@@ -69,6 +69,37 @@
         </form>
     </section>
 
+    <section class="admin-card voice-admin-card" aria-labelledby="voice-settings-heading">
+        <header class="admin-card-header"><span class="admin-card-icon" aria-hidden="true">♫</span><div><h2 id="voice-settings-heading">Voice sample generation</h2><p>Gemini TTS creates consistent preview audio for the selected language, voice, accent, and tone.</p></div><div class="admin-ready {{ $ttsReady ? '' : 'is-offline' }}"><i></i>{{ $ttsReady ? 'VOICE PREVIEWS ENABLED' : 'TTS NOT CONFIGURED' }}</div></header>
+
+        <form class="admin-form" action="{{ route('admin.voice-settings.update', [], false) }}" method="post">
+            @csrf
+            @method('PUT')
+            <div class="admin-form-grid">
+                <div class="admin-field admin-field--wide">
+                    <label class="field-label" for="tts_model">Gemini speech model</label>
+                    <input class="text-input" id="tts_model" name="tts_model" type="text" maxlength="150" required value="{{ old('tts_model', $settings->tts_model ?: 'gemini-2.5-flash-preview-tts') }}" autocomplete="off" placeholder="gemini-2.5-flash-preview-tts">
+                    <span class="field-hint">Use a Gemini model enabled for text-to-speech. The model can be changed without changing the separate prompt-generation model.</span>
+                    @error('tts_model')<p class="admin-error">{{ $message }}</p>@enderror
+                </div>
+                <div class="admin-field admin-field--wide">
+                    <label class="field-label" for="tts_api_key">Google TTS API key <span class="optional">NEVER DISPLAYED AFTER SAVING</span></label>
+                    <input class="text-input" id="tts_api_key" name="tts_api_key" type="password" maxlength="4096" autocomplete="new-password" placeholder="{{ $settings->ttsApiKeyConfigured() ? 'Saved TTS key is hidden — paste a new key to rotate it' : 'Paste a Google API key with Gemini TTS access' }}">
+                    <span class="field-hint">{{ $settings->ttsApiKeyConfigured() ? 'A saved speech key is hidden. Leave blank to keep it.' : 'A separate speech key is required to generate reliable previews.' }} The key is encrypted at rest and is sent only from this server to Google; it never reaches browser code.</span>
+                    @error('tts_api_key')<p class="admin-error">{{ $message }}</p>@enderror
+                </div>
+                @if($settings->ttsApiKeyConfigured())
+                    <div class="admin-field admin-field--wide">
+                        <label class="switch-row"><span><strong>Remove the saved TTS API key</strong><small>Cached samples remain available; new combinations will require a key.</small></span><input type="checkbox" name="clear_tts_key" value="1"><i class="switch-track"></i></label>
+                    </div>
+                @endif
+            </div>
+
+            <div class="admin-help"><span aria-hidden="true">ⓘ</span><div><strong>Samples are generated once, then cached privately.</strong> The first preview of a unique language × voice × accent × tone combination may take several seconds and uses one Gemini TTS request. Later previews reuse the saved audio. Up to 240 preference combinations are supported; no samples are generated in bulk without someone previewing them.</div></div>
+            <div class="admin-form-footer"><p>Only administrators can change the Gemini TTS model or speech key.</p><button class="button-primary" type="submit"><span>Save voice settings</span><span class="button-icon" aria-hidden="true">↗</span></button></div>
+        </form>
+    </section>
+
     <div class="admin-divider-label">YOUR PROMPTING STANDARD</div>
     <section class="admin-method-card">
         <span class="method-icon" aria-hidden="true">✳</span><div><strong>Master specification is loaded on every request</strong><p>The complete continuity method from <code>prompt.txt</code> is sent as server-side system instructions: stable subject and world details, exact clip-to-clip handoffs, a verbatim continuation rule, mode-appropriate factual checks, and copy-ready Flow prompts. It is not editable by ordinary users.</p></div>

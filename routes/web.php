@@ -9,6 +9,7 @@ use App\Http\Controllers\PresenceController;
 use App\Http\Controllers\PromptHistoryController;
 use App\Http\Controllers\StudioController;
 use App\Http\Controllers\StudioProjectController;
+use App\Http\Controllers\VoiceSampleController;
 use Illuminate\Support\Facades\Route;
 
 Route::view('/guide', 'pages.guide')->name('guide');
@@ -29,6 +30,7 @@ Route::middleware('user.auth')->group(function (): void {
     Route::get('/', [StudioProjectController::class, 'index'])->name('studio');
     Route::post('/logout', [AuthController::class, 'logout'])->name('logout');
     Route::post('/presence', [PresenceController::class, 'ping'])->middleware('throttle:2,1')->name('presence.ping');
+    Route::post('/voice-samples', [VoiceSampleController::class, 'store'])->middleware('throttle:12,1')->name('voice-samples.store');
 
     Route::get('/projects', [StudioProjectController::class, 'index'])->name('projects.index');
     Route::get('/projects/create', [StudioProjectController::class, 'create'])->name('projects.create');
@@ -57,6 +59,7 @@ Route::prefix('admin')
         Route::post('/models', [AiSettingsController::class, 'models'])->middleware('throttle:8,1')->name('models');
         Route::post('/test-connection', [AiSettingsController::class, 'testConnection'])->middleware('throttle:5,1')->name('connection.test');
         Route::put('/settings', [AiSettingsController::class, 'update'])->name('settings.update');
+        Route::put('/voice-settings', [AiSettingsController::class, 'updateVoice'])->name('voice-settings.update');
 
         Route::get('/users', [UserManagementController::class, 'index'])->name('users.index');
         Route::get('/users/presence', [UserManagementController::class, 'presence'])->middleware('throttle:10,1')->name('users.presence');

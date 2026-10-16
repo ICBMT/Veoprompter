@@ -10,10 +10,10 @@ VeoPrompter is a Laravel 13 prompt studio for creating detailed, continuity-firs
 - Requires sign-in before opening the prompt workspace or generating a prompt.
 - Lets signed-in users create projects with reusable preferences for default video type, audience, visual style, character type/profile, clip count, video and extension duration, aspect ratio, learning depth for explainers, narration, language, voice, accent, tone, music, and sound effects. Preferences can be edited later and are applied server-side to every generation in that project.
 - Saves each completed generation to the selected project and the user's private prompt library, where users can search, copy, download, revisit, and delete prompt kits.
-- Provides a best-effort voice sample using the browser/device's built-in speech synthesis. It approximates selected language, voice, accent, and tone when a matching installed voice exists; it does not synthesize the final video narration and varies by device.
+- Generates device-independent Gemini TTS previews for all 240 language × voice × accent × tone combinations. Each combination is generated on first request, converted to browser-friendly WAV, and cached privately for later playback; preview audio is illustrative and is not attached to the final video prompt.
 - Gives administrators a registered-user directory with recent online/offline presence and access to each user's saved prompt outputs. Administrators can create customer or admin test accounts that expire three hours after creation.
 - Keeps provider configuration in an administrator-only Control room. Regular users cannot add or change AI providers.
-- Stores provider credentials encrypted with Laravel's `APP_KEY`; the key is never returned to the browser.
+- Stores prompt-generation and dedicated Google TTS credentials encrypted with Laravel's `APP_KEY`; no provider key is returned to the browser.
 
 Generated prompts improve the odds of consistency but cannot guarantee that a video model will reproduce every detail exactly. Use reference images and final-frame continuation in Flow where available.
 
@@ -21,7 +21,8 @@ Generated prompts improve the odds of consistency but cannot guarantee that a vi
 
 - PHP 8.3 or newer, with Laravel's required extensions (including PDO SQLite for the default local database)
 - Composer 2
-- A Gemini API key, or an OpenAI-compatible API key and public HTTPS endpoint
+- A Gemini API key, or an OpenAI-compatible API key and public HTTPS endpoint for prompt generation
+- A separate Google API key with Gemini text-to-speech access to enable generated voice previews
 - A working mail transport in production if users should receive password-reset emails
 - Node.js and npm are optional; the interface ships as local CSS and JavaScript
 
@@ -63,6 +64,7 @@ Open `http://127.0.0.1:8000`. The default development mailer writes reset emails
 
    The command asks for a password without echoing it; use at least 12 characters. If the address already belongs to an account, it enables admin access without changing that account's password. Sign in at `/login` and open **Control room**.
 7. In **Control room → AI provider connection**, choose Google Gemini or an OpenAI-compatible provider and enter its API key. The model list loads after you finish typing; you can also click **Load available models** to use a key already saved for that same provider and endpoint. Select a model, click **Test selected model** to get a short text reply, then save the connection. The test does not save settings or create a prompt-history item. If an API does not expose a model catalogue, you can enter its model ID manually. The key is sent to this app's server for model discovery/testing; the browser never calls the provider directly. The optional extension-frame image is forwarded for prompt generation and not retained.
+8. In **Control room → Voice sample generation**, enter a separate Google API key with Gemini TTS access and the enabled speech model ID. The key is encrypted and used only by the server. Each of the 240 supported preference combinations is generated only when first previewed and then cached privately; no bulk generation runs automatically.
 
 Public account registration is enabled. Sign-in is required to open projects and generate prompts. Configure your deployment's privacy notice and account-retention policy for your audience. Administrators can review user activity and create three-hour temporary test accounts from **User management**.
 
@@ -75,6 +77,13 @@ Public account registration is enabled. Sign-in is required to open projects and
 - API key: a key created for your Google AI Studio project
 
 VeoPrompter calls Gemini's `generateContent` endpoint from the Laravel server.
+
+### Gemini text-to-speech previews
+
+- Configure a separate Google API key in **Control room → Voice sample generation**. It must have access to a Gemini TTS model.
+- Default model ID: `gemini-2.5-flash-preview-tts` (change it in the Control room if your project uses a different enabled TTS model).
+- Samples are generated on demand from fixed short examples, normalized to WAV, and cached privately by model and all four preference values.
+- The browser never receives the TTS credential and no system-installed speech voice is required.
 
 ### OpenAI-compatible API
 

@@ -24,6 +24,7 @@ class AiSettingsController extends Controller
         return view('admin.settings', [
             'settings' => $settings,
             'aiReady' => $settings->isReady(),
+            'ttsReady' => $settings->ttsReady(),
         ]);
     }
 
@@ -130,6 +131,34 @@ class AiSettingsController extends Controller
         $settings->save();
 
         return redirect()->to(route('admin.settings', [], false))->with('success', 'AI connection settings saved. Your secret key is encrypted at rest and will not be shown again.');
+    }
+
+    public function updateVoice(Request $request): RedirectResponse
+    {
+        try {
+            $validated = Validator::make($request->all(), [
+                'tts_model' => ['required', 'string', 'max:150', 'regex:/\A[A-Za-z0-9][A-Za-z0-9._\/:\-]*\z/'],
+                'tts_api_key' => ['nullable', 'string', 'max:4096'],
+                'clear_tts_key' => ['nullable', 'boolean'],
+            ])->validate();
+        } catch (ValidationException $exception) {
+            return back()->withErrors($exception->errors())->withInput($request->except('tts_api_key'));
+        }
+
+        $settings = AiSetting::current();
+        $settings->tts_model = trim($validated['tts_model']);
+        $newKey = trim((string) ($validated['tts_api_key'] ?? ''));
+
+        if ($newKey !== '') {
+            $settings->tts_api_key = $newKey;
+        } elseif ($request->boolean('clear_tts_key')) {
+            $settings->tts_api_key = null;
+        }
+
+        $settings->save();
+
+        return redirect()->to(route('admin.settings', [], false))
+            ->with('success', 'Google TTS settings saved. The speech key is encrypted at rest and is never sent to the browser.');
     }
 
     private function resolveApiKey(array $validated, ?string $baseUrl): string

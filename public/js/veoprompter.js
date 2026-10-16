@@ -652,114 +652,6 @@
 })();
 
 (() => {
-    const gsap = window.gsap;
-    const reduceMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
-    if (!gsap || reduceMotion) return;
-
-    if (window.ScrollTrigger) gsap.registerPlugin(window.ScrollTrigger);
-
-    const studio = document.querySelector('.studio-page');
-    if (studio) {
-        const intro = gsap.timeline({ defaults: { ease: 'power3.out' } });
-        intro.from('.hero-copy .eyebrow-label', { y: 12, autoAlpha: 0, duration: 0.45 })
-            .from('.hero-copy h1', { y: 24, autoAlpha: 0, duration: 0.72, ease: 'power4.out' }, '-=0.24')
-            .from('.hero-copy > p, .hero-qualities', { y: 14, autoAlpha: 0, duration: 0.52, stagger: 0.08 }, '-=0.36')
-            .from('.storyboard-card', { y: 20, autoAlpha: 0, scale: 0.985, rotationY: -3.5, rotationX: 1.5, transformPerspective: 1100, duration: 0.72 }, '-=0.56')
-            .from('.workspace-section .section-heading-row, .workspace-section .mode-tabs, .workspace-section .prompt-form', {
-                y: 18,
-                autoAlpha: 0,
-                duration: 0.56,
-                stagger: 0.09,
-                clearProps: 'transform,opacity,visibility',
-            }, '-=0.3');
-    } else {
-        const pageIntro = document.querySelector('.admin-page, .admin-users-page, .admin-user-detail-page, .auth-page, .guide-page, .account-page, .history-page, .history-detail, .projects-page, .project-settings-page');
-        if (pageIntro) {
-            gsap.from(pageIntro, {
-                y: 16,
-                autoAlpha: 0,
-                duration: 0.62,
-                ease: 'power3.out',
-                clearProps: 'transform,opacity,visibility',
-            });
-        }
-    }
-
-    const revealTargets = gsap.utils.toArray(
-        '.admin-card, .admin-method-card, .admin-prompt-card, .project-run-card, .project-settings-grid .form-panel, .guide-item, .history-card, .principles-row > div, .saved-brief-card, .saved-output-card'
-    );
-    revealTargets.forEach((element, index) => {
-        const reveal = {
-            y: 18,
-            z: 10,
-            rotationX: -1.8,
-            transformPerspective: 1000,
-            transformOrigin: 'center bottom',
-            autoAlpha: 0,
-            duration: 0.58,
-            delay: (index % 3) * 0.055,
-            ease: 'power3.out',
-            clearProps: 'transform,opacity,visibility',
-        };
-
-        if (window.ScrollTrigger) {
-            gsap.from(element, {
-                ...reveal,
-                scrollTrigger: { trigger: element, start: 'top 92%', once: true },
-            });
-        } else {
-            gsap.from(element, reveal);
-        }
-    });
-
-    if (studio) {
-        const art = document.querySelector('.storyboard-art');
-        if (art) {
-            const skyMotion = gsap.timeline({ repeat: -1, yoyo: true, defaults: { ease: 'sine.inOut' } });
-            skyMotion.to('.art-sun', { x: 3, y: -6, duration: 3.8 })
-                .to('.art-planet', { x: -2, y: 7, duration: 4.6 }, 0)
-                .to('.art-character', { y: -3, duration: 2.4 }, 0);
-
-            gsap.to('.art-orbit--two', {
-                rotation: 385,
-                duration: 42,
-                ease: 'none',
-                repeat: -1,
-                transformOrigin: '50% 50%',
-            });
-            gsap.to('.art-stars', {
-                backgroundPosition: '11px 27px, 40px 21px',
-                duration: 7,
-                ease: 'sine.inOut',
-                yoyo: true,
-                repeat: -1,
-            });
-        }
-    }
-
-    if (window.matchMedia('(hover: hover) and (pointer: fine)').matches) {
-        gsap.utils.toArray('.button-primary, .topbar-control').forEach((element) => {
-            const moveX = gsap.quickTo(element, 'x', { duration: 0.32, ease: 'power3.out' });
-            const moveY = gsap.quickTo(element, 'y', { duration: 0.32, ease: 'power3.out' });
-
-            element.addEventListener('pointermove', (event) => {
-                const bounds = element.getBoundingClientRect();
-                moveX((event.clientX - (bounds.left + bounds.width / 2)) * 0.045);
-                moveY((event.clientY - (bounds.top + bounds.height / 2)) * 0.08);
-            });
-            element.addEventListener('pointerleave', () => {
-                moveX(0);
-                moveY(0);
-            });
-        });
-    }
-
-    if (window.ScrollTrigger && document.fonts?.ready) {
-        document.fonts.ready.then(() => window.ScrollTrigger.refresh());
-    }
-})();
-
-(() => {
     const form = document.querySelector('.project-settings-form');
     if (!form) return;
 
@@ -841,38 +733,21 @@
 })();
 
 (() => {
-    // Generate local samples on demand so every supported preference combination can be auditioned without stored API keys or audio files.
-    const sampleLines = {
-        English: 'A tiny seed drifts into the garden. With sunlight, water, and a little patience, it begins a remarkable journey.',
-        Urdu: 'ایک ننھا سا بیج باغ میں گرتا ہے۔ دھوپ، پانی اور تھوڑے صبر سے اس کا حیرت انگیز سفر شروع ہوتا ہے۔',
-        Spanish: 'Una pequeña semilla llega al jardín. Con luz, agua y un poco de paciencia, comienza un viaje extraordinario.',
-        French: 'Une petite graine arrive dans le jardin. Avec du soleil, de l’eau et un peu de patience, une belle aventure commence.',
-        Arabic: 'تصل بذرة صغيرة إلى الحديقة. ومع ضوء الشمس والماء والقليل من الصبر، تبدأ رحلة رائعة.',
-        Hindi: 'एक छोटा सा बीज बगीचे में आता है। धूप, पानी और थोड़े धैर्य के साथ, इसकी अद्भुत यात्रा शुरू होती है।',
-    };
-    const localeForLanguage = { English: 'en-US', Urdu: 'ur-PK', Spanish: 'es-ES', French: 'fr-FR', Arabic: 'ar-SA', Hindi: 'hi-IN' };
-    const localesForAccent = {
-        'American English': ['en-US', 'en-CA', 'en-GB', 'en-AU'],
-        'British English': ['en-GB', 'en-AU', 'en-US', 'en-CA'],
-        'Pakistani English': ['en-PK', 'en-IN', 'en-GB', 'en-US'],
-        'Australian English': ['en-AU', 'en-GB', 'en-US'],
-        Neutral: ['en', 'en-US', 'en-GB', 'en-AU'],
-    };
-    const voiceNameHints = {
-        feminine: /\b(?:female|woman|feminine)\b|zira|samantha|victoria|serena|susan|aria|jenny|karen|monica|sofia|lucia|paulina|amelie|julie|heera|lekha|neha|sangeeta|joana|maria|ana|siri.*female|google.*female/i,
-        masculine: /\b(?:male|man|masculine)\b|david|mark|daniel|alex|fred|george|james|guy|jorge|pablo|thomas|antoine|henri|mathieu|diego|marco|rajesh|ravi|siri.*\bmale\b|google.*\bmale\b/i,
-    };
-    const toneSettings = {
-        'warm and friendly': { rate: 0.94, pitch: 1.03 },
-        'curious and lively': { rate: 1.08, pitch: 1.13 },
-        'calm and thoughtful': { rate: 0.86, pitch: 0.96 },
-        'confident and clear': { rate: 0.98, pitch: 1.0 },
-    };
-    let previewToken = 0;
+    // Voice previews are generated server-side by Gemini TTS, cached by the full preference tuple,
+    // and played as WAV so the result is consistent across devices instead of relying on local voices.
+    const previewButtons = [...document.querySelectorAll('[data-voice-preview-button]')];
+    if (!previewButtons.length) return;
 
-    const valueFor = (form, name, fallback) => {
-        const checked = form.querySelector(`input[type="radio"][name="${name}"]:checked`);
-        if (checked) return checked.value;
+    const endpoint = document.querySelector('meta[name="voice-sample-url"]')?.content;
+    const csrfToken = document.querySelector('meta[name="csrf-token"]')?.content;
+    const audioUrls = new Map();
+    let previewToken = 0;
+    let activeRequest = null;
+    let activeButton = null;
+
+    const readValue = (form, name, fallback) => {
+        const selected = form.querySelector(`input[name="${name}"]:checked`);
+        if (selected) return selected.value;
         return form.querySelector(`#${name}`)?.value || fallback;
     };
 
@@ -880,147 +755,192 @@
         const form = button.closest('.project-settings-form');
         if (form) {
             return {
-                language: valueFor(form, 'language', 'English'),
-                voice: valueFor(form, 'narrator_voice', 'feminine'),
-                accent: valueFor(form, 'narrator_accent', 'American English'),
-                tone: valueFor(form, 'narrator_tone', 'warm and friendly'),
-                narration: form.querySelector('input[name="narration"]:checked')?.value || '0',
+                language: readValue(form, 'language', 'English'),
+                narrator_voice: readValue(form, 'narrator_voice', 'feminine'),
+                narrator_accent: readValue(form, 'narrator_accent', 'American English'),
+                narrator_tone: readValue(form, 'narrator_tone', 'warm and friendly'),
+                narration: readValue(form, 'narration', '1'),
             };
         }
-        const source = document.querySelector('[data-voice-config]');
+
+        const source = button.closest('.studio-page')?.querySelector('[data-voice-config]')
+            || document.querySelector('[data-voice-config]');
         return {
             language: source?.dataset.language || 'English',
-            voice: source?.dataset.narratorVoice || 'feminine',
-            accent: source?.dataset.narratorAccent || 'American English',
-            tone: source?.dataset.narratorTone || 'warm and friendly',
+            narrator_voice: source?.dataset.narratorVoice || 'feminine',
+            narrator_accent: source?.dataset.narratorAccent || 'American English',
+            narrator_tone: source?.dataset.narratorTone || 'warm and friendly',
             narration: '1',
         };
     };
 
-    const preferredLocales = (language, accent) => language === 'English'
-        ? (localesForAccent[accent] || localesForAccent['American English'])
-        : [localeForLanguage[language] || 'en-US'];
+    const cacheKey = (config) => JSON.stringify([
+        config.language,
+        config.narrator_voice,
+        config.narrator_accent,
+        config.narrator_tone,
+    ]);
 
-    const voiceMatchesGender = (voice, gender) => voiceNameHints[gender]?.test(`${voice.name} ${voice.voiceURI || ''}`) || false;
-
-    const chooseVoice = (voices, locales, language, gender) => {
-        const languageCode = (localeForLanguage[language] || locales[0] || 'en-US').split('-')[0].toLowerCase();
-        const languageVoices = voices.filter((voice) => voice.lang.toLowerCase() === languageCode || voice.lang.toLowerCase().startsWith(`${languageCode}-`));
-
-        for (const locale of locales) {
-            const exactLocale = languageVoices.filter((voice) => voice.lang.toLowerCase() === locale.toLowerCase());
-            const genderMatch = exactLocale.find((voice) => voiceMatchesGender(voice, gender));
-            if (genderMatch) return genderMatch;
-            if (exactLocale.length) return exactLocale[0];
+    const getPlayer = (button) => {
+        const card = button.closest('.voice-preview-card, .generated-voice-preview');
+        if (!card) return null;
+        let player = card.querySelector('[data-voice-sample-player]');
+        if (!player) {
+            player = document.createElement('audio');
+            player.className = 'voice-sample-audio';
+            player.controls = true;
+            player.preload = 'none';
+            player.hidden = true;
+            player.dataset.voiceSamplePlayer = '';
+            player.setAttribute('aria-label', 'Generated voice sample audio');
+            card.append(player);
         }
-
-        return languageVoices.find((voice) => voiceMatchesGender(voice, gender)) || languageVoices[0] || null;
+        return player;
     };
 
-    const getInstalledVoices = (synth) => {
-        const current = synth.getVoices();
-        if (current.length || typeof synth.addEventListener !== 'function') return Promise.resolve(current);
+    const setStatus = (button, text) => {
+        const status = button.closest('.voice-preview-card, .generated-voice-preview')?.querySelector('[data-voice-preview-status]');
+        if (status) status.textContent = text;
+    };
 
-        return new Promise((resolve) => {
-            let settled = false;
-            let timeoutId;
-            const finish = (voices) => {
-                if (settled) return;
-                settled = true;
-                window.clearTimeout(timeoutId);
-                synth.removeEventListener('voiceschanged', onVoicesChanged);
-                resolve(voices);
-            };
-            const onVoicesChanged = () => {
-                const voices = synth.getVoices();
-                if (voices.length) finish(voices);
-            };
-            timeoutId = window.setTimeout(() => finish(synth.getVoices()), 1000);
-            synth.addEventListener('voiceschanged', onVoicesChanged);
-            onVoicesChanged();
+    const pausePlayers = () => {
+        document.querySelectorAll('[data-voice-sample-player]').forEach((player) => {
+            player.pause();
+            player.currentTime = 0;
         });
     };
 
-    const stopPreview = (form) => {
+    const stopPreview = () => {
         previewToken += 1;
-        if ('speechSynthesis' in window) window.speechSynthesis.cancel();
-        form.querySelectorAll('[data-voice-preview-status]').forEach((status) => {
+        activeRequest?.abort();
+        activeRequest = null;
+        pausePlayers();
+        if (activeButton) {
+            activeButton.disabled = false;
+            activeButton.removeAttribute('aria-busy');
+            activeButton = null;
+        }
+        document.querySelectorAll('[data-voice-preview-status]').forEach((status) => {
             if (/^(Playing|Preparing)/.test(status.textContent)) {
-                status.textContent = 'Voice settings changed. Preview again to hear the updated choices.';
+                status.textContent = 'Voice settings changed. Preview again to hear the updated combination.';
             }
         });
     };
 
+    const rememberAudio = (key, url) => {
+        audioUrls.set(key, url);
+        while (audioUrls.size > 6) {
+            const [oldestKey, oldestUrl] = audioUrls.entries().next().value;
+            audioUrls.delete(oldestKey);
+            document.querySelectorAll('[data-voice-sample-player]').forEach((player) => {
+                if (player.src === oldestUrl) {
+                    player.pause();
+                    player.removeAttribute('src');
+                    player.load();
+                    player.hidden = true;
+                }
+            });
+            URL.revokeObjectURL(oldestUrl);
+        }
+    };
+
     const playSample = async (button) => {
-        const card = button.closest('.voice-preview-card, .generated-voice-preview');
-        const status = card?.querySelector('[data-voice-preview-status]');
         const config = readConfig(button);
         if (config.narration !== '1') {
-            if (status) status.textContent = 'Turn narration on in project settings before previewing a voice.';
+            setStatus(button, 'Turn narration on in project settings before previewing a voice.');
             return;
         }
-        if (!('speechSynthesis' in window) || !('SpeechSynthesisUtterance' in window)) {
-            if (status) status.textContent = 'This browser does not provide built-in speech preview.';
+        if (!endpoint || !csrfToken) {
+            setStatus(button, 'Voice sample playback is unavailable. Refresh the page and try again.');
             return;
         }
 
-        const synth = window.speechSynthesis;
+        activeRequest?.abort();
+        if (activeButton) {
+            activeButton.disabled = false;
+            activeButton.removeAttribute('aria-busy');
+        }
+        activeButton = null;
+        pausePlayers();
         const token = ++previewToken;
-        synth.cancel();
-        const locales = preferredLocales(config.language, config.accent);
-        const locale = locales[0];
-        const utterance = new SpeechSynthesisUtterance(sampleLines[config.language] || sampleLines.English);
-        const tone = toneSettings[config.tone] || toneSettings['warm and friendly'];
-        utterance.lang = locale;
-        utterance.rate = tone.rate;
-        utterance.pitch = config.voice === 'feminine' ? Math.min(1.3, tone.pitch + 0.08) : Math.max(0.75, tone.pitch - 0.08);
+        const request = new AbortController();
+        activeRequest = request;
+        activeButton = button;
+        button.disabled = true;
+        button.setAttribute('aria-busy', 'true');
+        setStatus(button, 'Preparing your Gemini TTS sample. The first request for a combination may take a few seconds.');
 
-        if (status) status.textContent = `Preparing a ${config.language} sample with your selected voice preferences.`;
-        const voices = await getInstalledVoices(synth);
-        if (token !== previewToken) return;
-
-        const selectedVoice = chooseVoice(voices, locales, config.language, config.voice);
-        if (selectedVoice) {
-            utterance.voice = selectedVoice;
-            utterance.lang = selectedVoice.lang || locale;
-        }
-        const accentMatched = config.language !== 'English' || (selectedVoice && locale.toLowerCase() === selectedVoice.lang.toLowerCase());
-        const genderMatched = selectedVoice && voiceMatchesGender(selectedVoice, config.voice);
-        utterance.onstart = () => {
-            if (token !== previewToken || !status) return;
-            const selectedVoiceText = selectedVoice ? `${selectedVoice.name} (${selectedVoice.lang})` : 'your device’s default voice';
-            const notes = [];
-            if (!selectedVoice) notes.push(`No installed ${config.language} voice was found, so the browser may use a default voice.`);
-            else if (!accentMatched) notes.push(`The closest installed accent is ${selectedVoice.lang}.`);
-            if (selectedVoice && !genderMatched) notes.push('The device voice gender could not be identified; pitch is adjusted approximately.');
-            if (config.language !== 'English') notes.push('The English accent setting does not change pronunciation for this language.');
-            const accentDescription = config.language === 'English' ? `, ${config.accent}` : '';
-            status.textContent = `Playing ${config.language}${accentDescription}, ${config.voice}, ${config.tone} with ${selectedVoiceText}. ${notes.join(' ')} Device samples may differ from the final video voice.`;
-        };
-        utterance.onend = () => {
-            if (token === previewToken && status) status.textContent = 'Preview finished. Device voices and accents may differ from your final video.';
-        };
-        utterance.onerror = () => {
-            if (token === previewToken && status) status.textContent = 'The device could not play this speech sample. Try another installed voice or language.';
-        };
         try {
-            synth.speak(utterance);
-        } catch {
-            if (status) status.textContent = 'The device could not play this speech sample. Try another installed voice or language.';
+            const key = cacheKey(config);
+            let url = audioUrls.get(key);
+            if (!url) {
+                const response = await fetch(endpoint, {
+                    method: 'POST',
+                    credentials: 'same-origin',
+                    signal: request.signal,
+                    headers: {
+                        'Accept': 'audio/wav, application/json',
+                        'Content-Type': 'application/json',
+                        'X-CSRF-TOKEN': csrfToken,
+                        'X-Requested-With': 'XMLHttpRequest',
+                    },
+                    body: JSON.stringify({
+                        language: config.language,
+                        narrator_voice: config.narrator_voice,
+                        narrator_accent: config.narrator_accent,
+                        narrator_tone: config.narrator_tone,
+                    }),
+                });
+                if (!response.ok) {
+                    const payload = await response.json().catch(() => ({}));
+                    throw new Error(payload.message || 'The voice sample could not be generated. Please try again.');
+                }
+                const blob = await response.blob();
+                if (!blob.size || !blob.type.includes('audio')) {
+                    throw new Error('Gemini returned an empty or unsupported audio sample. Try again or ask an administrator to check the TTS settings.');
+                }
+                url = URL.createObjectURL(blob);
+                rememberAudio(key, url);
+            }
+
+            if (token !== previewToken) return;
+            const player = getPlayer(button);
+            if (!player) throw new Error('The voice sample player could not be prepared.');
+            player.src = url;
+            player.hidden = false;
+            window.dispatchEvent(new CustomEvent('veo:voice-sample-ready', { detail: { player } }));
+            player.onended = () => setStatus(button, 'Preview finished. This sample is cached for the selected combination.');
+            player.onplaying = () => setStatus(button, `Playing the generated ${config.language} sample. This preference combination is cached for future previews.`);
+
+            try {
+                await player.play();
+            } catch {
+                setStatus(button, 'Your sample is ready. Press play in the audio controls to listen.');
+            }
+        } catch (error) {
+            if (token !== previewToken) return;
+            setStatus(button, error.name === 'AbortError'
+                ? 'Preview cancelled.'
+                : (error.message || 'The voice sample could not be generated. Please try again.'));
+        } finally {
+            if (token === previewToken) {
+                button.disabled = false;
+                button.removeAttribute('aria-busy');
+                activeButton = null;
+                activeRequest = null;
+            }
         }
     };
 
     document.querySelectorAll('.project-settings-form').forEach((form) => {
         form.addEventListener('change', (event) => {
             if (['language', 'narrator_voice', 'narrator_accent', 'narrator_tone', 'narration'].includes(event.target.name)) {
-                stopPreview(form);
+                stopPreview();
             }
         });
     });
 
-    document.querySelectorAll('[data-voice-preview-button]').forEach((button) => {
-        button.addEventListener('click', () => playSample(button));
-    });
+    previewButtons.forEach((button) => button.addEventListener('click', () => playSample(button)));
 })();
 
 (() => {

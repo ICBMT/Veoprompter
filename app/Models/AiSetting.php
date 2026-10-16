@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use Illuminate\Contracts\Encryption\DecryptException;
 use Illuminate\Database\Eloquent\Model;
 
 class AiSetting extends Model
@@ -11,12 +12,15 @@ class AiSetting extends Model
         'model',
         'base_url',
         'api_key',
+        'tts_model',
+        'tts_api_key',
     ];
 
     protected function casts(): array
     {
         return [
             'api_key' => 'encrypted',
+            'tts_api_key' => 'encrypted',
         ];
     }
 
@@ -33,6 +37,20 @@ class AiSetting extends Model
     public function apiKeyConfigured(): bool
     {
         return filled($this->api_key);
+    }
+
+    public function ttsApiKeyConfigured(): bool
+    {
+        try {
+            return filled($this->tts_api_key);
+        } catch (DecryptException) {
+            return false;
+        }
+    }
+
+    public function ttsReady(): bool
+    {
+        return $this->ttsApiKeyConfigured() && filled($this->tts_model);
     }
 
     public function isReady(): bool

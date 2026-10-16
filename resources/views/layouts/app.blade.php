@@ -4,6 +4,7 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="csrf-token" content="{{ csrf_token() }}">
+    <meta name="voice-sample-url" content="{{ route('voice-samples.store', [], false) }}">
     @auth
         <meta name="presence-url" content="{{ route('presence.ping', [], false) }}">
         @if(auth()->user()->expires_at)<meta name="account-expires-at" content="{{ auth()->user()->expires_at->toIso8601String() }}">@endif
@@ -15,6 +16,7 @@
     <script src="/js/vendor/gsap.min.js" defer></script>
     <script src="/js/vendor/ScrollTrigger.min.js" defer></script>
     <script src="/js/veoprompter.js" defer></script>
+    <script src="/js/site-motion.js" defer></script>
 </head>
 <body>
 @php
