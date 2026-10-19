@@ -1,25 +1,25 @@
 # VeoPrompter for Google Flow
 
-This is a Chrome Manifest V3 extension kept separate from the Laravel application code. It receives generated prompts through a site-scoped VeoPrompter bridge, stores the active prompt in `chrome.storage.local`, and prepares Sections 1–7 followed by each clip prompt. Sections 9–10 stay attached to the final clip; unrecognized formats remain a single copy-ready part.
+This is a Chrome Manifest V3 extension kept separate from the Laravel application code. It receives generated or saved prompts through a site-scoped VeoPrompter bridge and stores the active prompt in `chrome.storage.local`. It prepares Sections 1–7 first, then each clip prompt in order, with Sections 9–10 attached to the final clip. Unrecognized formats remain a single copy-ready part.
 
 ## Load it in Chrome
 
 1. Visit `chrome://extensions`, turn on **Developer mode**, and select **Load unpacked**. Choose this `chrome-extension/` directory. If it is already installed unpacked, click **Reload** to apply the update.
-2. Open the VeoPrompter application in a tab. Open the extension popup and select **Connect this site**. Approve the origin-specific access request; the current page is connected immediately.
-3. Generate a project prompt and select **Send to Flow** beside Copy all and Save .txt. The extension parses the prompt and stores it locally.
-4. For automatic prompt-box filling, open Google Flow, then open the extension popup while the Flow tab is active. Click **Fill Flow** for Sections 1–7. The extension places the text in Flow’s empty prompt box and also attempts to copy it to the clipboard as a backup. Review the prompt and click Flow’s **Send** button yourself. After it is sent, reopen the extension and fill the next clip. Sections 9–10 are included with the final clip.
-5. If Flow is not the active tab, the main action copies the next part to the clipboard instead; Flow can stay closed while you prepare the sequence. On a Flow tab, **Copy this part to clipboard instead** is available as a fallback.
+2. Open VeoPrompter in a tab. Open the extension popup and select **Connect this site**. Approve the origin-specific access request; the current page is connected immediately.
+3. Generate a prompt and select **Send to Flow** beside Copy all and Save .txt, or open a saved prompt in the prompt library and select its **Send to Flow** button. The extension parses and stores the prompt locally.
+4. To paste a part on any site, open the destination tab, open the extension popup, and click **Copy** for the next part. The extension copies the text and arms a one-time listener on that tab. Click a text input, textarea, or editable text field to insert the part at the cursor. In Google Flow, review the prompt and click Flow’s **Send** button yourself. Repeat for each clip; Sections 9–10 are included with the final clip.
+5. If automatic insertion is unavailable or you prefer, use the copied text and your browser’s normal **Paste** command. You can also prepare the sequence with Flow closed; the extension does not require Flow to be open.
 
-The extension never clicks Flow’s Send button or starts video generation. It does not overwrite text already in Flow’s composer. If the composer is occupied or cannot be found, the extension explains the issue and leaves the sequence at the current part so you can retry or use the clipboard fallback.
+The extension never submits a prompt, clicks Flow’s Send button, or starts video generation. It does not overwrite text already in an editable field; it inserts at the current cursor/selection. Automatic paste is armed only after you open the popup on the active destination tab and click Copy. The listener handles one field click, then removes itself. It does not request persistent access to all destination sites.
 
-**Back:** rewinds one part. If the Flow composer still contains exactly the last unsent text inserted by the extension, it clears that text; changed text is left untouched, and sent chat messages are never removed. **Start this prompt over** resets the sequence to Sections 1–7. Sending a different prompt from VeoPrompter replaces the active extension prompt.
+**Go back one part** and **Start this prompt over** update the stored sequence and cancel any pending one-time paste. Text already inserted into a page is left unchanged. Sending a different prompt from VeoPrompter replaces the active extension prompt.
 
 ## Local storage and permissions
 
-- Prompt text remains on-device in Chrome extension local storage. The extension does not upload it to VeoPrompter, Flow, or another service.
+- Prompt text and progress remain on-device in Chrome extension local storage. The extension does not upload them to VeoPrompter, Flow, or another service.
 - The extension only receives app-page messages from a VeoPrompter origin that the user explicitly connected.
-- No persistent Google Flow host permission is requested. When Flow is the active tab and you click **Fill Flow**, the extension uses Chrome’s temporary `activeTab` access to fill the Flow composer. It does not submit the prompt.
-- Clipboard write access is used when you click a Copy action or fill a part in Flow. The clipboard copy provides a manual-paste fallback.
+- No persistent destination-site permission is requested. For one-time insertion, the extension uses Chrome’s temporary `activeTab` access after the user opens the popup on that tab and clicks Copy. The app-site connection is separate and scoped to the origin the user approves.
+- Clipboard write access is used when you click Copy; normal clipboard paste remains available as a fallback.
 
 ## Tests
 

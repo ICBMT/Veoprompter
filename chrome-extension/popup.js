@@ -1,5 +1,8 @@
+import { armPasteOnNextField } from './field-paste.js';
+
 const STORAGE_KEYS = ['connectedAppOrigins', 'activePrompt'];
 const APP_BRIDGE_ID = 'veoprompter-app-bridge';
+const ACTIVE_PROMPT_KEY = 'activePrompt';
 
 const mainButton = document.querySelector('[data-main-action]');
 const promptCard = document.querySelector('[data-prompt-card]');
@@ -7,13 +10,13 @@ const emptyState = document.querySelector('[data-empty-state]');
 const statusMessage = document.querySelector('[data-status]');
 const backAction = document.querySelector('[data-back-action]');
 const restartAction = document.querySelector('[data-restart-action]');
-const copyFallbackAction = document.querySelector('[data-copy-fallback]');
 const connectionList = document.querySelector('[data-connection-list]');
 const progressTrack = document.querySelector('.progress-track');
 
 let activeTab = null;
 let popupState = { connectedAppOrigins: [], activePrompt: null };
 let currentAction = 'none';
+let actionPending = false;
 
 function currentOrigin(value) {
     try {
@@ -24,12 +27,10 @@ function currentOrigin(value) {
     }
 }
 
-function isFlowTab(tab) {
+function canInjectIntoTab(tab) {
     try {
         const url = new URL(tab?.url);
-        return url.protocol === 'https:'
-            && (url.hostname === 'flow.google'
-                || (url.hostname === 'labs.google' && /^\/fx\/tools\/flow(?:\/|$)/.test(url.pathname)));
+        return ['http:', 'https:'].includes(url.protocol) && Number.isInteger(tab?.id);
     } catch {
         return false;
     }
@@ -89,9 +90,9 @@ function renderPrompt(prompt) {
     document.querySelector('[data-prompt-title]').textContent = prompt.title || 'VeoPrompter prompt';
     document.querySelector('[data-prompt-notice]').textContent = prompt.notice || 'Your prompt is stored locally in this browser.';
 
-    const total = prompt.chunks.length;
+    const chunks = Array.isArray(prompt.chunks) ? prompt.chunks : [];
+    const total = chunks.length;
     const nextIndex = Math.min(Math.max(Number(prompt.nextIndex) || 0, 0), total);
-    const flowIsActive = isFlowTab(activeTab);
     const percent = total ? Math.round((nextIndex / total) * 100) : 0;
     const progressBar = document.querySelector('[data-progress-bar]');
     progressBar.style.width = `${percent}%`;
@@ -101,30 +102,31 @@ function renderPrompt(prompt) {
         ? `Part ${Math.min(nextIndex + 1, total)} of ${total}`
         : 'No copyable parts';
 
-    const nextChunk = prompt.chunks[nextIndex];
+    const nextChunk = chunks[nextIndex];
     document.querySelector('[data-next-part]').textContent = nextChunk
         ? `Next: ${nextChunk.label}`
-        : 'All parts ready';
+        : 'All parts copied';
 
     if (nextChunk) {
-        const flowLabel = nextChunk.kind === 'context'
-            ? 'Sections 1–7'
-            : nextChunk.kind === 'clip'
-                ? `Clip ${nextChunk.clipNumber}`
-                : nextChunk.label;
-        setMainAction(flowIsActive ? `Fill Flow · ${flowLabel}` : `Copy ${nextChunk.label}`, flowIsActive ? 'fill-flow' : 'copy');
+        setMainAction(`Copy ${nextChunk.label}`, 'copy');
     } else {
-        setMainAction('All parts ready', 'none', true);
+        setMainAction('All parts copied', 'none', true);
+    }
+
+    const pendingPaste = prompt.pendingPaste;
+    const pendingLabel = pendingPaste?.label || 'the copied part';
+    if (pendingPaste && pendingPaste.tabId === activeTab?.id) {
+        document.querySelector('[data-usage-note]').textContent = `Click a text field on this tab to paste ${pendingLabel} once. Clipboard paste remains available; copying another part replaces this pending paste.`;
+    } else if (pendingPaste) {
+        document.querySelector('[data-usage-note]').textContent = `${pendingLabel} is armed on another tab. Return to that tab and click an editable text field, or use the clipboard manually.`;
+    } else if (nextChunk) {
+        document.querySelector('[data-usage-note]').textContent = 'Copy places the part on your clipboard and arms a one-time paste on this tab. Click a text field to insert it; you still choose when to send or submit.';
+    } else {
+        document.querySelector('[data-usage-note]').textContent = 'All parts are copied. You control when to submit or send them; the extension never submits or starts generation.';
     }
 
     backAction.hidden = nextIndex === 0;
     restartAction.hidden = nextIndex === 0;
-    copyFallbackAction.hidden = !flowIsActive || !nextChunk;
-    document.querySelector('[data-usage-note]').textContent = nextChunk
-        ? flowIsActive
-            ? 'Click to copy this part and fill Flow’s empty prompt box. Review it, then click Flow’s Send button. Existing composer text is never overwritten.'
-            : 'Each click copies one part. Open Flow and this popup to fill Flow automatically, or copy the sequence with Flow closed.'
-        : 'All parts are ready. The extension never sends messages; you control when to submit each part in Flow.';
 }
 
 async function refresh() {
@@ -153,7 +155,7 @@ async function refresh() {
     }
 
     showEmpty(
-        needsConnection ? 'Connect this VeoPrompter site' : 'Send a prompt to Flow',
+        needsConnection ? 'Connect this VeoPrompter site' : 'Send a prompt to the extension',
         needsConnection
             ? 'Allow this extension to receive prompts from the VeoPrompter site open in this tab.'
             : 'Generate a prompt in VeoPrompter, then use its Send to Flow button. Your prompt stays in this browser.',
@@ -161,15 +163,14 @@ async function refresh() {
 
     if (needsConnection) {
         setMainAction('Connect this site', 'connect-site');
-        document.querySelector('[data-usage-note]').textContent = 'You will be asked to approve this site. The extension does not read other websites.';
+        document.querySelector('[data-usage-note]').textContent = 'You will be asked to approve only this VeoPrompter origin. Destination-tab paste uses temporary activeTab access after you click Copy.';
     } else {
         setMainAction('Send a prompt from VeoPrompter first', 'none', true);
-        document.querySelector('[data-usage-note]').textContent = 'Once a prompt is stored, copy its parts on any tab or open Flow first to fill its prompt box automatically.';
+        document.querySelector('[data-usage-note]').textContent = 'Once a prompt is stored, open the extension on the destination tab, click Copy, then click a text field to paste it once.';
     }
 
     backAction.hidden = true;
     restartAction.hidden = true;
-    copyFallbackAction.hidden = true;
 }
 
 async function registerAppBridge(origins) {
@@ -227,7 +228,7 @@ async function connectCurrentSite() {
         await chrome.scripting.executeScript({ target: { tabId: activeTab.id }, files: ['app-bridge.js'] });
         popupState.connectedAppOrigins = origins;
         updateConnectionList(origins);
-        setStatus('Connected. Return to VeoPrompter and press Send to Flow on a generated prompt.', 'success');
+        setStatus('Connected. Return to VeoPrompter and press Send to Flow on a generated or saved prompt.', 'success');
         await refresh();
     } catch {
         setStatus('The site could not be connected. Check extension permissions and try again.', 'error');
@@ -258,121 +259,144 @@ async function copyText(text) {
     if (!copied) throw new Error('Clipboard access was blocked.');
 }
 
-function flowFailureMessage(reason) {
-    if (reason === 'composer-not-found') return 'Flow’s prompt box was not found. Nothing was inserted. Reload Flow or use “Copy this part to clipboard instead.”';
-    if (reason === 'composer-not-empty') return 'Flow’s prompt box already contains text, so it was left untouched. Send or clear that text, then retry, or use “Copy this part to clipboard instead.”';
-    if (reason === 'fill-failed') return 'Flow did not accept the prompt. Nothing was sent. Try again or use “Copy this part to clipboard instead.”';
-    if (reason === 'not-flow') return 'Open Google Flow in the active tab to fill its prompt box. No text was sent.';
-    if (reason === 'prompt-changed') return 'The active prompt changed while filling. Check Flow before continuing.';
-    if (reason === 'empty-prompt') return 'This part is empty. Send the prompt from VeoPrompter again.';
-    return 'The extension could not reach Flow. If the text is not in the prompt box, use “Copy this part to clipboard instead.”';
+function createPasteToken() {
+    return window.crypto?.randomUUID?.() || `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+}
+
+async function clearPendingPaste(promptId, token, restoreIndex = null) {
+    const { [ACTIVE_PROMPT_KEY]: latest = null } = await chrome.storage.local.get(ACTIVE_PROMPT_KEY);
+    if (!latest || latest.id !== promptId || latest.pendingPaste?.token !== token) return;
+
+    latest.pendingPaste = null;
+    if (restoreIndex !== null) latest.nextIndex = restoreIndex;
+    await chrome.storage.local.set({ [ACTIVE_PROMPT_KEY]: latest });
+    popupState.activePrompt = latest;
+    renderPrompt(latest);
 }
 
 async function copyNextPart() {
     const prompt = popupState.activePrompt;
-    const chunk = prompt?.chunks?.[prompt.nextIndex];
+    const index = Number(prompt?.nextIndex);
+    const chunk = prompt?.chunks?.[index];
     if (!chunk) return;
-
-    try {
-        await copyText(chunk.text);
-        prompt.nextIndex += 1;
-        await chrome.storage.local.set({ activePrompt: prompt });
-        popupState.activePrompt = prompt;
-        renderPrompt(prompt);
-        setStatus(`${chunk.label} copied to the clipboard. Paste it yourself when ready, then continue with the next part.`, 'success');
-    } catch {
-        setStatus('Clipboard access failed. Allow clipboard access for the extension and try again.', 'error');
-    }
-}
-
-async function fillNextPartInFlow() {
-    const prompt = popupState.activePrompt;
-    const chunk = prompt?.chunks?.[prompt.nextIndex];
-    if (!chunk || !activeTab?.id) return;
 
     let copiedToClipboard = false;
     try {
         await copyText(chunk.text);
         copiedToClipboard = true;
     } catch {
-        // Flow insertion can still succeed even if the clipboard is unavailable.
+        // Injection may still succeed on ordinary web pages if clipboard access is blocked.
     }
 
+    const scriptable = canInjectIntoTab(activeTab);
+    if (!copiedToClipboard && !scriptable) {
+        setStatus('Clipboard access failed, and this page does not allow automatic paste. Open a regular website or allow clipboard access, then try again.', 'error');
+        return;
+    }
+
+    const token = createPasteToken();
+    const replacedPending = Boolean(prompt.pendingPaste);
+    let latest;
     try {
-        const response = await chrome.runtime.sendMessage({
-            type: 'VEOPROMPTER_FLOW_INSERT_NEXT',
-            promptId: prompt.id,
-            expectedIndex: prompt.nextIndex,
+        const stored = await chrome.storage.local.get(ACTIVE_PROMPT_KEY);
+        latest = stored[ACTIVE_PROMPT_KEY];
+        if (!latest || latest.id !== prompt.id || latest.nextIndex !== index) {
+            setStatus(copiedToClipboard
+                ? `${chunk.label} is on your clipboard, but the active prompt changed. Paste it manually if needed.`
+                : 'The active prompt changed before automatic paste could be prepared. Nothing was inserted.', 'error');
+            return;
+        }
+
+        latest.nextIndex = index + 1;
+        latest.pendingPaste = scriptable ? {
+            token,
+            index,
             tabId: activeTab.id,
-        });
-        if (!response?.ok) {
-            setStatus(flowFailureMessage(response?.reason), 'error');
-            return;
-        }
-
-        const clipboardNote = copiedToClipboard ? ' It is also on your clipboard.' : '';
-        setStatus(`${response.label || chunk.label} is in Flow’s prompt box. Review it and click Flow’s Send button when ready; the extension has not sent it.${clipboardNote}`, 'success');
+            label: chunk.label,
+            armedAt: new Date().toISOString(),
+        } : null;
+        latest.lastInserted = null;
+        await chrome.storage.local.set({ [ACTIVE_PROMPT_KEY]: latest });
+        popupState.activePrompt = latest;
+        renderPrompt(latest);
     } catch {
-        setStatus(flowFailureMessage('flow-unavailable'), 'error');
+        setStatus(copiedToClipboard
+            ? `${chunk.label} is on your clipboard, but copy progress could not be saved.`
+            : 'The prompt could not be prepared. Check extension storage and try again.', 'error');
+        return;
     }
-}
 
-function navigationFeedback(undo) {
-    if (undo?.result === 'cleared-unsent-text') return ' The matching unsent text was cleared from Flow.';
-    if (undo?.result === 'already-sent') return ' Flow’s composer was already empty; messages in the chat were not changed.';
-    if (undo?.reason === 'composer-changed') return ' Flow’s composer had changed, so it was left untouched.';
-    if (undo?.reason === 'composer-not-found') return ' The Flow composer was not found, so no Flow text was changed.';
-    if (undo?.reason === 'clear-failed') return ' Flow did not clear the matching text, so it may still be in the composer.';
-    if (undo?.reason === 'not-flow') return ' The original tab is no longer a Flow page, so it was left untouched.';
-    if (undo?.reason === 'flow-unavailable') return ' Flow could not be reached, so its text was left untouched.';
-    return '';
-}
-
-async function goBackOnePart() {
-    const prompt = popupState.activePrompt;
-    if (!prompt || prompt.nextIndex <= 0) return;
+    if (!scriptable) {
+        setStatus(copiedToClipboard
+            ? `${chunk.label} copied. This browser page does not permit automatic paste; use the clipboard manually.`
+            : `${chunk.label} is ready, but automatic paste is unavailable on this browser page.`, 'info');
+        return;
+    }
 
     try {
-        const response = await chrome.runtime.sendMessage({
-            type: 'VEOPROMPTER_PROMPT_REWIND',
-            promptId: prompt.id,
+        const [execution] = await chrome.scripting.executeScript({
+            target: { tabId: activeTab.id },
+            func: armPasteOnNextField,
+            args: [chunk.text, latest.id, index, token, activeTab.id],
         });
-        if (!response?.ok) {
-            setStatus('The prompt sequence could not be rewound. Close and reopen the extension, then try again.', 'error');
-            return;
-        }
+        if (execution?.result?.ok !== true) throw new Error('Could not arm one-time paste.');
 
-        await refresh();
-        const promptAfterRewind = popupState.activePrompt;
-        const chunk = promptAfterRewind?.chunks?.[response.nextIndex];
-        setStatus(`Back to ${chunk?.label || 'the previous part'}. It is ready to fill or copy again.${navigationFeedback(response.undo)}`, 'info');
+        const prefix = replacedPending ? 'The previous pending paste was replaced. ' : '';
+        setStatus(copiedToClipboard
+            ? `${prefix}${chunk.label} copied. Click a text field on this tab to paste it once; you choose when to submit.`
+            : `${prefix}${chunk.label} is armed for this tab. Click a text field to paste it once; clipboard copy was blocked.`, 'success');
     } catch {
-        setStatus('The prompt sequence could not be rewound. Close and reopen the extension, then try again.', 'error');
+        try {
+            await clearPendingPaste(latest.id, token, copiedToClipboard ? null : index);
+        } catch {
+            // The clipboard remains a usable fallback even if extension storage also fails.
+        }
+        setStatus(copiedToClipboard
+            ? `${chunk.label} is on your clipboard, but automatic paste could not be armed. Paste it manually.`
+            : 'Automatic paste could not be armed and clipboard access failed. No prompt was inserted.', 'error');
     }
 }
 
-async function restartPrompt() {
+async function navigatePrompt(targetIndex, message) {
     const prompt = popupState.activePrompt;
     if (!prompt) return;
 
     try {
-        const response = await chrome.runtime.sendMessage({
-            type: 'VEOPROMPTER_PROMPT_RESTART',
-            promptId: prompt.id,
-        });
-        if (!response?.ok) {
-            setStatus('The prompt sequence could not be restarted. Close and reopen the extension, then try again.', 'error');
+        const stored = await chrome.storage.local.get(ACTIVE_PROMPT_KEY);
+        const latest = stored[ACTIVE_PROMPT_KEY];
+        if (!latest || latest.id !== prompt.id) {
+            setStatus('The active prompt changed. Reopen it from VeoPrompter and try again.', 'error');
             return;
         }
 
-        await refresh();
-        setStatus(`Started over. Sections 1–7 are ready again.${navigationFeedback(response.undo)}`, 'success');
+        const hadPendingPaste = Boolean(latest.pendingPaste);
+        const total = Array.isArray(latest.chunks) ? latest.chunks.length : 0;
+        latest.nextIndex = Math.max(0, Math.min(targetIndex, total));
+        latest.pendingPaste = null;
+        latest.lastInserted = null;
+        await chrome.storage.local.set({ [ACTIVE_PROMPT_KEY]: latest });
+        popupState.activePrompt = latest;
+        renderPrompt(latest);
+        setStatus(`${message}${hadPendingPaste ? ' Any pending one-time paste was cancelled; text already inserted into a page is left unchanged.' : ''}`, 'info');
     } catch {
-        setStatus('The prompt sequence could not be restarted. Close and reopen the extension, then try again.', 'error');
+        setStatus('The prompt sequence could not be updated. Your saved prompt is still intact; try again.', 'error');
     }
 }
 
-let actionPending = false;
+async function goBackOnePart() {
+    const prompt = popupState.activePrompt;
+    const nextIndex = Number(prompt?.nextIndex) || 0;
+    if (!prompt || nextIndex <= 0) return;
+
+    const targetIndex = Math.max(0, nextIndex - 1);
+    const chunk = prompt.chunks?.[targetIndex];
+    await navigatePrompt(targetIndex, `Back to ${chunk?.label || 'the previous part'}. It is ready to copy again.`);
+}
+
+async function restartPrompt() {
+    if (!popupState.activePrompt) return;
+    await navigatePrompt(0, 'Started over. Sections 1–7 are ready again.');
+}
 
 mainButton.addEventListener('click', async () => {
     if (actionPending) return;
@@ -380,7 +404,6 @@ mainButton.addEventListener('click', async () => {
     mainButton.disabled = true;
     try {
         if (currentAction === 'connect-site') await connectCurrentSite();
-        else if (currentAction === 'fill-flow') await fillNextPartInFlow();
         else if (currentAction === 'copy') await copyNextPart();
         await refresh();
     } finally {
@@ -405,17 +428,6 @@ restartAction.addEventListener('click', async (event) => {
     actionPending = true;
     try {
         await restartPrompt();
-    } finally {
-        actionPending = false;
-    }
-});
-
-copyFallbackAction.addEventListener('click', async (event) => {
-    event.preventDefault();
-    if (actionPending) return;
-    actionPending = true;
-    try {
-        await copyNextPart();
     } finally {
         actionPending = false;
     }

@@ -18,9 +18,12 @@
         <div class="detail-actions">
             <button class="button-secondary" type="button" data-copy-target="#saved-prompt-output"><span aria-hidden="true">▢</span> Copy all</button>
             <button class="button-secondary" type="button" data-download-target="#saved-prompt-output" data-download-name="{{ \Illuminate\Support\Str::slug($project->title) }}.txt"><span aria-hidden="true">↓</span> Save .txt</button>
+            <button class="button-secondary button-flow" type="button" data-send-to-flow data-prompt-target="#saved-prompt-output" data-prompt-title="{{ $project->title }} · saved prompt" data-prompt-mode="{{ $project->mode }}" aria-describedby="saved-flow-transfer-status"><span aria-hidden="true">↗</span><span data-flow-button-label>Send to Flow</span></button>
             <form action="{{ route('history.destroy', $project, false) }}" method="post" data-confirm="Remove this prompt kit from your library? This cannot be undone.">@csrf @method('DELETE')<button class="history-delete detail-delete" type="submit" aria-label="Delete this prompt kit" title="Delete this prompt kit"><svg viewBox="0 0 18 18" aria-hidden="true"><path d="M3.5 5h11M7 5V3.5h4V5m2.5 0-.6 9.5H5.1L4.5 5m2.8 2v5m3.4-5v5"/></svg></button></form>
         </div>
     </section>
+
+    <p class="flow-transfer-status" id="saved-flow-transfer-status" data-flow-transfer-status role="status" aria-live="polite" hidden></p>
 
     <div class="saved-detail-meta"><span>CREATED {{ $project->created_at->format('M j, Y · g:i A') }}</span><i></i><span>{{ $project->provider === 'gemini' ? 'GOOGLE GEMINI' : 'OPENAI-COMPATIBLE' }} · {{ $project->model }}</span>@if($project->reference_frame_attached)<i></i><span>FRAME IMAGE WAS USED · ORIGINAL IMAGE NOT RETAINED</span>@endif</div>
 
@@ -46,7 +49,7 @@
     </section>
 
     <section class="saved-output-card">
-        <div class="saved-output-heading"><div><span class="section-index">YOUR COPY-READY PROMPTS</span><p>Keep this page bookmarked, or copy the complete kit back into Flow.</p></div><span class="result-status"><i></i> SAVED</span></div>
+        <div class="saved-output-heading"><div><span class="section-index">YOUR COPY-READY PROMPTS</span><p>Send the saved kit to the extension, then copy each part into a text field when ready.</p></div><span class="result-status"><i></i> SAVED</span></div>
         <pre class="history-output" id="saved-prompt-output">{{ $project->content }}</pre>
     </section>
 </div>

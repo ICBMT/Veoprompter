@@ -382,57 +382,18 @@
         }
     });
 
-    sendToFlowButton?.addEventListener('click', async () => {
-        if (!latestOutput.trim()) return;
-
-        const label = sendToFlowButton.querySelector('[data-flow-button-label]');
-        const originalLabel = label?.textContent || 'Send to Flow';
-        const requestId = window.crypto?.randomUUID?.() || `${Date.now()}-${Math.random().toString(36).slice(2)}`;
-        sendToFlowButton.disabled = true;
-        sendToFlowButton.setAttribute('aria-busy', 'true');
-        if (label) label.textContent = 'Sending…';
-        flowTransferStatus.hidden = true;
-        flowTransferStatus.textContent = '';
-
-        let settled = false;
-        let timeoutId;
-        const finish = (response) => {
-            if (settled) return;
-            settled = true;
-            window.clearTimeout(timeoutId);
-            window.removeEventListener('message', onAck);
-            sendToFlowButton.disabled = false;
-            sendToFlowButton.removeAttribute('aria-busy');
-            if (label) label.textContent = response?.ok ? 'Saved in extension' : originalLabel;
-            flowTransferStatus.dataset.kind = response?.ok ? 'success' : 'error';
-            flowTransferStatus.textContent = response?.ok
-                ? `${response.replacedPrevious ? 'Replaced the previous extension prompt. ' : ''}Saved ${response.chunkCount} part${response.chunkCount === 1 ? '' : 's'} locally. Open the extension on a Google Flow tab to fill its prompt box, or on any tab to copy. You still send each part yourself.`
-                : (response?.message || 'The extension did not respond. Connect it to this site, then try again.');
+    sendToFlowButton?.addEventListener('click', () => {
+        if (typeof window.veoprompterSendToFlow !== 'function') {
+            flowTransferStatus.textContent = 'The extension handoff could not start. Reload the page and try again.';
+            flowTransferStatus.dataset.kind = 'error';
             flowTransferStatus.hidden = false;
-            window.setTimeout(() => {
-                if (label && label.textContent === 'Saved in extension') label.textContent = originalLabel;
-            }, 1800);
-        };
-        const onAck = (event) => {
-            if (event.source !== window || event.origin !== window.location.origin) return;
-            const response = event.data;
-            if (!response || response.type !== 'VEOPROMPTER_FLOW_EXTENSION_ACK' || response.requestId !== requestId) return;
-            finish(response);
-        };
+            return;
+        }
 
-        window.addEventListener('message', onAck);
-        timeoutId = window.setTimeout(() => finish({
-            ok: false,
-            message: 'No connected VeoPrompter Flow extension was found. Open the extension on this site, choose “Connect this site”, then try again.',
-        }), 5000);
-
-        window.postMessage({
-            type: 'VEOPROMPTER_FLOW_EXTENSION_STORE',
-            requestId,
-            prompt: latestOutput,
+        window.veoprompterSendToFlow(sendToFlowButton, latestOutput, {
             title: `${sendToFlowButton.dataset.projectName || 'Project'} · ${activeMode === 'extend' ? 'extension' : 'video prompt'}`,
             mode: activeMode,
-        }, window.location.origin);
+        });
     });
 
     document.querySelector('[data-download-output]')?.addEventListener('click', () => {

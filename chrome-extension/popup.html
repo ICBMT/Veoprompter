@@ -3,14 +3,14 @@
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>VeoPrompter Flow handoff</title>
+    <title>VeoPrompter prompt handoff</title>
     <link rel="stylesheet" href="popup.css">
 </head>
 <body>
     <main class="popup-shell">
         <header class="popup-header">
             <span class="brand-mark" aria-hidden="true">✳</span>
-            <div class="brand-copy"><strong>VeoPrompter</strong><span>FLOW HANDOFF</span></div>
+            <div class="brand-copy"><strong>VeoPrompter</strong><span>PROMPT HANDOFF</span></div>
             <span class="local-badge"><i></i> LOCAL</span>
         </header>
 
@@ -24,7 +24,7 @@
 
         <section class="empty-state" data-empty-state aria-labelledby="empty-title">
             <span class="empty-mark" aria-hidden="true">↗</span>
-            <h1 id="empty-title" data-empty-title>Send a prompt to Flow</h1>
+            <h1 id="empty-title" data-empty-title>Send a prompt to the extension</h1>
             <p data-empty-copy>Generate a prompt in VeoPrompter, then use its Send to Flow button. Your prompt stays in this browser.</p>
         </section>
 
@@ -34,17 +34,16 @@
         <nav class="recovery-actions" aria-label="Prompt navigation">
             <a href="#" data-back-action hidden>↶ Go back one part</a>
             <a href="#" data-restart-action hidden>Start this prompt over</a>
-            <a href="#" data-copy-fallback hidden>Copy this part to clipboard instead</a>
         </nav>
 
-        <p class="usage-note" data-usage-note>Each click copies one part to your clipboard. Open Flow and this popup to fill Flow automatically, or copy with Flow closed.</p>
+        <p class="usage-note" data-usage-note>Copy a part, then click a text field on this tab to paste it once. Clipboard paste remains available as a fallback.</p>
 
         <details class="connection-details">
             <summary>Connected VeoPrompter site</summary>
             <div class="connection-copy" data-connection-list>No site connected yet.</div>
-            <p>Connection is limited to a site you approve. Prompt text is stored locally in this browser.</p>
+            <p>The app connection is limited to a site you approve. A one-time paste uses temporary active-tab access; prompt text stays local.</p>
         </details>
     </main>
-    <script src="popup.js"></script>
+    <script type="module" src="popup.js"></script>
 </body>
 </html>

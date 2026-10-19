@@ -15,6 +15,7 @@
     <link rel="stylesheet" href="/css/veoprompter.css">
     <script src="/js/vendor/gsap.min.js" defer></script>
     <script src="/js/vendor/ScrollTrigger.min.js" defer></script>
+    <script src="/js/extension-handoff.js" defer></script>
     <script src="/js/veoprompter.js" defer></script>
     <script src="/js/site-motion.js" defer></script>
 </head>

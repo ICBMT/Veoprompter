@@ -242,7 +242,13 @@ class PromptStudioTest extends TestCase
             ->get(route('history.show', $run))
             ->assertOk()
             ->assertSee('Bee garden story')
-            ->assertSee('A stable opening shot.');
+            ->assertSee('A stable opening shot.')
+            ->assertSee('Copy all')
+            ->assertSee('Save .txt')
+            ->assertSee('Send to Flow')
+            ->assertSee('data-send-to-flow', false)
+            ->assertSee('data-prompt-target="#saved-prompt-output"', false)
+            ->assertSee('/js/extension-handoff.js');
 
         $administrator = User::factory()->create();
         $administrator->is_admin = true;
