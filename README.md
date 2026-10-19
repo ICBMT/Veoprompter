@@ -20,17 +20,18 @@ Generated prompts improve the odds of consistency but cannot guarantee that a vi
 
 ## Chrome extension for Google Flow
 
-The optional Manifest V3 extension lives in [`chrome-extension/`](chrome-extension/). It splits a generated story prompt into the project context (Sections 1–7) and one clipboard-ready part per clip. Sections 9–10 stay attached to the final clip. Prompts without the expected clip format are kept together as a single part. **Google Flow does not need to be open while the extension parses or copies the sequence.**
+The optional Manifest V3 extension lives in [`chrome-extension/`](chrome-extension/). It splits a generated story prompt into the project context (Sections 1–7) and one part per clip. Sections 9–10 stay attached to the final clip; unrecognized prompt formats stay together as a single part. **Flow can be closed while the extension parses or copies the sequence.** When Google Flow is the active tab, the extension can also fill its empty prompt box for you; you still review and click Flow’s Send button yourself.
 
 For local testing:
 
-1. Open `chrome://extensions`, enable **Developer mode**, and choose **Load unpacked**. Select this repository's `chrome-extension/` folder.
+1. Open `chrome://extensions`, enable **Developer mode**, and choose **Load unpacked**. Select this repository's `chrome-extension/` folder. If it is already installed unpacked, click **Reload** to apply updates.
 2. Open the VeoPrompter site in Chrome, open the extension popup, and choose **Connect this site**. Approve the site-specific permission. This enables the Send to Flow button on that origin; you only need to connect once per site origin.
 3. Generate a prompt in a project and click **Send to Flow**. The prompt is stored in the extension's local Chrome storage, not uploaded to another service.
-4. Open the extension popup on any tab and use its single changing **Copy** action to copy Sections 1–7, then each clip in order. Paste each part into Flow when convenient and send it yourself. The extension copies text to the clipboard; it does not connect to Flow, submit messages, or start video generation.
-5. Use **Go back one part** to rewind the sequence and copy that part again, or **Start this prompt over** to return to the project context. Sending a new prompt from VeoPrompter replaces the active prompt stored in the extension.
+4. To fill Flow automatically, open Google Flow and then open the extension popup while the Flow tab is active. Click **Fill Flow** for Sections 1–7, review the text in Flow, and click Flow’s Send button yourself. Repeat for each clip after sending the previous part. Sections 9–10 are included with the final clip.
+5. If Flow is not the active tab, the extension’s main action copies the next part to the clipboard instead, so you can prepare the sequence with Flow closed and paste it later. On a Flow tab, **Copy this part to clipboard instead** is available as a fallback.
+6. Use **Go back one part** to rewind the sequence and fill or copy that part again, or **Start this prompt over** to return to the project context. Rewind/restart clears text from Flow only when the composer still exactly matches the extension’s last unsent insertion; sent chat messages are never changed. Sending a new prompt from VeoPrompter replaces the active prompt stored in the extension.
 
-The extension's page access is limited to the VeoPrompter site you connect. It also uses clipboard-write permission only when you click Copy; it does not request access to Flow's website.
+The extension's persistent page access is limited to the VeoPrompter site you connect. It uses Chrome’s temporary **activeTab** access to fill Flow only when Flow is the current tab, plus clipboard-write access for copy-only actions and a clipboard backup while filling Flow. It does not request persistent host permission for Flow, click Flow’s Send button, or start video generation.
 
 ## Requirements
 

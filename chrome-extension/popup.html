@@ -18,8 +18,8 @@
             <span class="eyebrow">PROMPT READY</span>
             <h1 id="prompt-title" data-prompt-title>VeoPrompter prompt</h1>
             <p class="prompt-notice" data-prompt-notice></p>
-            <div class="progress-track" role="progressbar" aria-label="Copy progress" aria-valuemin="0" aria-valuemax="1" aria-valuenow="0"><span data-progress-bar></span></div>
-            <div class="progress-caption"><span data-progress-count>Part 1 of 1</span><strong data-next-part>Ready to copy</strong></div>
+            <div class="progress-track" role="progressbar" aria-label="Prompt handoff progress" aria-valuemin="0" aria-valuemax="1" aria-valuenow="0"><span data-progress-bar></span></div>
+            <div class="progress-caption"><span data-progress-count>Part 1 of 1</span><strong data-next-part>Ready</strong></div>
         </section>
 
         <section class="empty-state" data-empty-state aria-labelledby="empty-title">
@@ -34,9 +34,10 @@
         <nav class="recovery-actions" aria-label="Prompt navigation">
             <a href="#" data-back-action hidden>↶ Go back one part</a>
             <a href="#" data-restart-action hidden>Start this prompt over</a>
+            <a href="#" data-copy-fallback hidden>Copy this part to clipboard instead</a>
         </nav>
 
-        <p class="usage-note" data-usage-note>Each click copies one part to your clipboard. Flow does not need to be open; paste and send each part yourself when ready.</p>
+        <p class="usage-note" data-usage-note>Each click copies one part to your clipboard. Open Flow and this popup to fill Flow automatically, or copy with Flow closed.</p>
 
         <details class="connection-details">
             <summary>Connected VeoPrompter site</summary>

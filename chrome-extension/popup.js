@@ -7,6 +7,7 @@ const emptyState = document.querySelector('[data-empty-state]');
 const statusMessage = document.querySelector('[data-status]');
 const backAction = document.querySelector('[data-back-action]');
 const restartAction = document.querySelector('[data-restart-action]');
+const copyFallbackAction = document.querySelector('[data-copy-fallback]');
 const connectionList = document.querySelector('[data-connection-list]');
 const progressTrack = document.querySelector('.progress-track');
 
@@ -20,6 +21,17 @@ function currentOrigin(value) {
         return ['http:', 'https:'].includes(url.protocol) ? url.origin : null;
     } catch {
         return null;
+    }
+}
+
+function isFlowTab(tab) {
+    try {
+        const url = new URL(tab?.url);
+        return url.protocol === 'https:'
+            && (url.hostname === 'flow.google'
+                || (url.hostname === 'labs.google' && /^\/fx\/tools\/flow(?:\/|$)/.test(url.pathname)));
+    } catch {
+        return false;
     }
 }
 
@@ -79,6 +91,7 @@ function renderPrompt(prompt) {
 
     const total = prompt.chunks.length;
     const nextIndex = Math.min(Math.max(Number(prompt.nextIndex) || 0, 0), total);
+    const flowIsActive = isFlowTab(activeTab);
     const percent = total ? Math.round((nextIndex / total) * 100) : 0;
     const progressBar = document.querySelector('[data-progress-bar]');
     progressBar.style.width = `${percent}%`;
@@ -91,19 +104,27 @@ function renderPrompt(prompt) {
     const nextChunk = prompt.chunks[nextIndex];
     document.querySelector('[data-next-part]').textContent = nextChunk
         ? `Next: ${nextChunk.label}`
-        : 'All parts copied';
+        : 'All parts ready';
 
     if (nextChunk) {
-        setMainAction(`Copy ${nextChunk.label}`, 'copy');
+        const flowLabel = nextChunk.kind === 'context'
+            ? 'Sections 1–7'
+            : nextChunk.kind === 'clip'
+                ? `Clip ${nextChunk.clipNumber}`
+                : nextChunk.label;
+        setMainAction(flowIsActive ? `Fill Flow · ${flowLabel}` : `Copy ${nextChunk.label}`, flowIsActive ? 'fill-flow' : 'copy');
     } else {
-        setMainAction('All parts copied', 'none', true);
+        setMainAction('All parts ready', 'none', true);
     }
 
     backAction.hidden = nextIndex === 0;
     restartAction.hidden = nextIndex === 0;
+    copyFallbackAction.hidden = !flowIsActive || !nextChunk;
     document.querySelector('[data-usage-note]').textContent = nextChunk
-        ? 'Copy each part in order, then paste it into Flow or another destination. Flow does not need to be open while you prepare the sequence.'
-        : 'All parts are copied. Paste them into Flow in order; sent messages are controlled by you.';
+        ? flowIsActive
+            ? 'Click to copy this part and fill Flow’s empty prompt box. Review it, then click Flow’s Send button. Existing composer text is never overwritten.'
+            : 'Each click copies one part. Open Flow and this popup to fill Flow automatically, or copy the sequence with Flow closed.'
+        : 'All parts are ready. The extension never sends messages; you control when to submit each part in Flow.';
 }
 
 async function refresh() {
@@ -143,11 +164,12 @@ async function refresh() {
         document.querySelector('[data-usage-note]').textContent = 'You will be asked to approve this site. The extension does not read other websites.';
     } else {
         setMainAction('Send a prompt from VeoPrompter first', 'none', true);
-        document.querySelector('[data-usage-note]').textContent = 'Once a prompt is stored, you can copy its parts in order without opening Flow.';
+        document.querySelector('[data-usage-note]').textContent = 'Once a prompt is stored, copy its parts on any tab or open Flow first to fill its prompt box automatically.';
     }
 
     backAction.hidden = true;
     restartAction.hidden = true;
+    copyFallbackAction.hidden = true;
 }
 
 async function registerAppBridge(origins) {
@@ -236,6 +258,16 @@ async function copyText(text) {
     if (!copied) throw new Error('Clipboard access was blocked.');
 }
 
+function flowFailureMessage(reason) {
+    if (reason === 'composer-not-found') return 'Flow’s prompt box was not found. Nothing was inserted. Reload Flow or use “Copy this part to clipboard instead.”';
+    if (reason === 'composer-not-empty') return 'Flow’s prompt box already contains text, so it was left untouched. Send or clear that text, then retry, or use “Copy this part to clipboard instead.”';
+    if (reason === 'fill-failed') return 'Flow did not accept the prompt. Nothing was sent. Try again or use “Copy this part to clipboard instead.”';
+    if (reason === 'not-flow') return 'Open Google Flow in the active tab to fill its prompt box. No text was sent.';
+    if (reason === 'prompt-changed') return 'The active prompt changed while filling. Check Flow before continuing.';
+    if (reason === 'empty-prompt') return 'This part is empty. Send the prompt from VeoPrompter again.';
+    return 'The extension could not reach Flow. If the text is not in the prompt box, use “Copy this part to clipboard instead.”';
+}
+
 async function copyNextPart() {
     const prompt = popupState.activePrompt;
     const chunk = prompt?.chunks?.[prompt.nextIndex];
@@ -247,50 +279,146 @@ async function copyNextPart() {
         await chrome.storage.local.set({ activePrompt: prompt });
         popupState.activePrompt = prompt;
         renderPrompt(prompt);
-        setStatus(`${chunk.label} copied. Paste it wherever you need it, then copy the next part.`, 'success');
+        setStatus(`${chunk.label} copied to the clipboard. Paste it yourself when ready, then continue with the next part.`, 'success');
     } catch {
         setStatus('Clipboard access failed. Allow clipboard access for the extension and try again.', 'error');
     }
+}
+
+async function fillNextPartInFlow() {
+    const prompt = popupState.activePrompt;
+    const chunk = prompt?.chunks?.[prompt.nextIndex];
+    if (!chunk || !activeTab?.id) return;
+
+    let copiedToClipboard = false;
+    try {
+        await copyText(chunk.text);
+        copiedToClipboard = true;
+    } catch {
+        // Flow insertion can still succeed even if the clipboard is unavailable.
+    }
+
+    try {
+        const response = await chrome.runtime.sendMessage({
+            type: 'VEOPROMPTER_FLOW_INSERT_NEXT',
+            promptId: prompt.id,
+            expectedIndex: prompt.nextIndex,
+            tabId: activeTab.id,
+        });
+        if (!response?.ok) {
+            setStatus(flowFailureMessage(response?.reason), 'error');
+            return;
+        }
+
+        const clipboardNote = copiedToClipboard ? ' It is also on your clipboard.' : '';
+        setStatus(`${response.label || chunk.label} is in Flow’s prompt box. Review it and click Flow’s Send button when ready; the extension has not sent it.${clipboardNote}`, 'success');
+    } catch {
+        setStatus(flowFailureMessage('flow-unavailable'), 'error');
+    }
+}
+
+function navigationFeedback(undo) {
+    if (undo?.result === 'cleared-unsent-text') return ' The matching unsent text was cleared from Flow.';
+    if (undo?.result === 'already-sent') return ' Flow’s composer was already empty; messages in the chat were not changed.';
+    if (undo?.reason === 'composer-changed') return ' Flow’s composer had changed, so it was left untouched.';
+    if (undo?.reason === 'composer-not-found') return ' The Flow composer was not found, so no Flow text was changed.';
+    if (undo?.reason === 'clear-failed') return ' Flow did not clear the matching text, so it may still be in the composer.';
+    if (undo?.reason === 'not-flow') return ' The original tab is no longer a Flow page, so it was left untouched.';
+    if (undo?.reason === 'flow-unavailable') return ' Flow could not be reached, so its text was left untouched.';
+    return '';
 }
 
 async function goBackOnePart() {
     const prompt = popupState.activePrompt;
     if (!prompt || prompt.nextIndex <= 0) return;
 
-    prompt.nextIndex -= 1;
-    await chrome.storage.local.set({ activePrompt: prompt });
-    popupState.activePrompt = prompt;
-    renderPrompt(prompt);
-    const chunk = prompt.chunks[prompt.nextIndex];
-    setStatus(`Back to ${chunk?.label || 'the previous part'}. Click the main action to copy it again.`, 'info');
+    try {
+        const response = await chrome.runtime.sendMessage({
+            type: 'VEOPROMPTER_PROMPT_REWIND',
+            promptId: prompt.id,
+        });
+        if (!response?.ok) {
+            setStatus('The prompt sequence could not be rewound. Close and reopen the extension, then try again.', 'error');
+            return;
+        }
+
+        await refresh();
+        const promptAfterRewind = popupState.activePrompt;
+        const chunk = promptAfterRewind?.chunks?.[response.nextIndex];
+        setStatus(`Back to ${chunk?.label || 'the previous part'}. It is ready to fill or copy again.${navigationFeedback(response.undo)}`, 'info');
+    } catch {
+        setStatus('The prompt sequence could not be rewound. Close and reopen the extension, then try again.', 'error');
+    }
 }
 
 async function restartPrompt() {
     const prompt = popupState.activePrompt;
     if (!prompt) return;
 
-    prompt.nextIndex = 0;
-    await chrome.storage.local.set({ activePrompt: prompt });
-    popupState.activePrompt = prompt;
-    renderPrompt(prompt);
-    setStatus('Started over. The first part is ready to copy.', 'success');
+    try {
+        const response = await chrome.runtime.sendMessage({
+            type: 'VEOPROMPTER_PROMPT_RESTART',
+            promptId: prompt.id,
+        });
+        if (!response?.ok) {
+            setStatus('The prompt sequence could not be restarted. Close and reopen the extension, then try again.', 'error');
+            return;
+        }
+
+        await refresh();
+        setStatus(`Started over. Sections 1–7 are ready again.${navigationFeedback(response.undo)}`, 'success');
+    } catch {
+        setStatus('The prompt sequence could not be restarted. Close and reopen the extension, then try again.', 'error');
+    }
 }
 
+let actionPending = false;
+
 mainButton.addEventListener('click', async () => {
+    if (actionPending) return;
+    actionPending = true;
     mainButton.disabled = true;
-    if (currentAction === 'connect-site') await connectCurrentSite();
-    else if (currentAction === 'copy') await copyNextPart();
-    await refresh();
+    try {
+        if (currentAction === 'connect-site') await connectCurrentSite();
+        else if (currentAction === 'fill-flow') await fillNextPartInFlow();
+        else if (currentAction === 'copy') await copyNextPart();
+        await refresh();
+    } finally {
+        actionPending = false;
+    }
 });
 
 backAction.addEventListener('click', async (event) => {
     event.preventDefault();
-    await goBackOnePart();
+    if (actionPending) return;
+    actionPending = true;
+    try {
+        await goBackOnePart();
+    } finally {
+        actionPending = false;
+    }
 });
 
 restartAction.addEventListener('click', async (event) => {
     event.preventDefault();
-    await restartPrompt();
+    if (actionPending) return;
+    actionPending = true;
+    try {
+        await restartPrompt();
+    } finally {
+        actionPending = false;
+    }
+});
+
+copyFallbackAction.addEventListener('click', async (event) => {
+    event.preventDefault();
+    if (actionPending) return;
+    actionPending = true;
+    try {
+        await copyNextPart();
+    } finally {
+        actionPending = false;
+    }
 });
 
 refresh().catch(() => {

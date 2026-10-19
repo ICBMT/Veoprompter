@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "VeoPrompter for Google Flow",
-  "version": "1.1.0",
-  "description": "Copy VeoPrompter context and clip prompts in order for Google Flow.",
+  "version": "1.2.0",
+  "description": "Copy prompts or fill Google Flow's prompt box one part at a time.",
   "permissions": [
     "activeTab",
     "clipboardWrite",
