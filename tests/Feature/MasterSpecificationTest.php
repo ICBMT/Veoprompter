@@ -6,7 +6,7 @@ use Tests\TestCase;
 
 class MasterSpecificationTest extends TestCase
 {
-    public function test_extracted_master_spec_keeps_the_mandatory_continuation_instruction(): void
+    public function test_master_spec_preserves_the_extension_contract_and_continuation_instruction(): void
     {
         $specification = file_get_contents(resource_path('prompts/master-spec.txt'));
 
@@ -24,5 +24,12 @@ class MasterSpecificationTest extends TestCase
         $this->assertStringContainsString('MANDATORY CONTINUATION INSTRUCTION', $specification);
         $this->assertStringContainsString('Whatever was already in motion keeps its direction and speed through the cut rather than restarting', $specification);
         $this->assertStringContainsString('Never generate images or videos.', $specification);
+
+        preg_match_all('/^SECTION\s+(\d+)\s+—/mu', $specification, $sections);
+        $this->assertSame(range(1, 14), array_map('intval', $sections[1]));
+        $this->assertStringContainsString('SECTION 8 — FOUR COPY-AND-PASTE VIDEO PROMPTS', $specification);
+        $this->assertStringContainsString('COPY CLIP 1 PROMPT', $specification);
+        $this->assertStringContainsString('COPY EXTENSION VIDEO PROMPT', $specification);
+        $this->assertStringContainsString('SILENT 10-POINT QUALITY GATE', $specification);
     }
 }

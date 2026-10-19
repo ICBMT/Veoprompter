@@ -52,6 +52,26 @@ test('separates Sections 1–7 and any number of clip prompts, appending handoff
     assert.match(parsed.notice, /4 clip prompts separated/);
 });
 
+test('keeps variable clip counts above the four-clip default in order for the extension', () => {
+    const clipCount = 6;
+    const clipPrompts = Array.from({ length: clipCount }, (_, index) => `COPY CLIP ${index + 1} PROMPT > Clip ${index + 1} prompt.`);
+    const parsed = parsePrompt([
+        'SECTION 1 — PROJECT OVERVIEW',
+        'A six-part sequence.',
+        'SECTION 8 — FOUR COPY-AND-PASTE VIDEO PROMPTS',
+        ...clipPrompts,
+        'SECTION 9 — EXACT HANDOFF SPECIFICATION',
+        'Final handoff details.',
+        'SECTION 10 — FINAL CONTINUITY AUDIT',
+        'Continuity remains stable.',
+    ].join('\n'));
+
+    assert.equal(parsed.format, 'clip-sequence');
+    assert.deepEqual(parsed.chunks.slice(1).map((chunk) => chunk.clipNumber), [1, 2, 3, 4, 5, 6]);
+    assert.match(parsed.chunks[6].text, /SECTION 9 — EXACT HANDOFF SPECIFICATION/);
+    assert.match(parsed.chunks[6].text, /SECTION 10 — FINAL CONTINUITY AUDIT/);
+});
+
 test('keeps a one-clip result copy-ready and includes trailing continuity sections', () => {
     const parsed = parsePrompt([
         'SECTION 1 — PROJECT OVERVIEW',
