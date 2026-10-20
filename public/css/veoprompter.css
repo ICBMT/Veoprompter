@@ -1606,3 +1606,39 @@ body {
     .button-primary, .button-secondary, .topbar-control, .nav-link, .text-input { forced-color-adjust: auto; }
     .button-primary:focus-visible, .button-secondary:focus-visible, .topbar-control:focus-visible, .nav-link:focus-visible, .text-input:focus-visible { outline: 2px solid Highlight; }
 }
+
+/* GSAP rolls the visible label against an aria-hidden duplicate without changing textContent. */
+.motion-roll {
+    position: relative;
+    display: inline-grid;
+    grid-template-areas: "roll";
+    max-width: 100%;
+    overflow: hidden;
+    color: inherit;
+    line-height: inherit;
+    white-space: inherit;
+}
+.motion-roll__current, .motion-roll__clone {
+    display: block;
+    grid-area: roll;
+    min-width: 0;
+    max-width: 100%;
+    color: inherit;
+    font: inherit;
+    line-height: inherit;
+    white-space: inherit;
+}
+.motion-roll__clone { pointer-events: none; }
+.motion-roll__clone::before { content: attr(data-roll-text); }
+.brand-name .motion-roll, .brand-name .motion-roll__current, .brand-name .motion-roll__clone,
+.topbar-control .motion-roll, .topbar-control .motion-roll__current, .topbar-control .motion-roll__clone {
+    color: inherit;
+    font-weight: inherit;
+}
+
+@media (hover: hover) and (pointer: fine) and (prefers-reduced-motion: no-preference) {
+    .is-dock-item.is-dock-active { will-change: transform; }
+}
+@media (prefers-reduced-motion: reduce) {
+    .motion-roll__current, .motion-roll__clone { transform: none !important; }
+}

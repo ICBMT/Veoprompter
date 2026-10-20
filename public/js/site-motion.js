@@ -25,6 +25,91 @@
     const visible = (element) => !element.closest('[hidden], [inert]') && getComputedStyle(element).display !== 'none';
     const ease = 'power3.out';
 
+    // Rolling labels keep their original DOM text for screen readers and existing summary logic.
+    if (finePointer) {
+        const bindRollingOwner = (owner) => {
+            if (!owner || owner.dataset.rollMotionBound === 'true') return;
+            owner.dataset.rollMotionBound = 'true';
+
+            const setRolling = (active) => {
+                owner.classList.toggle('is-roll-active', active);
+                const current = [...owner.querySelectorAll('.motion-roll__current')];
+                const incoming = [...owner.querySelectorAll('.motion-roll__clone')];
+                if (!current.length) return;
+                gsap.to(current, { yPercent: active ? -110 : 0, duration: 0.36, stagger: 0.018, ease: 'power3.out', overwrite: 'auto' });
+                gsap.to(incoming, { yPercent: active ? 0 : 110, duration: 0.36, stagger: 0.018, delay: active ? 0.025 : 0, ease: 'power3.out', overwrite: 'auto' });
+            };
+
+            owner.addEventListener('pointerenter', () => setRolling(true));
+            owner.addEventListener('pointerleave', () => {
+                setRolling(owner.matches(':focus-visible') || Boolean(owner.querySelector(':focus-visible')));
+            });
+            owner.addEventListener('focusin', (event) => {
+                if (event.target.matches?.(':focus-visible')) setRolling(true);
+            });
+            owner.addEventListener('focusout', (event) => {
+                if (!owner.contains(event.relatedTarget)) setRolling(owner.matches(':hover'));
+            });
+        };
+
+        const addRollingText = (target, owner = target) => {
+            if (!target || !owner) return;
+            let changed = false;
+            [...target.childNodes].forEach((node) => {
+                if (node.nodeType !== Node.TEXT_NODE || !node.nodeValue?.trim()) return;
+                const raw = node.nodeValue;
+                const first = raw.search(/\S/);
+                let last = raw.length;
+                while (last > first && /\s/.test(raw[last - 1])) last -= 1;
+                const prefix = raw.slice(0, first);
+                const label = raw.slice(first, last);
+                const suffix = raw.slice(last);
+                if (!label) return;
+
+                const roll = document.createElement('span');
+                roll.className = 'motion-roll';
+                const current = document.createElement('span');
+                current.className = 'motion-roll__current';
+                current.textContent = label;
+                const clone = document.createElement('span');
+                clone.className = 'motion-roll__clone';
+                clone.dataset.rollText = label;
+                clone.setAttribute('aria-hidden', 'true');
+                roll.append(current, clone);
+
+                const fragment = document.createDocumentFragment();
+                if (prefix) fragment.append(document.createTextNode(prefix));
+                fragment.append(roll);
+                if (suffix) fragment.append(document.createTextNode(suffix));
+                node.replaceWith(fragment);
+                gsap.set(clone, { yPercent: 110 });
+                changed = true;
+            });
+            if (changed) bindRollingOwner(owner);
+        };
+
+        const addFor = (selector, ownerSelector) => {
+            document.querySelectorAll(selector).forEach((target) => addRollingText(target, ownerSelector ? target.closest(ownerSelector) : target));
+        };
+        addFor('.brand-name', '.brand');
+        addFor('.brand-name > span', '.brand');
+        addFor('.sidebar-nav .nav-link > span:not(.nav-pulse)', '.nav-link');
+        addFor('.button-primary > span:not(.button-icon):not(.button-loading):not([data-submit-label])', '.button-primary');
+        addFor('.mode-tab strong', '.mode-tab');
+        addFor('.wizard-choice-title', '.wizard-choice');
+        addFor('.aspect-choice > span:not(.ratio-icon):not(.sr-only)', '.aspect-choice');
+        addFor('.toggle-choice > span', '.toggle-choice');
+        addFor('.history-card h2 a');
+        addFor('.guide-item h2');
+        addFor('.admin-card-header h2');
+        addFor('.admin-method-card strong');
+        addFor('.project-run-card strong');
+        addFor('.account-library-link strong', '.account-library-link');
+        addFor('.panel-heading h3');
+
+        document.querySelectorAll('.sidebar-note a, .app-footer a, .topbar-control, .topbar-library, .topbar-quiet, .topbar-logout, .button-secondary:not(.button-copy-all):not(.button-flow):not([data-copy-all]):not([data-copy-target]), .history-search button, .pagination-control, .history-open, .project-edit-inline, .project-run-open').forEach((owner) => addRollingText(owner));
+    }
+
     // 1–9. A short, staggered shell entrance establishes the same motion language on every page.
     const shellIntro = gsap.timeline({ defaults: { ease, duration: 0.46 } });
     shellIntro.from('.brand-mark', { autoAlpha: 0, scale: 0.72, rotation: -16, transformOrigin: '50% 50%' })
@@ -145,9 +230,9 @@
     if (finePointer) {
         const tiltSelector = '.storyboard-card, .history-card, .project-run-card, .admin-card, .admin-method-card, .guide-item, .saved-brief-card, .saved-output-card';
         document.querySelectorAll(tiltSelector).forEach((element) => {
-            const rotateX = gsap.quickTo(element, 'rotationX', { duration: 0.42, ease: 'power3.out' });
-            const rotateY = gsap.quickTo(element, 'rotationY', { duration: 0.42, ease: 'power3.out' });
-            const lift = gsap.quickTo(element, 'z', { duration: 0.42, ease: 'power3.out' });
+            const rotateX = gsap.quickTo(element, 'rotationX', { duration: 0.42, ease: 'power3.out', overwrite: 'auto' });
+            const rotateY = gsap.quickTo(element, 'rotationY', { duration: 0.42, ease: 'power3.out', overwrite: 'auto' });
+            const lift = gsap.quickTo(element, 'z', { duration: 0.42, ease: 'power3.out', overwrite: 'auto' });
             element.style.transformPerspective = '1100px';
             element.addEventListener('pointermove', (event) => {
                 if (event.pointerType === 'touch') return;
@@ -172,26 +257,110 @@
         });
     }
 
+    // A gentle proximity dock magnifies the hovered choice and its nearest neighbors in place.
+    if (finePointer) {
+        const setupDock = (containerSelector, itemSelector, options) => {
+            document.querySelectorAll(containerSelector).forEach((container) => {
+                const states = new Map();
+                const getState = (item) => {
+                    if (states.has(item)) return states.get(item);
+                    const origin = typeof options.origin === 'function' ? options.origin() : (options.origin || 'center center');
+                    item.style.transformOrigin = origin;
+                    item.classList.add('is-dock-item');
+                    const state = {
+                        scaleTo: gsap.quickTo(item, 'scale', { duration: 0.34, ease: 'power3.out', overwrite: 'auto' }),
+                        liftTo: gsap.quickTo(item, 'y', { duration: 0.34, ease: 'power3.out', overwrite: 'auto' }),
+                        icon: options.iconSelector ? item.querySelector(options.iconSelector) : null,
+                        iconScaleTo: null,
+                        active: false,
+                    };
+                    if (state.icon) {
+                        state.iconScaleTo = gsap.quickTo(state.icon, 'scale', { duration: 0.34, ease: 'power3.out', overwrite: 'auto' });
+                    }
+                    states.set(item, state);
+                    return state;
+                };
+                const resetItem = (item, state) => {
+                    state.scaleTo(1);
+                    state.liftTo(0);
+                    state.iconScaleTo?.(1);
+                    state.active = false;
+                    item.classList.remove('is-dock-active');
+                };
+                const reset = () => states.forEach((state, item) => resetItem(item, state));
+                const update = (x, y) => {
+                    const items = [...container.querySelectorAll(itemSelector)].filter(visible);
+                    const activeItems = new Set(items);
+                    const radius = options.radius;
+                    items.forEach((item) => {
+                        if (options.origin) item.style.transformOrigin = typeof options.origin === 'function' ? options.origin() : options.origin;
+                        const bounds = item.getBoundingClientRect();
+                        const dx = x - (bounds.left + bounds.width / 2);
+                        const dy = y - (bounds.top + bounds.height / 2);
+                        const weight = Math.exp(-((dx * dx) + (dy * dy)) / (2 * radius * radius));
+                        const state = getState(item);
+                        state.scaleTo(1 + weight * options.scale);
+                        state.liftTo(-weight * (options.lift || 0));
+                        state.iconScaleTo?.(1 + weight * (options.iconScale || 0));
+                        state.active = true;
+                        item.classList.toggle('is-dock-active', weight > 0.035);
+                    });
+                    states.forEach((state, item) => {
+                        if (!activeItems.has(item) && state.active) resetItem(item, state);
+                    });
+                };
+
+                container.addEventListener('pointermove', (event) => {
+                    if (event.pointerType !== 'touch') update(event.clientX, event.clientY);
+                });
+                container.addEventListener('pointerleave', reset);
+                container.addEventListener('pointercancel', reset);
+                container.addEventListener('focusin', (event) => {
+                    const item = event.target.closest(itemSelector);
+                    if (!item || !container.contains(item)) return;
+                    const bounds = item.getBoundingClientRect();
+                    update(bounds.left + bounds.width / 2, bounds.top + bounds.height / 2);
+                });
+                container.addEventListener('focusout', (event) => {
+                    if (!container.contains(event.relatedTarget)) reset();
+                });
+            });
+        };
+
+        setupDock('.sidebar-nav', '.nav-link', { radius: 72, scale: 0.095, iconScale: 0.2, origin: () => window.innerWidth <= 1020 ? 'center center' : 'left center' });
+        setupDock('.mode-tabs', '.mode-tab', { radius: 112, scale: 0.065, iconScale: 0.16, lift: 1.5 });
+        setupDock('.wizard-choice-grid', '.wizard-choice', { radius: 126, scale: 0.055, iconScale: 0.18, lift: 1.5 });
+        setupDock('.aspect-options', '.aspect-choice', { radius: 70, scale: 0.085, iconScale: 0.22, lift: 1 });
+        setupDock('.toggle-options', '.toggle-choice', { radius: 52, scale: 0.09, lift: 1 });
+    }
+
+    // Magnetic controls share overwrite-safe GSAP quick setters, so rapid pointer changes never leave them offset.
     // 43–46. Magnetic actions, tiny press feedback, and arrow nudges reward interaction without moving content.
     if (finePointer) {
-        document.querySelectorAll('.button-primary, .topbar-control').forEach((element) => {
-            const moveX = gsap.quickTo(element, 'x', { duration: 0.3, ease: 'power3.out' });
-            const moveY = gsap.quickTo(element, 'y', { duration: 0.3, ease: 'power3.out' });
+        document.querySelectorAll('.button-primary, .button-secondary:not(:disabled), .topbar-control, .account-action').forEach((element) => {
+            const isPrimary = element.matches('.button-primary, .topbar-control');
+            const moveX = gsap.quickTo(element, 'x', { duration: 0.3, ease: 'power3.out', overwrite: 'auto' });
+            const moveY = gsap.quickTo(element, 'y', { duration: 0.3, ease: 'power3.out', overwrite: 'auto' });
+            const scaleTo = gsap.quickTo(element, 'scale', { duration: 0.16, ease: 'power3.out', overwrite: 'auto' });
             element.addEventListener('pointermove', (event) => {
+                if (event.pointerType === 'touch' || element.disabled) return;
                 const bounds = element.getBoundingClientRect();
-                moveX((event.clientX - (bounds.left + bounds.width / 2)) * 0.035);
-                moveY((event.clientY - (bounds.top + bounds.height / 2)) * 0.055);
+                const x = ((event.clientX - (bounds.left + bounds.width / 2)) / Math.max(bounds.width / 2, 1));
+                const y = ((event.clientY - (bounds.top + bounds.height / 2)) / Math.max(bounds.height / 2, 1));
+                moveX(Math.max(-1, Math.min(1, x)) * (isPrimary ? 3.8 : 2.5));
+                moveY((Math.max(-1, Math.min(1, y)) * (isPrimary ? 2.3 : 1.5)) - 0.6);
             });
-            const release = () => gsap.to(element, { scale: 1, duration: 0.22, ease: 'back.out(2.2)' });
-            element.addEventListener('pointerleave', () => { moveX(0); moveY(0); release(); });
-            element.addEventListener('pointerdown', () => gsap.to(element, { scale: 0.975, duration: 0.1, ease: 'power2.out' }));
-            element.addEventListener('pointerup', release);
+            const release = () => { moveX(0); moveY(0); scaleTo(1); };
+            element.addEventListener('pointerleave', release);
+            element.addEventListener('pointerdown', () => { if (!element.disabled) scaleTo(0.978); });
+            element.addEventListener('pointerup', () => scaleTo(1));
             element.addEventListener('pointercancel', release);
         });
 
-        document.querySelectorAll('.button-secondary, .button-copy-all, .button-flow, .mode-tab, .wizard-choice, .aspect-choice, .toggle-choice, .history-search button, .pagination-control, .detail-delete').forEach((element) => {
-            const release = () => gsap.to(element, { scale: 1, duration: 0.22, ease: 'back.out(2.1)' });
-            element.addEventListener('pointerdown', () => gsap.to(element, { scale: 0.978, duration: 0.1, ease: 'power2.out' }));
+        document.querySelectorAll('.history-search button, .pagination-control, .detail-delete').forEach((element) => {
+            const scaleTo = gsap.quickTo(element, 'scale', { duration: 0.16, ease: 'power3.out', overwrite: 'auto' });
+            const release = () => scaleTo(1);
+            element.addEventListener('pointerdown', () => scaleTo(0.978));
             element.addEventListener('pointerup', release);
             element.addEventListener('pointercancel', release);
             element.addEventListener('pointerleave', release);
@@ -200,8 +369,9 @@
         document.querySelectorAll('.sidebar-note a, .app-footer a, .history-open, .project-edit-inline, .project-run-open, .account-library-link').forEach((link) => {
             const arrow = link.querySelector('span[aria-hidden="true"], .library-link-arrow');
             if (!arrow) return;
-            link.addEventListener('pointerenter', () => gsap.to(arrow, { x: 3, duration: 0.22, ease: 'power2.out' }));
-            link.addEventListener('pointerleave', () => gsap.to(arrow, { x: 0, duration: 0.28, ease: 'power2.out' }));
+            const nudge = gsap.quickTo(arrow, 'x', { duration: 0.24, ease: 'power3.out', overwrite: 'auto' });
+            link.addEventListener('pointerenter', () => nudge(3));
+            link.addEventListener('pointerleave', () => nudge(0));
         });
     }
 
@@ -223,9 +393,13 @@
     document.addEventListener('change', (event) => {
         const choice = event.target.closest('.wizard-choice, .aspect-choice, .toggle-choice');
         if (choice && event.target.matches('input[type="radio"], input[type="checkbox"]')) {
-            gsap.fromTo(choice, { scale: 0.986 }, { scale: 1, duration: 0.28, ease: 'back.out(2.1)', clearProps: 'transform' });
-            const icon = choice.querySelector('.wizard-choice-icon, .ratio-icon, .mode-icon');
-            if (icon) gsap.fromTo(icon, { scale: 0.84, rotation: -7 }, { scale: 1, rotation: 0, duration: 0.34, ease: 'back.out(2.5)', clearProps: 'transform' });
+            if (finePointer) {
+                gsap.fromTo(choice, { filter: 'brightness(1.14)' }, { filter: 'brightness(1)', duration: 0.24, ease: 'power2.out', overwrite: 'auto', clearProps: 'filter' });
+            } else {
+                gsap.fromTo(choice, { scale: 0.986 }, { scale: 1, duration: 0.28, ease: 'back.out(2.1)', clearProps: 'transform' });
+                const icon = choice.querySelector('.wizard-choice-icon, .ratio-icon, .mode-icon');
+                if (icon) gsap.fromTo(icon, { scale: 0.84, rotation: -7 }, { scale: 1, rotation: 0, duration: 0.34, ease: 'back.out(2.5)', clearProps: 'transform' });
+            }
         }
     });
 
