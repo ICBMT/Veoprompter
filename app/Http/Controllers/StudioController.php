@@ -44,7 +44,7 @@ class StudioController extends Controller
             'next_action' => ['nullable', 'required_if:mode,extend', 'string', 'max:800'],
             'visible_start' => ['nullable', 'string', 'max:1500'],
             'audience' => ['required', 'string', 'max:160'],
-            'visual_style' => ['required', Rule::in(['3d-family-animation', '2d-illustration', 'cinematic-realism', 'stop-motion', 'custom'])],
+            'visual_style' => ['required', Rule::in(array_keys(ProjectSettings::visualStyleOptions()))],
             'style_detail' => ['nullable', 'required_if:visual_style,custom', 'string', 'max:500'],
             'character_type' => ['required', Rule::in(['ai-choice', 'human-male', 'human-female', 'robot', 'fictional'])],
             'character_details' => ['nullable', 'required_if:character_type,fictional', 'string', 'max:500'],

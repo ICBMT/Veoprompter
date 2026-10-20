@@ -70,6 +70,48 @@ class ProjectAndTemporaryAccountTest extends TestCase
         $this->assertSame('Urdu', $project->settings['language'], 'Disabled voice controls keep their saved values when narration is turned off.');
     }
 
+    public function test_new_visual_styles_are_valid_saved_editable_and_displayed_with_readable_names(): void
+    {
+        $owner = User::factory()->create();
+        $payload = [
+            ...ProjectSettings::defaults(),
+            'name' => 'Feature animation project',
+            'visual_style' => 'disney-pixar-inspired',
+        ];
+
+        $this->actingAs($owner)
+            ->post(route('projects.store'), $payload)
+            ->assertRedirect();
+
+        $project = $owner->studioProjects()->firstOrFail();
+        $this->assertSame('disney-pixar-inspired', $project->settings['visual_style']);
+        $this->actingAs($owner)
+            ->get(route('projects.settings.edit', $project))
+            ->assertOk()
+            ->assertSee('Disney/Pixar-style 3D animation')
+            ->assertSee('value="disney-pixar-inspired"', false);
+        $this->get(route('projects.index'))
+            ->assertOk()
+            ->assertSee('Disney/Pixar-style 3D animation');
+        $this->get(route('projects.show', $project))
+            ->assertOk()
+            ->assertSee('Disney/Pixar-style 3D animation');
+
+        $updated = [...$payload, 'name' => 'Anime feature project', 'visual_style' => 'japanese-anime'];
+        $this->put(route('projects.settings.update', $project), $updated)
+            ->assertRedirect(route('projects.show', $project, false));
+
+        $project->refresh();
+        $this->assertSame('japanese-anime', $project->settings['visual_style']);
+        $this->get(route('projects.settings.edit', $project))
+            ->assertOk()
+            ->assertSee('Japanese anime-style animation')
+            ->assertSee('value="japanese-anime"', false);
+        $this->get(route('projects.show', $project))
+            ->assertOk()
+            ->assertSee('Japanese anime-style animation');
+    }
+
     public function test_project_is_private_to_its_owner(): void
     {
         $owner = User::factory()->create();

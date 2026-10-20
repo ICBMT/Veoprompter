@@ -40,7 +40,7 @@
 
         <div class="project-preference-strip">
             <span><small>CHARACTER</small><strong>{{ $characterLabel }}</strong></span>
-            <span><small>STYLE</small><strong>{{ $settings['visual_style'] === 'custom' ? $settings['style_detail'] : str_replace('-', ' ', $settings['visual_style']) }}</strong></span>
+            <span><small>STYLE</small><strong>{{ \App\Support\ProjectSettings::visualStyleLabel($settings['visual_style'] ?? '3d-family-animation', $settings['style_detail'] ?? null) }}</strong></span>
             <span><small>FORMAT</small><strong>{{ $settings['clip_count'] }} clips · {{ $settings['clip_duration'] }} sec / {{ $settings['extend_duration'] }} sec extension · {{ $settings['aspect_ratio'] }}</strong></span>
             <span><small>NARRATION</small><strong>{{ $settings['narration'] === '1' ? $settings['language'].' · '.$settings['narrator_voice'].' · '.$settings['narrator_tone'] : 'Off' }}</strong></span>
         </div>
@@ -99,7 +99,7 @@
                     <div class="project-recipe-list">
                         <div><span>Default video type</span><strong>{{ $videoTypeLabel }}</strong></div>
                         <div><span>Audience</span><strong>{{ $settings['audience'] }}</strong></div>
-                        <div><span>Visual style</span><strong>{{ $settings['visual_style'] === 'custom' ? $settings['style_detail'] : str_replace('-', ' ', $settings['visual_style']) }}</strong></div>
+                        <div><span>Visual style</span><strong>{{ \App\Support\ProjectSettings::visualStyleLabel($settings['visual_style'] ?? '3d-family-animation', $settings['style_detail'] ?? null) }}</strong></div>
                         <div><span>Character type</span><strong>{{ $characterLabel }}@if(!empty($settings['character_details'])) · {{ \Illuminate\Support\Str::limit($settings['character_details'], 100) }}@endif</strong></div>
                         <div><span>New-video length</span><strong>{{ $settings['clip_count'] }} clips · {{ $settings['clip_duration'] }} seconds each</strong></div>
                         <div><span>Extension length</span><strong>{{ $settings['extend_duration'] }} seconds for the next clip</strong></div>

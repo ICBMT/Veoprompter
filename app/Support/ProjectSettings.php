@@ -103,6 +103,71 @@ final class ProjectSettings
         return $settings;
     }
 
+    /**
+     * @return array<string, array{label: string, description: string, direction: string}>
+     */
+    public static function visualStyleOptions(): array
+    {
+        return [
+            '3d-family-animation' => [
+                'label' => 'Polished 3D family animation',
+                'description' => 'Rounded characters, dimensional scenes, and polished lighting.',
+                'direction' => 'Use polished, family-friendly 3D animation with dimensional forms, appealing stylized proportions, expressive acting, refined materials, and soft cinematic lighting. Keep the requested subject and format intact; style should shape the rendering, not change the content.',
+            ],
+            'disney-pixar-inspired' => [
+                'label' => 'Disney/Pixar-style 3D animation',
+                'description' => 'Feature-style 3D characters, rich worlds, and warm, expressive storytelling.',
+                'direction' => 'Use an original, polished 3D family-feature animation look associated with Disney/Pixar: appealing silhouettes, expressive character acting, rich layered environments, refined materials, cinematic lighting, and warm visual storytelling. Create original designs; do not reproduce recognizable characters, film scenes, logos, or exact proprietary designs. Preserve the requested subject, audience, tone, and format.',
+            ],
+            'japanese-anime' => [
+                'label' => 'Japanese anime-style animation',
+                'description' => 'Expressive Japanese animation, elegant linework, and cinematic backgrounds.',
+                'direction' => 'Use Japanese anime-inspired visual language: clean expressive linework, intentional cel shading with nuanced gradients, emotionally readable faces, composed or dynamic framing as the moment requires, and richly painted cinematic backgrounds. Keep character designs and details consistent; create original designs rather than copying a known series or character. Preserve the requested subject, audience, tone, and format.',
+            ],
+            '2d-illustration' => [
+                'label' => 'Expressive 2D illustration',
+                'description' => 'Drawn shapes, graphic compositions, and illustration textures.',
+                'direction' => 'Use an expressive 2D illustrated look with deliberate shape language, clear graphic composition, tactile illustration textures, and a cohesive color palette. Keep the requested subject and format intact; style should shape the rendering, not change the content.',
+            ],
+            'cinematic-realism' => [
+                'label' => 'Cinematic live-action realism',
+                'description' => 'Natural materials, believable light, and a film-like camera language.',
+                'direction' => 'Use grounded live-action cinematic realism: natural materials, believable lighting and shadows, plausible camera optics and movement, and restrained color grading. Keep the scene physically credible and preserve the requested subject and format.',
+            ],
+            'stop-motion' => [
+                'label' => 'Tactile stop-motion',
+                'description' => 'Handmade textures and a crafted, frame-by-frame feel.',
+                'direction' => 'Use a tactile handcrafted stop-motion look with miniature-scale sets, visible material character, subtle frame-by-frame movement, and consistent practical lighting. Preserve the requested subject and format.',
+            ],
+            'custom' => [
+                'label' => 'Custom visual style',
+                'description' => 'Describe a look, palette, texture, or medium of your choice.',
+                'direction' => 'Apply the user-supplied custom style consistently across the sequence while preserving the requested subject and format.',
+            ],
+        ];
+    }
+
+    public static function visualStyleLabel(?string $style, ?string $detail = null): string
+    {
+        if ($style === 'custom') {
+            return filled($detail) ? trim($detail) : self::visualStyleOptions()['custom']['label'];
+        }
+
+        return self::visualStyleOptions()[$style ?? '']['label'] ?? self::visualStyleOptions()['custom']['label'];
+    }
+
+    public static function visualStyleDirection(?string $style, ?string $detail = null): string
+    {
+        $direction = self::visualStyleOptions()[$style ?? '']['direction']
+            ?? self::visualStyleOptions()['custom']['direction'];
+
+        if ($style === 'custom' && filled($detail)) {
+            return $direction.' User-supplied style description: '.trim($detail);
+        }
+
+        return $direction;
+    }
+
     /** @param array{clip_duration?: bool, extend_duration?: bool} $durationOptions
      *  @return array<string, array<int, mixed>>
      */
@@ -111,7 +176,7 @@ final class ProjectSettings
         return [
             'audience' => ['required', 'string', 'max:160'],
             'video_type' => ['required', Rule::in(array_keys(self::videoTypes()))],
-            'visual_style' => ['required', Rule::in(['3d-family-animation', '2d-illustration', 'cinematic-realism', 'stop-motion', 'custom'])],
+            'visual_style' => ['required', Rule::in(array_keys(self::visualStyleOptions()))],
             'style_detail' => ['nullable', 'required_if:visual_style,custom', 'string', 'max:500'],
             'character_type' => ['required', Rule::in(['ai-choice', 'human-male', 'human-female', 'robot', 'fictional'])],
             'character_details' => ['nullable', 'required_if:character_type,fictional', 'string', 'max:500'],

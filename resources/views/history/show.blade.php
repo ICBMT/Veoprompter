@@ -40,7 +40,7 @@
                 @if(!empty($project->brief['creative_direction']))<div><span>Creative direction</span><strong>{{ $project->brief['creative_direction'] }}</strong></div>@endif
             @endif
             <div><span>Audience</span><strong>{{ $project->brief['audience'] ?? '—' }}</strong></div>
-            <div><span>Visual style</span><strong>{{ ($project->brief['visual_style'] ?? '') === 'custom' ? ($project->brief['style_detail'] ?? 'Custom') : str_replace('-', ' ', $project->brief['visual_style'] ?? '—') }}</strong></div>
+            <div><span>Visual style</span><strong>{{ empty($project->brief['visual_style']) ? '—' : \App\Support\ProjectSettings::visualStyleLabel($project->brief['visual_style'], $project->brief['style_detail'] ?? null) }}</strong></div>
             @if(!empty($project->brief['character_type']))<div><span>Main character</span><strong>{{ $characterLabels[$project->brief['character_type']] ?? 'Custom character' }}@if(!empty($project->brief['character_details'])) · {{ $project->brief['character_details'] }}@endif</strong></div>@endif
             <div><span>Clip format</span><strong>{{ $clipFormat }}</strong></div>
             @if(!empty($project->brief['narration']))<div><span>Narration</span><strong>{{ $project->brief['narration'] === '1' ? ($project->brief['language'] ?? 'English').' · '.($project->brief['narrator_voice'] ?? 'Voice unspecified').' · '.($project->brief['narrator_accent'] ?? 'Accent unspecified').' · '.($project->brief['narrator_tone'] ?? 'Tone unspecified') : 'Off' }}</strong></div>@endif

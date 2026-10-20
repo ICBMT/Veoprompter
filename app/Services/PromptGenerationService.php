@@ -100,11 +100,21 @@ POLICY;
         $videoType = (string) ($input['video_type'] ?? 'educational');
         $videoTypeLabel = ProjectSettings::videoTypes()[$videoType] ?? 'Educational explainer';
         $isEducational = $videoType === 'educational';
+        $visualStyle = (string) ($input['visual_style'] ?? '3d-family-animation');
+        $styleDetail = $input['style_detail'] ?? null;
         $fields = [
             'Workflow' => $input['mode'] === 'extend' ? 'Extend an existing video' : ($isEducational ? 'Create a new educational story' : 'Create a new '.$videoTypeLabel),
             'Target audience' => $input['audience'] ?? 'General audience; family-friendly and understandable to children',
             'Visual style' => $input['visual_style'] ?? 'Polished family-friendly 3D animation',
-            'Visual style detail' => filled($input['style_detail'] ?? null) ? $input['style_detail'] : 'None supplied',
+        ];
+
+        if (in_array($visualStyle, ['disney-pixar-inspired', 'japanese-anime'], true)) {
+            $fields['Visual style'] = ProjectSettings::visualStyleLabel($visualStyle);
+            $fields['Visual style direction'] = ProjectSettings::visualStyleDirection($visualStyle, $styleDetail);
+        }
+
+        $fields['Visual style detail'] = filled($styleDetail) ? $styleDetail : 'None supplied';
+        $fields += [
             'Aspect ratio' => $input['aspect_ratio'] ?? '16:9',
             'Clip duration' => ($input['clip_duration'] ?? 8).' seconds',
             'Narration' => $narrationEnabled

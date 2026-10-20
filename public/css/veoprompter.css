@@ -1081,6 +1081,7 @@ body {
 .wizard-choice-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 9px; }
 .wizard-choice-grid--three { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 .wizard-choice-grid--four { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.wizard-choice-grid--visual-styles { grid-template-columns: repeat(4, minmax(0, 1fr)); }
 .wizard-choice { position: relative; display: flex; min-height: 94px; flex-direction: column; align-items: flex-start; justify-content: center; gap: 5px; padding: 13px 14px; overflow: hidden; color: #d6e4ea; border: 1px solid #304451; border-radius: 7px; background: linear-gradient(135deg, #121d26, #111820); cursor: pointer; transition: border-color .17s, background .17s, transform .17s, box-shadow .17s; }
 .wizard-choice:hover { transform: translateY(-1px); border-color: #4c788a; background: #172631; }
 .wizard-choice:focus-within { outline: 2px solid var(--accent); outline-offset: 2px; }
@@ -1121,6 +1122,7 @@ body {
     .wizard-step { min-height: 330px; padding: 19px 16px; }
     .wizard-choice-grid--three { grid-template-columns: repeat(2, minmax(0, 1fr)); }
     .wizard-choice-grid--four { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+    .wizard-choice-grid--visual-styles { grid-template-columns: repeat(2, minmax(0, 1fr)); }
     .wizard-review-list { grid-template-columns: 1fr; }
     .wizard-navigation { flex-wrap: wrap; }
 }
@@ -1128,7 +1130,7 @@ body {
     .wizard-progress { padding: 12px; }
     .wizard-step { min-height: 320px; padding: 17px 13px; }
     .wizard-question h2 { font-size: 20px; }
-    .wizard-choice-grid, .wizard-choice-grid--two, .wizard-choice-grid--three { grid-template-columns: 1fr; }
+    .wizard-choice-grid, .wizard-choice-grid--two, .wizard-choice-grid--three, .wizard-choice-grid--visual-styles { grid-template-columns: 1fr; }
     .wizard-choice-grid--four { grid-template-columns: repeat(2, minmax(0, 1fr)); }
     .wizard-choice { min-height: 76px; padding: 11px 12px; }
     .wizard-choice--number { min-height: 68px; }

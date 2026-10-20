@@ -22,11 +22,9 @@
         <div class="setting-field-block">
             <div class="field-label-row"><label class="field-label" for="visual_style">Visual style</label><button class="field-info" type="button" data-tooltip="This visual language is reused across the project, helping characters, lighting, and materials feel like one world." aria-label="Help: visual style">i</button></div>
             <select class="text-input select-input" id="visual_style" name="visual_style" required>
-                <option value="3d-family-animation" title="Rounded, dimensional animation with polished lighting and family-friendly appeal." @selected(old('visual_style', $settings['visual_style']) === '3d-family-animation')>Polished 3D family animation</option>
-                <option value="2d-illustration" title="Expressive drawn shapes, illustration textures, and flatter graphic compositions." @selected(old('visual_style', $settings['visual_style']) === '2d-illustration')>Expressive 2D illustration</option>
-                <option value="cinematic-realism" title="Natural materials, believable lighting, and a live-action cinematic camera language." @selected(old('visual_style', $settings['visual_style']) === 'cinematic-realism')>Cinematic live-action realism</option>
-                <option value="stop-motion" title="Handmade textures, tactile materials, and a crafted frame-by-frame feel." @selected(old('visual_style', $settings['visual_style']) === 'stop-motion')>Tactile stop-motion</option>
-                <option value="custom" title="Describe your own look, texture, palette, or medium in the field below." @selected(old('visual_style', $settings['visual_style']) === 'custom')>I have a style in mind…</option>
+                @foreach(\App\Support\ProjectSettings::visualStyleOptions() as $style => $option)
+                    <option value="{{ $style }}" title="{{ $option['description'] }}" @selected(old('visual_style', $settings['visual_style']) === $style)>{{ $option['label'] }}</option>
+                @endforeach
             </select>
             <div data-custom-style @if(old('visual_style', $settings['visual_style']) !== 'custom') hidden @endif>
                 <label class="sr-only" for="style_detail">Describe your visual style</label>

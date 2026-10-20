@@ -51,9 +51,13 @@ class PromptStudioTest extends TestCase
             ->assertSee('data-wizard-title="Choose a video type"', false)
             ->assertSee('Cinematic story / short film')
             ->assertSee('style-3d.jpg')
+            ->assertSee('style-stylized-3d-family.jpg')
+            ->assertSee('style-japanese-anime.jpg')
             ->assertSee('style-2d.jpg')
             ->assertSee('style-cinematic.jpg')
             ->assertSee('style-stop-motion.jpg')
+            ->assertSee('Disney/Pixar-style 3D animation')
+            ->assertSee('Japanese anime-style animation')
             ->assertSee('Preview this language')
             ->assertSee('Preview this voice')
             ->assertSee('Preview this accent')
@@ -119,8 +123,56 @@ class PromptStudioTest extends TestCase
                 && str_contains($brief, 'Why do bees visit flowers?')
                 && str_contains($brief, 'Saved family audience')
                 && ! str_contains($brief, 'Untrusted browser override')
-                && str_contains($brief, 'Main character type: Robot or animated machine');
+                && str_contains($brief, 'Main character type: Robot or animated machine')
+                && str_contains($brief, 'Visual style: 3d-family-animation')
+                && ! str_contains($brief, 'Visual style direction:');
         });
+    }
+
+    public function test_new_visual_styles_guide_generated_prompts_and_are_saved_with_readable_history_labels(): void
+    {
+        Http::fake([
+            'https://generativelanguage.googleapis.com/*' => Http::response([
+                'candidates' => [['content' => ['parts' => [['text' => "## PROJECT OVERVIEW\nA visual story.\n\n### COPY CLIP 1 PROMPT\n```text\nA consistent opening shot.\n```"]]]]],
+            ], 200),
+        ]);
+        AiSetting::create([
+            'provider' => 'gemini',
+            'model' => 'gemini-2.5-flash',
+            'api_key' => 'test-provider-secret',
+        ]);
+        $owner = User::factory()->create();
+        $styles = [
+            'disney-pixar-inspired' => [
+                'label' => 'Disney/Pixar-style 3D animation',
+                'direction' => 'Use an original, polished 3D family-feature animation look associated with Disney/Pixar',
+            ],
+            'japanese-anime' => [
+                'label' => 'Japanese anime-style animation',
+                'direction' => 'Use Japanese anime-inspired visual language: clean expressive linework',
+            ],
+        ];
+
+        foreach ($styles as $style => $expected) {
+            $project = $this->makeProject($owner, ['visual_style' => $style]);
+            $this->actingAs($owner)
+                ->postJson(route('studio.generate', $project), $this->storyBrief())
+                ->assertOk()
+                ->assertJsonPath('saved_to_history', true);
+
+            $run = $owner->promptProjects()->orderByDesc('id')->firstOrFail();
+            $this->assertSame($style, $run->brief['visual_style']);
+            Http::assertSent(function (ClientRequest $request) use ($expected): bool {
+                $brief = data_get($request->data(), 'contents.0.parts.0.text', '');
+
+                return str_contains($brief, 'Visual style: '.$expected['label'])
+                    && str_contains($brief, 'Visual style direction: '.$expected['direction']);
+            });
+
+            $this->get(route('history.show', $run))
+                ->assertOk()
+                ->assertSee($expected['label']);
+        }
     }
 
     public function test_cinematic_story_mode_uses_a_general_video_brief_without_changing_the_project_default(): void
