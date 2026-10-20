@@ -3,6 +3,19 @@
     if (!gsap) return;
 
     const prefersReducedMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+    const topbar = document.querySelector('.topbar');
+    if (topbar) {
+        let scrollFrame = 0;
+        const syncTopbarDepth = () => {
+            if (scrollFrame) return;
+            scrollFrame = requestAnimationFrame(() => {
+                topbar.classList.toggle('is-scrolled', window.scrollY > 12);
+                scrollFrame = 0;
+            });
+        };
+        syncTopbarDepth();
+        window.addEventListener('scroll', syncTopbarDepth, { passive: true });
+    }
     if (prefersReducedMotion) return;
 
     const ScrollTrigger = window.ScrollTrigger;
@@ -23,7 +36,15 @@
         .from('.topbar .breadcrumbs', { autoAlpha: 0, y: -7, duration: 0.32 }, 0.06)
         .from('.topbar-actions > *', { autoAlpha: 0, y: -8, stagger: 0.045, duration: 0.34 }, 0.1);
 
-    // 10–15. Hero moments are tailored to the current page rather than animated as one generic block.
+    const pageShell = document.querySelector('.page-shell');
+    if (pageShell) {
+        gsap.fromTo(pageShell,
+            { autoAlpha: 0, y: 8 },
+            { autoAlpha: 1, y: 0, duration: 0.48, delay: 0.04, ease, clearProps: 'transform,opacity,visibility' },
+        );
+    }
+
+    // Hero moments are tailored to the current page rather than animated as one generic block.
     const studioHero = document.querySelector('.studio-hero');
     if (studioHero) {
         const hero = gsap.timeline({ defaults: { ease, clearProps: 'transform,opacity,visibility' } });
@@ -52,6 +73,7 @@
         '.project-settings-grid .form-panel', '.principles-row > div', '.saved-brief-card', '.saved-output-card',
         '.history-empty', '.project-runs-empty', '.project-runs-section', '.wizard-progress',
         '.wizard-navigation', '.voice-preview-card', '.admin-users-page .history-card', '.app-footer',
+        '.flash-message', '.connection-notice', '.generation-message', '.history-result-notice',
     ].join(', ');
 
     const reveal = (element, options = {}) => {
@@ -132,6 +154,11 @@
                 const bounds = element.getBoundingClientRect();
                 const x = (event.clientX - bounds.left) / Math.max(bounds.width, 1) - 0.5;
                 const y = (event.clientY - bounds.top) / Math.max(bounds.height, 1) - 0.5;
+                const lightX = Math.max(0, Math.min(100, (x + 0.5) * 100));
+                const lightY = Math.max(0, Math.min(100, (y + 0.5) * 100));
+                element.style.setProperty('--glass-x', `${lightX}%`);
+                element.style.setProperty('--glass-y', `${lightY}%`);
+                element.classList.add('is-glass-lit');
                 rotateX(-y * 3.2);
                 rotateY(x * 3.6);
                 lift(5);
@@ -140,6 +167,7 @@
                 rotateX(0);
                 rotateY(0);
                 lift(0);
+                element.classList.remove('is-glass-lit');
             });
         });
     }
@@ -154,9 +182,19 @@
                 moveX((event.clientX - (bounds.left + bounds.width / 2)) * 0.035);
                 moveY((event.clientY - (bounds.top + bounds.height / 2)) * 0.055);
             });
-            element.addEventListener('pointerleave', () => { moveX(0); moveY(0); });
+            const release = () => gsap.to(element, { scale: 1, duration: 0.22, ease: 'back.out(2.2)' });
+            element.addEventListener('pointerleave', () => { moveX(0); moveY(0); release(); });
             element.addEventListener('pointerdown', () => gsap.to(element, { scale: 0.975, duration: 0.1, ease: 'power2.out' }));
-            element.addEventListener('pointerup', () => gsap.to(element, { scale: 1, duration: 0.22, ease: 'back.out(2.2)' }));
+            element.addEventListener('pointerup', release);
+            element.addEventListener('pointercancel', release);
+        });
+
+        document.querySelectorAll('.button-secondary, .button-copy-all, .button-flow, .mode-tab, .wizard-choice, .aspect-choice, .toggle-choice, .history-search button, .pagination-control, .detail-delete').forEach((element) => {
+            const release = () => gsap.to(element, { scale: 1, duration: 0.22, ease: 'back.out(2.1)' });
+            element.addEventListener('pointerdown', () => gsap.to(element, { scale: 0.978, duration: 0.1, ease: 'power2.out' }));
+            element.addEventListener('pointerup', release);
+            element.addEventListener('pointercancel', release);
+            element.addEventListener('pointerleave', release);
         });
 
         document.querySelectorAll('.sidebar-note a, .app-footer a, .history-open, .project-edit-inline, .project-run-open, .account-library-link').forEach((link) => {

@@ -1318,3 +1318,291 @@ body {
 .wizard-navigation-note {
     color: #9baab4;
 }
+
+/* Frosted, rain-lit glass brings the existing workspace together without changing its layout. */
+:root {
+    color-scheme: dark;
+    --glass-line: rgb(174 219 239 / 17%);
+    --glass-line-hover: rgb(174 229 248 / 34%);
+    --glass-sheen: rgb(216 244 255 / 11%);
+    --glass-shadow: 0 18px 54px rgb(0 0 0 / 24%), inset 0 1px 0 rgb(235 249 255 / 5%);
+    --glass-blur: 18px;
+}
+
+body {
+    background:
+        radial-gradient(ellipse 68rem 44rem at 88% 2%, rgb(92 174 210 / 13%), transparent 69%),
+        radial-gradient(ellipse 57rem 46rem at 7% 82%, rgb(110 113 188 / 9%), transparent 70%),
+        linear-gradient(145deg, #0a1118 0%, #0b1017 52%, #0a0f15 100%);
+    background-attachment: fixed;
+}
+
+.app-shell { position: relative; isolation: isolate; min-height: 100vh; }
+.app-shell::before {
+    position: fixed;
+    z-index: 0;
+    inset: -8%;
+    pointer-events: none;
+    background:
+        radial-gradient(ellipse 37% 28% at 22% 16%, rgb(106 202 232 / 10%), transparent 76%),
+        radial-gradient(ellipse 34% 29% at 84% 64%, rgb(120 126 205 / 9%), transparent 78%),
+        radial-gradient(ellipse 43% 30% at 43% 100%, rgb(69 151 182 / 7%), transparent 78%);
+    opacity: .72;
+    transform: translate3d(0, 0, 0);
+    animation: rain-glass-drift 34s ease-in-out infinite alternate;
+    content: "";
+}
+@keyframes rain-glass-drift {
+    from { transform: translate3d(-.4%, -.3%, 0) scale(1); }
+    to { transform: translate3d(.7%, .5%, 0) scale(1.035); }
+}
+
+.sidebar {
+    z-index: 10;
+    border-right-color: rgb(174 219 239 / 15%);
+    background: linear-gradient(180deg, rgb(15 25 35 / 89%), rgb(9 16 23 / 86%));
+    box-shadow: 12px 0 36px rgb(0 0 0 / 12%), inset -1px 0 0 rgb(255 255 255 / 3%);
+    -webkit-backdrop-filter: blur(24px) saturate(145%);
+    backdrop-filter: blur(24px) saturate(145%);
+}
+.app-main { position: relative; z-index: 1; }
+.topbar {
+    border-bottom-color: rgb(174 219 239 / 14%);
+    background: rgb(10 17 24 / 72%);
+    box-shadow: 0 9px 28px rgb(0 0 0 / 8%);
+    -webkit-backdrop-filter: blur(24px) saturate(150%);
+    backdrop-filter: blur(24px) saturate(150%);
+    transition: background-color .28s ease, border-color .28s ease, box-shadow .28s ease;
+}
+.topbar.is-scrolled {
+    border-bottom-color: rgb(174 219 239 / 22%);
+    background: rgb(8 15 22 / 86%);
+    box-shadow: 0 12px 34px rgb(0 0 0 / 18%), inset 0 -1px 0 rgb(255 255 255 / 3%);
+}
+.app-footer {
+    border-top-color: rgb(174 219 239 / 12%);
+    background: linear-gradient(180deg, rgb(10 16 23 / 46%), rgb(8 13 19 / 68%));
+    -webkit-backdrop-filter: blur(14px) saturate(135%);
+    backdrop-filter: blur(14px) saturate(135%);
+}
+
+:is(.storyboard-card, .prompt-form, .admin-card, .admin-method-card, .auth-card, .auth-layout, .guide-card, .guide-item, .history-card, .history-empty, .saved-brief-card, .saved-output-card, .project-run-card, .project-preference-strip > span, .project-settings-grid .form-panel, .test-account-credentials, .wizard-progress, .wizard-step, .voice-preview-card, .generated-voice-preview, .account-summary, .account-library-link, .history-count, .history-search, .sidebar-note, .sidebar-status, .mode-tab, .wizard-choice, .output-content, .result-meta) {
+    border-color: var(--glass-line);
+    box-shadow: var(--glass-shadow);
+    -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(140%);
+    backdrop-filter: blur(var(--glass-blur)) saturate(140%);
+}
+:is(.storyboard-card, .prompt-form, .admin-card, .admin-method-card, .auth-card, .auth-layout, .guide-card, .guide-item, .history-card, .saved-brief-card, .saved-output-card, .project-run-card, .project-settings-grid .form-panel, .test-account-credentials, .wizard-progress, .wizard-step, .voice-preview-card, .generated-voice-preview) {
+    background:
+        radial-gradient(ellipse at 90% 0%, rgb(118 191 218 / 9%), transparent 43%),
+        linear-gradient(145deg, rgb(24 37 50 / 83%), rgb(11 18 26 / 82%));
+}
+.storyboard-card, .prompt-form, .admin-card, .auth-card, .auth-layout, .guide-card, .saved-brief-card, .saved-output-card { border-radius: 15px; }
+.storyboard-card, .admin-card, .guide-card, .history-card, .project-run-card { box-shadow: var(--glass-shadow), 0 12px 34px rgb(0 0 0 / 12%); }
+.storyboard-footer, .result-meta, .output-content, .output-copy-card, .output-copy-head, .output-copy-pre {
+    border-color: rgb(174 219 239 / 14%);
+    background-color: rgb(11 19 27 / 74%);
+}
+.brief-panel { border-color: rgb(174 219 239 / 15%); }
+.recipe-panel {
+    border-color: rgb(174 219 239 / 14%);
+    background: linear-gradient(145deg, rgb(24 37 50 / 46%), rgb(10 17 25 / 58%));
+    -webkit-backdrop-filter: blur(14px) saturate(135%);
+    backdrop-filter: blur(14px) saturate(135%);
+}
+:is(.project-preference-strip > span, .voice-preview-card, .generated-voice-preview, .account-summary, .account-library-link, .history-count, .history-search, .sidebar-note, .sidebar-status, .mode-tab, .wizard-choice, .output-content, .result-meta) {
+    background-color: rgb(17 28 39 / 65%);
+}
+.sidebar-note, .account-library-link, .project-preference-strip > span {
+    background: linear-gradient(145deg, rgb(25 40 53 / 72%), rgb(12 20 28 / 72%));
+}
+.wizard-choice { background: linear-gradient(145deg, rgb(20 33 45 / 77%), rgb(12 20 28 / 78%)); }
+.wizard-choice:hover:not(.is-selected):not(:has(input:checked)) { background: linear-gradient(145deg, rgb(28 47 61 / 84%), rgb(15 26 36 / 84%)); }
+.sidebar-status, .sidebar-status.is-ready, .account-summary, .history-count, .history-search,
+.voice-preview-card, .generated-voice-preview {
+    background: linear-gradient(145deg, rgb(23 36 48 / 74%), rgb(12 20 28 / 72%));
+}
+.account-library-link:hover { background: linear-gradient(145deg, rgb(31 54 69 / 84%), rgb(15 26 36 / 84%)); }
+.history-empty {
+    border-color: var(--glass-line);
+    background:
+        radial-gradient(ellipse at 50% 34%, rgb(70 137 164 / 19%) 0, transparent 58%),
+        linear-gradient(145deg, rgb(22 35 47 / 80%), rgb(12 19 27 / 84%));
+}
+.mode-tab.is-selected { background: linear-gradient(110deg, rgb(31 57 72 / 83%), rgb(18 31 43 / 85%)); }
+.wizard-choice.is-selected, .wizard-choice:has(input:checked) { background: linear-gradient(135deg, rgb(31 65 80 / 82%), rgb(19 37 52 / 86%)); }
+
+:is(.admin-help, .guide-quote, .guide-cta, .connection-notice, .flash-message, .duration-policy-note, .output-copy-card) {
+    box-shadow: inset 0 1px 0 rgb(255 255 255 / 5%), 0 10px 26px rgb(0 0 0 / 10%);
+    -webkit-backdrop-filter: blur(14px) saturate(138%);
+    backdrop-filter: blur(14px) saturate(138%);
+}
+.admin-help { background: linear-gradient(135deg, rgb(24 42 54 / 79%), rgb(14 23 31 / 80%)); }
+.guide-quote { border-left-color: var(--accent); background: linear-gradient(135deg, rgb(23 39 50 / 80%), rgb(13 21 28 / 82%)); }
+.guide-cta { border-color: rgb(174 219 239 / 17%); background: linear-gradient(120deg, rgb(23 39 51 / 78%), rgb(13 21 29 / 80%)); }
+.connection-notice { background: linear-gradient(110deg, rgb(35 42 55 / 82%), rgb(21 28 38 / 84%)); }
+.flash-message { border-color: rgb(120 205 223 / 26%); background: linear-gradient(120deg, rgb(20 42 51 / 82%), rgb(12 24 31 / 85%)); }
+.duration-policy-note { background: linear-gradient(135deg, rgb(22 37 47 / 78%), rgb(13 21 28 / 81%)); }
+.output-copy-card { background: rgb(10 17 24 / 81%); }
+.auth-copy {
+    background:
+        radial-gradient(ellipse at 83% 80%, rgb(76 157 186 / 19%), transparent 44%),
+        linear-gradient(145deg, rgb(23 40 54 / 88%), rgb(12 20 29 / 91%) 80%);
+    -webkit-backdrop-filter: blur(18px) saturate(140%);
+    backdrop-filter: blur(18px) saturate(140%);
+}
+
+/* A pointer-following reflection gives interactive glass a soft liquid highlight. */
+:is(.storyboard-card, .prompt-form, .admin-card, .admin-method-card, .auth-card, .auth-layout, .guide-card, .guide-item, .history-card, .history-empty, .saved-brief-card, .saved-output-card, .project-run-card, .project-preference-strip > span, .project-settings-grid .form-panel, .test-account-credentials, .wizard-progress, .wizard-step, .voice-preview-card, .generated-voice-preview, .account-summary, .account-library-link, .history-count, .history-search, .sidebar-note, .sidebar-status, .mode-tab, .wizard-choice, .output-content, .result-meta) {
+    position: relative;
+    isolation: isolate;
+    --glass-x: 50%;
+    --glass-y: 0%;
+    transition: transform .32s cubic-bezier(.2,.8,.2,1), border-color .28s ease, box-shadow .32s ease, background .28s ease;
+}
+:is(.storyboard-card, .prompt-form, .admin-card, .admin-method-card, .auth-card, .auth-layout, .guide-card, .guide-item, .history-card, .history-empty, .saved-brief-card, .saved-output-card, .project-run-card, .project-preference-strip > span, .project-settings-grid .form-panel, .test-account-credentials, .wizard-progress, .wizard-step, .voice-preview-card, .generated-voice-preview, .account-summary, .account-library-link, .history-count, .history-search, .sidebar-note, .sidebar-status, .mode-tab, .wizard-choice, .output-content, .result-meta)::before {
+    position: absolute;
+    z-index: -1;
+    inset: 0;
+    pointer-events: none;
+    border-radius: inherit;
+    background:
+        radial-gradient(260px circle at var(--glass-x) var(--glass-y), rgb(183 236 255 / 14%), transparent 74%),
+        linear-gradient(135deg, var(--glass-sheen), transparent 48%);
+    opacity: .34;
+    transition: opacity .32s ease;
+    content: "";
+}
+@media (hover: hover) and (prefers-reduced-motion: no-preference) {
+    :is(.storyboard-card, .prompt-form, .admin-card, .admin-method-card, .auth-card, .auth-layout, .guide-card, .guide-item, .history-card, .saved-brief-card, .saved-output-card, .project-run-card, .project-preference-strip > span, .project-settings-grid .form-panel, .test-account-credentials, .wizard-progress, .wizard-step, .voice-preview-card, .generated-voice-preview, .account-summary, .account-library-link, .history-count, .history-search, .sidebar-note, .sidebar-status, .mode-tab, .wizard-choice, .output-content, .result-meta):hover,
+    :is(.storyboard-card, .prompt-form, .admin-card, .admin-method-card, .auth-card, .auth-layout, .guide-card, .guide-item, .history-card, .saved-brief-card, .saved-output-card, .project-run-card, .project-preference-strip > span, .project-settings-grid .form-panel, .test-account-credentials, .wizard-progress, .wizard-step, .voice-preview-card, .generated-voice-preview, .account-summary, .account-library-link, .history-count, .history-search, .sidebar-note, .sidebar-status, .mode-tab, .wizard-choice, .output-content, .result-meta):focus-within,
+    :is(.storyboard-card, .prompt-form, .admin-card, .admin-method-card, .auth-card, .auth-layout, .guide-card, .guide-item, .history-card, .saved-brief-card, .saved-output-card, .project-run-card, .project-preference-strip > span, .project-settings-grid .form-panel, .test-account-credentials, .wizard-progress, .wizard-step, .voice-preview-card, .generated-voice-preview, .account-summary, .account-library-link, .history-count, .history-search, .sidebar-note, .sidebar-status, .mode-tab, .wizard-choice, .output-content, .result-meta).is-glass-lit {
+        border-color: var(--glass-line-hover);
+        box-shadow: var(--glass-shadow), 0 0 28px rgb(106 200 231 / 8%);
+    }
+    :is(.storyboard-card, .prompt-form, .admin-card, .admin-method-card, .auth-card, .auth-layout, .guide-card, .guide-item, .history-card, .history-empty, .saved-brief-card, .saved-output-card, .project-run-card, .project-preference-strip > span, .project-settings-grid .form-panel, .test-account-credentials, .wizard-progress, .wizard-step, .voice-preview-card, .generated-voice-preview, .account-summary, .account-library-link, .history-count, .history-search, .sidebar-note, .sidebar-status, .mode-tab, .wizard-choice, .output-content, .result-meta):hover::before,
+    :is(.storyboard-card, .prompt-form, .admin-card, .admin-method-card, .auth-card, .auth-layout, .guide-card, .guide-item, .history-card, .saved-brief-card, .saved-output-card, .project-run-card, .project-preference-strip > span, .project-settings-grid .form-panel, .test-account-credentials, .wizard-progress, .wizard-step, .voice-preview-card, .generated-voice-preview, .account-summary, .account-library-link, .history-count, .history-search, .sidebar-note, .sidebar-status, .mode-tab, .wizard-choice, .output-content, .result-meta):focus-within::before,
+    :is(.storyboard-card, .prompt-form, .admin-card, .admin-method-card, .auth-card, .auth-layout, .guide-card, .guide-item, .history-card, .saved-brief-card, .saved-output-card, .project-run-card, .project-preference-strip > span, .project-settings-grid .form-panel, .test-account-credentials, .wizard-progress, .wizard-step, .voice-preview-card, .generated-voice-preview, .account-summary, .account-library-link, .history-count, .history-search, .sidebar-note, .sidebar-status, .mode-tab, .wizard-choice, .output-content, .result-meta).is-glass-lit::before { opacity: .88; }
+}
+
+.nav-link {
+    border-color: transparent;
+    border-radius: 11px;
+    transition: color .24s ease, background-color .24s ease, border-color .24s ease, box-shadow .28s ease;
+}
+.nav-link:hover { border-color: rgb(159 215 236 / 13%); background: linear-gradient(110deg, rgb(35 58 73 / 55%), rgb(22 34 46 / 42%)); box-shadow: inset 0 1px 0 rgb(255 255 255 / 4%); }
+.nav-link.is-active {
+    border-color: rgb(152 220 241 / 22%);
+    background: linear-gradient(110deg, rgb(37 69 86 / 70%), rgb(22 37 51 / 76%));
+    box-shadow: inset 0 1px 0 rgb(255 255 255 / 7%), 0 6px 20px rgb(32 110 137 / 10%);
+}
+.topbar-control, .button-secondary, .button-copy-all, .button-flow, .history-search button, .pagination-control, .detail-actions .detail-delete {
+    border-color: rgb(165 218 238 / 20%);
+    background-color: rgb(20 34 46 / 75%);
+    box-shadow: inset 0 1px 0 rgb(255 255 255 / 5%);
+    -webkit-backdrop-filter: blur(12px) saturate(140%);
+    backdrop-filter: blur(12px) saturate(140%);
+}
+.topbar-control, .button-secondary, .button-copy-all, .button-flow, .history-search button, .pagination-control { border-radius: 999px; }
+.topbar-control:hover, .button-secondary:hover, .button-copy-all:hover, .button-flow:hover, .history-search button:hover, .pagination-control:not(.is-disabled):hover {
+    border-color: rgb(149 223 245 / 42%);
+    background-color: rgb(28 52 67 / 86%);
+    box-shadow: inset 0 1px 0 rgb(255 255 255 / 8%), 0 7px 20px rgb(55 155 187 / 12%);
+}
+.button-primary {
+    border-radius: 999px;
+    box-shadow: 0 7px 26px rgb(84 196 231 / 25%), inset 0 1px 0 rgb(255 255 255 / 46%), inset 0 -1px 0 rgb(56 115 150 / 12%);
+    transition: transform .22s cubic-bezier(.2,.8,.2,1), box-shadow .28s ease, filter .28s ease, background .28s ease;
+}
+.button-primary:hover { filter: brightness(1.045) saturate(1.06); }
+.button-primary:active, .button-secondary:active, .button-copy-all:active, .button-flow:active, .topbar-control:active { filter: brightness(1.08); }
+.button-secondary:focus-visible, .button-primary:focus-visible, .topbar-control:focus-visible, .nav-link:focus-visible { outline: 2px solid rgb(140 220 243 / 82%); outline-offset: 3px; }
+.text-input {
+    border-color: rgb(163 204 224 / 20%);
+    border-radius: 10px;
+    background-color: rgb(9 16 24 / 72%);
+    box-shadow: inset 0 1px 0 rgb(255 255 255 / 3%);
+    -webkit-backdrop-filter: blur(10px) saturate(135%);
+    backdrop-filter: blur(10px) saturate(135%);
+    transition: border-color .24s ease, background-color .24s ease, box-shadow .26s ease;
+}
+.text-input:focus { border-color: rgb(120 209 236 / 70%); background-color: rgb(14 27 38 / 86%); box-shadow: 0 0 0 3px rgb(152 231 255 / 13%), inset 0 1px 0 rgb(255 255 255 / 4%); }
+.mode-tab, .wizard-choice, .aspect-choice, .toggle-options { border-radius: 13px; }
+.mode-tab.is-selected, .aspect-choice.is-selected, .wizard-choice.is-selected, .wizard-choice:has(input:checked) {
+    border-color: rgb(119 199 222 / 62%);
+    background-color: rgb(25 55 69 / 75%);
+    box-shadow: inset 0 1px 0 rgb(255 255 255 / 7%), 0 0 22px rgb(72 177 211 / 10%);
+}
+.toggle-options { background-color: rgb(9 16 24 / 66%); -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px); }
+.toggle-choice.is-active { border-radius: 999px; background: rgb(33 62 77 / 82%); box-shadow: inset 0 1px 0 rgb(255 255 255 / 7%), 0 3px 12px rgb(77 169 198 / 12%); }
+.upload-zone { border-radius: 13px; background: linear-gradient(145deg, rgb(19 32 43 / 70%), rgb(11 18 26 / 78%)); -webkit-backdrop-filter: blur(14px); backdrop-filter: blur(14px); }
+.upload-zone:hover, .upload-zone.is-dragging { background: linear-gradient(145deg, rgb(26 48 62 / 83%), rgb(15 25 35 / 85%)); }
+.upload-zone.has-file { background: linear-gradient(145deg, rgb(20 42 53 / 82%), rgb(13 23 31 / 85%)); }
+
+@media (max-width: 760px) {
+    :root { --glass-blur: 13px; }
+    .app-shell::before { inset: -14%; opacity: .52; }
+    .sidebar { -webkit-backdrop-filter: blur(18px) saturate(140%); backdrop-filter: blur(18px) saturate(140%); }
+    .topbar { -webkit-backdrop-filter: blur(18px) saturate(145%); backdrop-filter: blur(18px) saturate(145%); }
+}
+@media (max-width: 400px) {
+    .topbar { gap: 7px; padding-right: 10px; padding-left: 10px; }
+    .topbar-actions { gap: 5px; }
+    .topbar-actions .topbar-control { gap: 3px; padding-right: 6px; padding-left: 6px; font-size: 9px; }
+    .topbar-logout, .topbar-quiet { font-size: 9px; }
+    .breadcrumbs { gap: 5px; font-size: 9px; }
+    .breadcrumbs > span { display: none; }
+    .page-shell { padding-right: 12px; padding-left: 12px; }
+}
+@media (max-width: 1020px) and (min-width: 761px) {
+    .sidebar { padding-top: calc(21px + env(safe-area-inset-top)); padding-bottom: calc(14px + env(safe-area-inset-bottom)); }
+}
+@media (max-width: 760px) {
+    .sidebar {
+        height: calc(58px + env(safe-area-inset-top));
+        padding: env(safe-area-inset-top) max(18px, env(safe-area-inset-right)) 0 max(18px, env(safe-area-inset-left));
+    }
+    .topbar { padding-right: max(18px, env(safe-area-inset-right)); padding-left: max(18px, env(safe-area-inset-left)); }
+    .page-shell { padding-right: max(18px, env(safe-area-inset-right)); padding-left: max(18px, env(safe-area-inset-left)); }
+    .app-footer { padding-right: max(18px, env(safe-area-inset-right)); padding-bottom: env(safe-area-inset-bottom); padding-left: max(18px, env(safe-area-inset-left)); }
+}
+@media (max-width: 480px) {
+    .page-shell { padding-right: max(14px, env(safe-area-inset-right)); padding-left: max(14px, env(safe-area-inset-left)); }
+    .sidebar { padding-right: max(14px, env(safe-area-inset-right)); padding-left: max(14px, env(safe-area-inset-left)); }
+}
+@media (max-width: 400px) {
+    .topbar { padding-right: max(10px, env(safe-area-inset-right)); padding-left: max(10px, env(safe-area-inset-left)); }
+    .page-shell { padding-right: max(12px, env(safe-area-inset-right)); padding-left: max(12px, env(safe-area-inset-left)); }
+}
+
+@media (prefers-reduced-transparency: reduce) {
+    .sidebar, .topbar, .app-footer, .recipe-panel, .upload-zone, .text-input, .toggle-options,
+    .topbar-control, .button-secondary, .button-copy-all, .button-flow, .history-search button, .pagination-control, .detail-actions .detail-delete,
+    .admin-help, .guide-quote, .guide-cta, .connection-notice, .flash-message, .duration-policy-note, .output-copy-card, .auth-copy,
+    :is(.storyboard-card, .prompt-form, .admin-card, .admin-method-card, .auth-card, .auth-layout, .guide-card, .guide-item, .history-card, .history-empty, .saved-brief-card, .saved-output-card, .project-run-card, .project-preference-strip > span, .project-settings-grid .form-panel, .test-account-credentials, .wizard-progress, .wizard-step, .voice-preview-card, .generated-voice-preview, .account-summary, .account-library-link, .history-count, .history-search, .sidebar-note, .sidebar-status, .mode-tab, .wizard-choice, .output-content, .result-meta) {
+        -webkit-backdrop-filter: none;
+        backdrop-filter: none;
+    }
+    .sidebar { background: #0d161f; }
+    .topbar { background: #0b121a; }
+    .app-footer, .recipe-panel, .upload-zone, .text-input, .toggle-options { background: #101a24; }
+    .topbar-control, .button-secondary, .button-copy-all, .button-flow, .history-search button, .pagination-control, .detail-actions .detail-delete { background: #16232d; }
+    :is(.storyboard-card, .prompt-form, .admin-card, .admin-method-card, .auth-card, .auth-layout, .guide-card, .guide-item, .history-card, .history-empty, .saved-brief-card, .saved-output-card, .project-run-card, .project-preference-strip > span, .project-settings-grid .form-panel, .test-account-credentials, .wizard-progress, .wizard-step, .voice-preview-card, .generated-voice-preview, .account-summary, .account-library-link, .history-count, .history-search, .sidebar-note, .sidebar-status, .mode-tab, .wizard-choice, .output-content, .result-meta) { background: #111b25; }
+    .admin-help { background: #16232c; }
+    .guide-quote { background: #131e27; }
+    .guide-cta { background: #172732; }
+    .connection-notice { background: #1b202a; }
+    .flash-message { background: #13232b; }
+    .duration-policy-note { background: #131e26; }
+    .output-copy-card { background: #0c131a; }
+    .auth-copy { background: #172735; }
+}
+@media (prefers-reduced-motion: reduce) {
+    .app-shell::before { animation: none; }
+    .topbar, .topbar.is-scrolled { transition: none; }
+    :is(.storyboard-card, .prompt-form, .admin-card, .admin-method-card, .auth-card, .auth-layout, .guide-card, .guide-item, .history-card, .history-empty, .saved-brief-card, .saved-output-card, .project-run-card, .project-preference-strip > span, .project-settings-grid .form-panel, .test-account-credentials, .wizard-progress, .wizard-step, .voice-preview-card, .generated-voice-preview, .account-summary, .account-library-link, .history-count, .history-search, .sidebar-note, .sidebar-status, .mode-tab, .wizard-choice, .output-content, .result-meta)::before { display: none; }
+}
+@media (forced-colors: active) {
+    .button-primary, .button-secondary, .topbar-control, .nav-link, .text-input { forced-color-adjust: auto; }
+    .button-primary:focus-visible, .button-secondary:focus-visible, .topbar-control:focus-visible, .nav-link:focus-visible, .text-input:focus-visible { outline: 2px solid Highlight; }
+}

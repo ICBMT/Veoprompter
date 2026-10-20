@@ -2,14 +2,14 @@
 <html lang="en">
 <head>
     <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
     <meta name="csrf-token" content="{{ csrf_token() }}">
     <meta name="voice-sample-url" content="{{ route('voice-samples.store', [], false) }}">
     @auth
         <meta name="presence-url" content="{{ route('presence.ping', [], false) }}">
         @if(auth()->user()->expires_at)<meta name="account-expires-at" content="{{ auth()->user()->expires_at->toIso8601String() }}">@endif
     @endauth
-    <meta name="theme-color" content="#0a0e13">
+    <meta name="theme-color" content="#0a1118">
     <title>@yield('title', 'VeoPrompter — Prompt studio')</title>
     <link rel="preload" href="/fonts/inter-latin-wght-normal.woff2" as="font" type="font/woff2" crossorigin>
     <link rel="stylesheet" href="/css/veoprompter.css">
