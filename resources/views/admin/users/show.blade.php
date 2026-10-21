@@ -25,16 +25,16 @@
             <div class="admin-form-grid">
                 <div class="admin-field admin-field--wide">
                     <input type="hidden" name="can_choose_clip_duration" value="0">
-                    <label class="switch-row"><span><strong>Allow this account to choose video clip length</strong><small>When off, clips use 8 seconds for this account.</small></span><input type="checkbox" name="can_choose_clip_duration" value="1" @checked($user->can_choose_clip_duration)><i class="switch-track"></i></label>
-                    @unless($globalDurationOptions['clip_duration'])<p class="field-hint duration-global-note">The global Control room switch is off, so this account currently uses the 8-second default.</p>@endunless
+                    <label class="switch-row"><span><strong>Allow this account to choose video clip length</strong><small>When off, AI selects each clip’s duration from 4 to 10 seconds.</small></span><input type="checkbox" name="can_choose_clip_duration" value="1" @checked($user->can_choose_clip_duration)><i class="switch-track"></i></label>
+                    @unless($globalDurationOptions['clip_duration'])<p class="field-hint duration-global-note">The global Control room switch is off, so AI currently chooses this account’s clip lengths.</p>@endunless
                 </div>
                 <div class="admin-field admin-field--wide">
                     <input type="hidden" name="can_choose_extension_duration" value="0">
-                    <label class="switch-row"><span><strong>Allow this account to choose extension length</strong><small>When off, extensions use 8 seconds for this account.</small></span><input type="checkbox" name="can_choose_extension_duration" value="1" @checked($user->can_choose_extension_duration)><i class="switch-track"></i></label>
-                    @unless($globalDurationOptions['extend_duration'])<p class="field-hint duration-global-note">The global Control room switch is off, so this account currently uses the 8-second default.</p>@endunless
+                    <label class="switch-row"><span><strong>Allow this account to choose extension length</strong><small>When off, AI selects the continuation duration from 4 to 10 seconds.</small></span><input type="checkbox" name="can_choose_extension_duration" value="1" @checked($user->can_choose_extension_duration)><i class="switch-track"></i></label>
+                    @unless($globalDurationOptions['extend_duration'])<p class="field-hint duration-global-note">The global Control room switch is off, so AI currently chooses this account’s extension length.</p>@endunless
                 </div>
             </div>
-            <div class="admin-help"><span aria-hidden="true">ⓘ</span><div>A duration choice is available only when both its global Control room switch and this account’s switch are on. If either is off, project setup and generated prompts use 8 seconds.</div></div>
+            <div class="admin-help"><span aria-hidden="true">ⓘ</span><div>A duration question is available only when both its global Control room switch and this account’s switch are on. If either is off, the AI selects a whole-second duration between 4 and 10 seconds.</div></div>
             <div class="admin-form-footer"><p>Changes apply to new projects and future prompt generations for this account.</p><button class="button-primary" type="submit"><span>Save account options</span><span class="button-icon" aria-hidden="true">↗</span></button></div>
         </form>
     </section>

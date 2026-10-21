@@ -31,7 +31,7 @@
             <p data-wizard-progress-note>One small choice at a time. You can go back whenever you like.</p>
         </div>
         @if(!$durationOptions['clip_duration'] || !$durationOptions['extend_duration'])
-            <div class="duration-policy-note" role="status"><span aria-hidden="true">◷</span><p><strong>Some duration choices are fixed at 8 seconds.</strong> @if(!$durationOptions['clip_duration'] && !$durationOptions['extend_duration'])Video clips and extensions use the 8-second default.@elseif(!$durationOptions['clip_duration'])Video clips use the 8-second default.@else Video extensions use the 8-second default.@endif</p></div>
+            <div class="duration-policy-note" role="status"><span aria-hidden="true">◷</span><p><strong>AI-selected timing is active where duration questions are hidden.</strong> @if(!$durationOptions['clip_duration'] && !$durationOptions['extend_duration'])AI will choose each clip and extension length from 4 to 10 seconds.@elseif(!$durationOptions['clip_duration'])AI will choose each new-video clip length from 4 to 10 seconds.@else AI will choose each extension length from 4 to 10 seconds.@endif</p></div>
         @endif
         <p class="wizard-validation" data-wizard-validation role="alert" aria-live="assertive" hidden></p>
         <span class="sr-only" data-wizard-announcement aria-live="polite"></span>
@@ -91,38 +91,41 @@
             </section>
 
             <section class="wizard-step" data-wizard-step data-wizard-group="VIDEO FORMAT" data-wizard-title="Choose the number of clips">
-                <div class="wizard-question"><span class="wizard-question-number" data-wizard-number>08</span><h2 tabindex="-1">How many clips should this video have?</h2><p>Each clip becomes one connected scene in the prompt plan.</p></div>
+                <div class="wizard-question"><span class="wizard-question-number" data-wizard-number>08</span><h2 tabindex="-1">How many clips should this video have?</h2><p>Choose a fixed count, or let AI choose 2–8 clips for a complete sequence without filler.</p></div>
                 <div class="wizard-choice-grid wizard-choice-grid--four wizard-choice-grid--compact">
                     @for($count = 2; $count <= 8; $count++)
                         <label class="wizard-choice wizard-choice--number"><input type="radio" name="clip_count" value="{{ $count }}" data-summary-label="{{ $count }} clips" @checked((int) old('clip_count', $settings['clip_count']) === $count) @if($count === 2) required @endif><span class="wizard-choice-title">{{ $count }}</span><span class="wizard-choice-description">clips</span></label>
                     @endfor
+                    <label class="wizard-choice wizard-choice--number wizard-choice--ai"><input type="radio" name="clip_count" value="auto" data-summary-label="Let AI decide · 2–8 clips" @checked((string) old('clip_count', $settings['clip_count']) === 'auto')><span class="wizard-choice-title">Let AI decide</span><span class="wizard-choice-description">2–8 clips</span></label>
                 </div>
             </section>
 
             @if($durationOptions['clip_duration'])
                 <section class="wizard-step" data-wizard-step data-wizard-group="VIDEO FORMAT" data-wizard-title="Choose video clip duration">
-                    <div class="wizard-question"><span class="wizard-question-number" data-wizard-number>09</span><h2 tabindex="-1">How long should each video clip be?</h2><p>This is the target duration for each scene in a new video.</p></div>
+                    <div class="wizard-question"><span class="wizard-question-number" data-wizard-number>09</span><h2 tabindex="-1">How long should each video clip be?</h2><p>Choose a fixed length, or let AI select a whole-second duration from 4 to 10 seconds for each beat.</p></div>
                     <div class="wizard-choice-grid wizard-choice-grid--four wizard-choice-grid--compact">
+                        <label class="wizard-choice wizard-choice--number wizard-choice--ai"><input type="radio" name="clip_duration" value="auto" data-summary-label="Let AI decide · up to 10 seconds per clip" @checked((string) old('clip_duration', $settings['clip_duration']) === 'auto') required><span class="wizard-choice-title">Let AI decide</span><span class="wizard-choice-description">4–10 sec per clip</span></label>
                         @foreach([4,6,8,10,12,15,20] as $duration)
-                            <label class="wizard-choice wizard-choice--number"><input type="radio" name="clip_duration" value="{{ $duration }}" data-summary-label="{{ $duration }} seconds per video clip" @checked((int) old('clip_duration', $settings['clip_duration']) === $duration) @if($duration === 4) required @endif><span class="wizard-choice-title">{{ $duration }}</span><span class="wizard-choice-description">seconds</span></label>
+                            <label class="wizard-choice wizard-choice--number"><input type="radio" name="clip_duration" value="{{ $duration }}" data-summary-label="{{ $duration }} seconds per video clip" @checked((string) old('clip_duration', $settings['clip_duration']) === (string) $duration)><span class="wizard-choice-title">{{ $duration }}</span><span class="wizard-choice-description">seconds</span></label>
                         @endforeach
                     </div>
                 </section>
             @else
-                <input type="hidden" name="clip_duration" value="8" data-summary-label="8 seconds per video clip">
+                <input type="hidden" name="clip_duration" value="auto" data-summary-label="Let AI decide · up to 10 seconds per video clip">
             @endif
 
             @if($durationOptions['extend_duration'])
                 <section class="wizard-step" data-wizard-step data-wizard-group="VIDEO FORMAT" data-wizard-title="Choose extension length">
-                    <div class="wizard-question"><span class="wizard-question-number" data-wizard-number>{{ str_pad((string) (10 - (int) (!$durationOptions['clip_duration'])), 2, '0', STR_PAD_LEFT) }}</span><h2 tabindex="-1">How long should a video extension be?</h2><p>This can be different from the clips in a new video.</p></div>
+                    <div class="wizard-question"><span class="wizard-question-number" data-wizard-number>{{ str_pad((string) (10 - (int) (!$durationOptions['clip_duration'])), 2, '0', STR_PAD_LEFT) }}</span><h2 tabindex="-1">How long should a video extension be?</h2><p>Choose a fixed length, or let AI select a whole-second duration from 4 to 10 seconds for this continuation.</p></div>
                     <div class="wizard-choice-grid wizard-choice-grid--four wizard-choice-grid--compact">
+                        <label class="wizard-choice wizard-choice--number wizard-choice--ai"><input type="radio" name="extend_duration" value="auto" data-summary-label="Let AI decide · up to 10 seconds for the extension" @checked((string) old('extend_duration', $settings['extend_duration']) === 'auto') required><span class="wizard-choice-title">Let AI decide</span><span class="wizard-choice-description">4–10 sec</span></label>
                         @foreach([4,6,8,10,12,15,20] as $duration)
-                            <label class="wizard-choice wizard-choice--number"><input type="radio" name="extend_duration" value="{{ $duration }}" data-summary-label="{{ $duration }} seconds per extension" @checked((int) old('extend_duration', $settings['extend_duration']) === $duration) @if($duration === 4) required @endif><span class="wizard-choice-title">{{ $duration }}</span><span class="wizard-choice-description">seconds</span></label>
+                            <label class="wizard-choice wizard-choice--number"><input type="radio" name="extend_duration" value="{{ $duration }}" data-summary-label="{{ $duration }} seconds per extension" @checked((string) old('extend_duration', $settings['extend_duration']) === (string) $duration)><span class="wizard-choice-title">{{ $duration }}</span><span class="wizard-choice-description">seconds</span></label>
                         @endforeach
                     </div>
                 </section>
             @else
-                <input type="hidden" name="extend_duration" value="8" data-summary-label="8 seconds per extension">
+                <input type="hidden" name="extend_duration" value="auto" data-summary-label="Let AI decide · up to 10 seconds per extension">
             @endif
 
             <section class="wizard-step" data-wizard-step data-wizard-group="VIDEO FORMAT" data-wizard-title="Choose a frame shape">

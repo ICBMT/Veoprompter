@@ -100,7 +100,11 @@ class PromptStudioTest extends TestCase
             'api_key' => 'test-provider-secret',
         ]);
         $owner = User::factory()->create();
-        $project = $this->makeProject($owner, ['audience' => 'Saved family audience', 'character_type' => 'robot']);
+        $project = $this->makeProject($owner, [
+            'audience' => 'Saved family audience',
+            'character_type' => 'robot',
+            'clip_count' => 'auto',
+        ]);
         $payload = [...$this->storyBrief(), 'audience' => 'Untrusted browser override'];
 
         $this->actingAs($owner)
@@ -120,6 +124,10 @@ class PromptStudioTest extends TestCase
                 && $request->hasHeader('x-goog-api-key', 'test-provider-secret')
                 && str_contains($systemInstruction, 'AI VIDEO STORYTELLER — MASTER SPECIFICATION')
                 && str_contains($systemInstruction, 'MANDATORY CONTINUATION INSTRUCTION')
+                && str_contains($systemInstruction, 'CLIP COUNT — AI DECIDES: Choose an exact total of 2–8 connected clips.')
+                && str_contains($systemInstruction, 'CLIP DURATION — AI DECIDES: Choose an exact whole-second duration from 4 through 10 seconds for each clip independently')
+                && str_contains($brief, 'Clip duration: AI decides; choose an exact whole-second duration from 4 to 10 seconds')
+                && str_contains($brief, 'Number of clips: AI decides; choose 2–8 connected clips')
                 && str_contains($brief, 'Why do bees visit flowers?')
                 && str_contains($brief, 'Saved family audience')
                 && ! str_contains($brief, 'Untrusted browser override')
@@ -127,6 +135,8 @@ class PromptStudioTest extends TestCase
                 && str_contains($brief, 'Visual style: 3d-family-animation')
                 && ! str_contains($brief, 'Visual style direction:');
         });
+
+        $this->assertSame('auto', $owner->promptProjects()->firstOrFail()->brief['clip_count']);
     }
 
     public function test_new_visual_styles_guide_generated_prompts_and_are_saved_with_readable_history_labels(): void
@@ -334,6 +344,8 @@ class PromptStudioTest extends TestCase
             'provider' => 'gemini',
             'model' => 'gemini-2.5-flash',
             'api_key' => 'test-provider-secret',
+            'allow_clip_duration_choice' => true,
+            'allow_extension_duration_choice' => true,
         ]);
         $owner = User::factory()->create();
         $project = $this->makeProject($owner, ['clip_duration' => 10, 'extend_duration' => 6]);
@@ -352,6 +364,42 @@ class PromptStudioTest extends TestCase
             data_get($request->data(), 'contents.0.parts.0.text', ''),
             'Clip duration: 6 seconds',
         ));
+    }
+
+    public function test_ai_selects_a_bounded_extension_duration_when_global_duration_questions_are_off(): void
+    {
+        Http::fake([
+            'https://generativelanguage.googleapis.com/*' => Http::response([
+                'candidates' => [['content' => ['parts' => [['text' => '## EXTENSION PROMPT'."\n".'Continue from the visible frame.']]]]],
+            ], 200),
+        ]);
+        AiSetting::create([
+            'provider' => 'gemini',
+            'model' => 'gemini-2.5-flash',
+            'api_key' => 'test-provider-secret',
+        ]);
+        $owner = User::factory()->create();
+        $project = $this->makeProject($owner, ['extend_duration' => 'auto']);
+
+        $this->actingAs($owner)
+            ->postJson(route('studio.generate', $project), [
+                'mode' => 'extend',
+                'next_action' => 'The character moves toward the flower.',
+                'visible_start' => 'A small bee hovers by a yellow flower.',
+            ])
+            ->assertOk()
+            ->assertJsonPath('saved_to_history', true);
+
+        Http::assertSent(function (ClientRequest $request): bool {
+            $systemInstructions = data_get($request->data(), 'systemInstruction.parts.0.text', '');
+            $brief = data_get($request->data(), 'contents.0.parts.0.text', '');
+
+            return str_contains($systemInstructions, 'EXTENSION DURATION — AI DECIDES: Choose one exact whole-second duration from 4 through 10 seconds')
+                && str_contains($brief, 'Clip duration: AI decides; choose an exact whole-second duration from 4 to 10 seconds')
+                && str_contains($brief, 'Workflow: Extend an existing video');
+        });
+
+        $this->assertSame('auto', $owner->promptProjects()->firstOrFail()->brief['clip_duration']);
     }
 
     public function test_provider_http_503_is_reported_as_temporary_unavailability_not_as_an_api_key_error(): void

@@ -35,6 +35,8 @@ class AiSetting extends Model
         ], [
             'provider' => 'gemini',
             'model' => 'gemini-2.5-flash',
+            'allow_clip_duration_choice' => false,
+            'allow_extension_duration_choice' => false,
         ]);
     }
 

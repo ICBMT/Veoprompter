@@ -22,7 +22,7 @@
             <div class="storyboard-art">
                 <div class="art-stars" aria-hidden="true"></div><div class="art-glow" aria-hidden="true"></div><div class="art-planet" aria-hidden="true"><span></span></div><div class="art-orbit art-orbit--one" aria-hidden="true"></div><div class="art-orbit art-orbit--two" aria-hidden="true"></div>
                 <div class="art-character" aria-hidden="true"><span class="character-antenna"></span><span class="character-head"><i class="robot-eye robot-eye--left"></i><i class="robot-eye robot-eye--right"></i><i class="robot-mouth"></i></span><span class="character-body"><i class="robot-core"></i></span><span class="character-arm character-arm--left"></span><span class="character-arm character-arm--right"></span><span class="character-leg character-leg--left"></span><span class="character-leg character-leg--right"></span></div>
-                <div class="art-location"><span>SUBJECT / CHARACTER</span><strong>{{ $characterLabel }}</strong></div><div class="art-lock"><span class="lock-check">✓</span> CONTINUITY LOCKED</div><div class="art-frame-number">01 <span>/</span> {{ str_pad((string) $settings['clip_count'], 2, '0', STR_PAD_LEFT) }}</div><div class="art-sun" aria-hidden="true"></div><div class="art-horizon" aria-hidden="true"></div>
+                <div class="art-location"><span>SUBJECT / CHARACTER</span><strong>{{ $characterLabel }}</strong></div><div class="art-lock"><span class="lock-check">✓</span> CONTINUITY LOCKED</div><div class="art-frame-number">01 <span>/</span> {{ \App\Support\ProjectSettings::isAiChoice($settings['clip_count']) ? 'AI' : str_pad((string) $settings['clip_count'], 2, '0', STR_PAD_LEFT) }}</div><div class="art-sun" aria-hidden="true"></div><div class="art-horizon" aria-hidden="true"></div>
             </div>
             <div class="storyboard-footer"><div class="frame-track" aria-hidden="true"><span class="frame-thumb is-current"><i></i></span><span class="frame-link"></span><span class="frame-thumb"><i></i></span><span class="frame-link"></span><span class="frame-thumb"><i></i></span><span class="frame-link"></span><span class="frame-thumb"><i></i></span></div><div class="storyboard-caption"><span>YOUR PROJECT / SAVED SETTINGS</span><span>↗</span></div></div>
         </div>
@@ -41,7 +41,7 @@
         <div class="project-preference-strip">
             <span><small>CHARACTER</small><strong>{{ $characterLabel }}</strong></span>
             <span><small>STYLE</small><strong>{{ \App\Support\ProjectSettings::visualStyleLabel($settings['visual_style'] ?? '3d-family-animation', $settings['style_detail'] ?? null) }}</strong></span>
-            <span><small>FORMAT</small><strong>{{ $settings['clip_count'] }} clips · {{ $settings['clip_duration'] }} sec / {{ $settings['extend_duration'] }} sec extension · {{ $settings['aspect_ratio'] }}</strong></span>
+            <span><small>FORMAT</small><strong>{{ \App\Support\ProjectSettings::formatClipCount($settings['clip_count']) }} · {{ \App\Support\ProjectSettings::formatDuration($settings['clip_duration']) }} / {{ \App\Support\ProjectSettings::formatDuration($settings['extend_duration']) }} extension · {{ $settings['aspect_ratio'] }}</strong></span>
             <span><small>NARRATION</small><strong>{{ $settings['narration'] === '1' ? $settings['language'].' · '.$settings['narrator_voice'].' · '.$settings['narrator_tone'] : 'Off' }}</strong></span>
         </div>
 
@@ -101,8 +101,8 @@
                         <div><span>Audience</span><strong>{{ $settings['audience'] }}</strong></div>
                         <div><span>Visual style</span><strong>{{ \App\Support\ProjectSettings::visualStyleLabel($settings['visual_style'] ?? '3d-family-animation', $settings['style_detail'] ?? null) }}</strong></div>
                         <div><span>Character type</span><strong>{{ $characterLabel }}@if(!empty($settings['character_details'])) · {{ \Illuminate\Support\Str::limit($settings['character_details'], 100) }}@endif</strong></div>
-                        <div><span>New-video length</span><strong>{{ $settings['clip_count'] }} clips · {{ $settings['clip_duration'] }} seconds each</strong></div>
-                        <div><span>Extension length</span><strong>{{ $settings['extend_duration'] }} seconds for the next clip</strong></div>
+                        <div><span>New-video length</span><strong>{{ \App\Support\ProjectSettings::formatClipCount($settings['clip_count']) }} · {{ \App\Support\ProjectSettings::formatDuration($settings['clip_duration'], true) }} each</strong></div>
+                        <div><span>Extension length</span><strong>{{ \App\Support\ProjectSettings::formatDuration($settings['extend_duration'], true) }} for the next clip</strong></div>
                         <div><span>Frame shape</span><strong>{{ $settings['aspect_ratio'] }}</strong></div>
                         @if(($settings['video_type'] ?? 'educational') === 'educational')<div><span>Learning depth</span><strong>{{ str_replace('-', ' ', $settings['educational_depth']) }}</strong></div>@endif
                         <div><span>Narration</span><strong>{{ $settings['narration'] === '1' ? $settings['language'].' · '.$settings['narrator_voice'].' · '.$settings['narrator_accent'].' · '.$settings['narrator_tone'] : 'Off' }}</strong></div>

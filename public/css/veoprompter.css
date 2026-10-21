@@ -1097,6 +1097,10 @@ body {
 .wizard-choice--number::after { top: 6px; right: 6px; width: 13px; height: 13px; font-size: 9px; }
 .wizard-choice--number .wizard-choice-title { padding: 0; font-family: var(--mono); font-size: 17px; }
 .wizard-choice--number .wizard-choice-description { font-size: 9px; }
+.wizard-choice--ai { border-color: #3f6879; background: linear-gradient(135deg, #172d39, #121e29); }
+.wizard-choice--ai .wizard-choice-title { color: #bfeeff; font-family: inherit; font-size: 10px; font-weight: 720; line-height: 1.25; }
+.wizard-choice--ai .wizard-choice-description { color: #a4c8d4; font-size: 8px; line-height: 1.35; }
+.wizard-choice--ai.is-selected { border-color: #8adcf1; background: linear-gradient(135deg, #1e4050, #192b39); box-shadow: inset 0 0 0 1px rgb(152 231 255 / 14%), 0 0 22px rgb(94 193 224 / 10%); }
 .wizard-choice--language { min-height: 82px; }
 .wizard-choice--language .wizard-choice-icon { color: #c8bdff; border-color: #4d4d73; background: #211f34; font-family: var(--mono); font-size: 9px; }
 .wizard-choice--custom { border-style: dashed; }

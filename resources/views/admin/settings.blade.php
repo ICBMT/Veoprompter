@@ -70,22 +70,22 @@
     </section>
 
     <section class="admin-card duration-options-card" aria-labelledby="duration-options-heading">
-        <header class="admin-card-header"><span class="admin-card-icon" aria-hidden="true">◷</span><div><h2 id="duration-options-heading">Project duration choices</h2><p>Control whether users can customize clip and extension length in project setup.</p></div></header>
+        <header class="admin-card-header"><span class="admin-card-icon" aria-hidden="true">◷</span><div><h2 id="duration-options-heading">Project duration choices</h2><p>Control whether users see the clip-length questions in project setup.</p></div></header>
         <form class="admin-form" action="{{ route('admin.duration-options.update', [], false) }}" method="post">
             @csrf
             @method('PUT')
             <div class="admin-form-grid">
                 <div class="admin-field admin-field--wide">
                     <input type="hidden" name="allow_clip_duration_choice" value="0">
-                    <label class="switch-row"><span><strong>Allow users to choose each video clip’s length</strong><small>When off, new and existing projects use 8 seconds per clip.</small></span><input type="checkbox" name="allow_clip_duration_choice" value="1" @checked($settings->allow_clip_duration_choice)><i class="switch-track"></i></label>
+                    <label class="switch-row"><span><strong>Show the video clip-duration question</strong><small>When off, AI chooses a whole-second duration from 4 to 10 seconds for each clip.</small></span><input type="checkbox" name="allow_clip_duration_choice" value="1" @checked($settings->allow_clip_duration_choice)><i class="switch-track"></i></label>
                 </div>
                 <div class="admin-field admin-field--wide">
                     <input type="hidden" name="allow_extension_duration_choice" value="0">
-                    <label class="switch-row"><span><strong>Allow users to choose video extension length</strong><small>When off, every extension uses the 8-second default.</small></span><input type="checkbox" name="allow_extension_duration_choice" value="1" @checked($settings->allow_extension_duration_choice)><i class="switch-track"></i></label>
+                    <label class="switch-row"><span><strong>Show the video-extension duration question</strong><small>When off, AI chooses a whole-second duration from 4 to 10 seconds for the continuation.</small></span><input type="checkbox" name="allow_extension_duration_choice" value="1" @checked($settings->allow_extension_duration_choice)><i class="switch-track"></i></label>
                 </div>
             </div>
-            <div class="admin-help"><span aria-hidden="true">ⓘ</span><div><strong>These are global controls.</strong> Turning a choice off hides its setup question and forces 8 seconds during project creation, editing, and prompt generation. You can further disable either choice for an individual account in User management; an individual setting cannot bypass a global off switch.</div></div>
-            <div class="admin-form-footer"><p>New accounts keep both choices on unless changed here or for that account.</p><button class="button-primary" type="submit"><span>Save duration options</span><span class="button-icon" aria-hidden="true">↗</span></button></div>
+            <div class="admin-help"><span aria-hidden="true">ⓘ</span><div><strong>These are global controls, off by default.</strong> Turning a choice off hides that setup question and lets AI choose a suitable duration between 4 and 10 seconds. Turn it on to let eligible accounts choose an AI-selected or fixed duration. Account-level switches in User management can further restrict access; they cannot bypass a global off switch.</div></div>
+            <div class="admin-form-footer"><p>Both controls start off. Enable them here and for an account to show that duration question.</p><button class="button-primary" type="submit"><span>Save duration options</span><span class="button-icon" aria-hidden="true">↗</span></button></div>
         </form>
     </section>
 

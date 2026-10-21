@@ -102,7 +102,7 @@ class UserManagementController extends Controller
         $user->save();
 
         return redirect()->to(route('admin.users.show', $user, false))
-            ->with('success', 'This account’s duration choices have been updated. Disabled choices use the 8-second default.');
+            ->with('success', 'This account’s duration choices have been updated. Disabled choices let AI select a suitable length up to 10 seconds.');
     }
 
     public function show(User $user): Response

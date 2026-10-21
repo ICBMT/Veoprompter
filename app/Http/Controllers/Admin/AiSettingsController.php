@@ -41,7 +41,7 @@ class AiSettingsController extends Controller
         $settings->save();
 
         return redirect()->to(route('admin.settings', [], false))
-            ->with('success', 'Duration choice controls saved. Disabled choices now use the 8-second default.');
+            ->with('success', 'Duration controls saved. When a choice is disabled, AI selects a suitable clip length up to 10 seconds.');
     }
 
     public function models(Request $request, AiProviderSetupService $providerSetup): JsonResponse

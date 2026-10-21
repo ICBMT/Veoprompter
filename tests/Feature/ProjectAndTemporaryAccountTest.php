@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Models\AiSetting;
 use App\Models\StudioProject;
 use App\Models\User;
 use App\Support\ProjectSettings;
@@ -14,6 +15,11 @@ class ProjectAndTemporaryAccountTest extends TestCase
 
     public function test_project_creation_saves_preferences_and_the_owner_can_update_them_later(): void
     {
+        $durationSettings = AiSetting::current();
+        $durationSettings->allow_clip_duration_choice = true;
+        $durationSettings->allow_extension_duration_choice = true;
+        $durationSettings->save();
+
         $owner = User::factory()->create();
         $payload = [
             'name' => 'Urdu space stories',

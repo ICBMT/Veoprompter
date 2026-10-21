@@ -8,8 +8,8 @@
     $characterLabels = ['ai-choice' => 'AI chooses', 'human-male' => 'Human male', 'human-female' => 'Human female', 'robot' => 'Robot', 'fictional' => 'Fictional character'];
     $videoTypeLabel = \App\Support\ProjectSettings::videoTypes()[$project->brief['video_type'] ?? 'educational'] ?? 'Other / custom video';
     $clipFormat = $project->mode === 'extend'
-        ? 'Next clip · '.($project->brief['clip_duration'] ?? '—').' seconds · '.($project->brief['aspect_ratio'] ?? '—')
-        : ($project->brief['clip_count'] ?? '—').' clips · '.($project->brief['clip_duration'] ?? '—').' seconds · '.($project->brief['aspect_ratio'] ?? '—');
+        ? 'Next clip · '.\App\Support\ProjectSettings::formatDuration($project->brief['clip_duration'] ?? '—', true).' · '.($project->brief['aspect_ratio'] ?? '—')
+        : \App\Support\ProjectSettings::formatClipCount($project->brief['clip_count'] ?? '—').' · '.\App\Support\ProjectSettings::formatDuration($project->brief['clip_duration'] ?? '—', true).' · '.($project->brief['aspect_ratio'] ?? '—');
 @endphp
 <div class="history-detail">
     <a href="{{ route('history.index', [], false) }}" class="history-back"><span aria-hidden="true">←</span> Back to your library</a>

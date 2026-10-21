@@ -1,6 +1,6 @@
 # VeoPrompter for Google Flow
 
-This is a Chrome Manifest V3 extension kept separate from the Laravel application code. It receives generated or saved prompts through a site-scoped VeoPrompter bridge and stores the active prompt in `chrome.storage.local`. It prepares Sections 1–7 first, then each clip prompt in order, with Sections 9–10 attached to the final clip. Unrecognized formats remain a single copy-ready part.
+This is a Chrome Manifest V3 extension kept separate from the Laravel application code. It receives generated or saved prompts through a site-scoped VeoPrompter bridge and stores the active prompt in `chrome.storage.local`. It prepares Sections 1–7 first, then every numbered clip prompt in order, with Sections 9–10 attached to the final clip. It supports AI-selected clip counts and per-clip durations because it follows the prompts actually returned; no extension-side timing settings are needed. Unrecognized formats remain a single copy-ready part.
 
 ## Load it in Chrome
 

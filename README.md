@@ -8,8 +8,8 @@ VeoPrompter is a Laravel 13 prompt studio for creating detailed, continuity-firs
 - Continues a video from a written final-frame description and, optionally, a supplied still image.
 - Carries character, scene, camera, object, lighting, and sound details across clips; continuation prompts include the required verbatim handoff instruction from the master specification.
 - Requires sign-in before opening the prompt workspace or generating a prompt.
-- Lets signed-in users create projects with reusable preferences for default video type, audience, visual style, character type/profile, clip count, video and extension duration, aspect ratio, learning depth for explainers, narration, language, voice, accent, tone, music, and sound effects. Preferences can be edited later and are applied server-side to every generation in that project.
-- Lets administrators control clip-duration and extension-duration choices globally and per user account. When either control is off, the corresponding question is hidden and prompts use the 8-second default.
+- Lets signed-in users create projects with reusable preferences for default video type, audience, visual style, character type/profile, clip count, video and extension duration, aspect ratio, learning depth for explainers, narration, language, voice, accent, tone, music, and sound effects. Users can set a fixed clip count or let AI choose 2–8 clips; AI-selected durations are chosen per clip from 4–10 seconds. Preferences can be edited later and are applied server-side to every generation in that project.
+- Lets administrators control clip-duration and extension-duration questions globally and per user account. Both global controls default off; when a question is hidden, AI selects a suitable 4–10-second duration instead of forcing eight seconds.
 - Saves each completed generation to the selected project and the user's private prompt library, where users can search, copy, download, revisit, and delete prompt kits.
 - Generates device-independent Gemini TTS previews for all 240 language × voice × accent × tone combinations. Each combination is generated on first request, converted to browser-friendly WAV, and cached privately for later playback; preview audio is illustrative and is not attached to the final video prompt.
 - Gives administrators a registered-user directory with recent online/offline presence and access to each user's saved prompt outputs. Administrators can create customer or admin test accounts that expire three hours after creation.
@@ -20,7 +20,7 @@ Generated prompts improve the odds of consistency but cannot guarantee that a vi
 
 ## Chrome extension for Google Flow
 
-The optional Manifest V3 extension lives in [`chrome-extension/`](chrome-extension/). It splits a prompt into Sections 1–7 followed by each clip in order, with Sections 9–10 attached to the final clip. Unrecognized formats stay together as one part. Flow can be closed while the extension stores or prepares a prompt.
+The optional Manifest V3 extension lives in [`chrome-extension/`](chrome-extension/). It splits a prompt into Sections 1–7 followed by each numbered clip in order, with Sections 9–10 attached to the final clip. AI-selected clip counts and per-clip durations need no special extension settings; the handoff follows the generated headings. Unrecognized formats stay together as one part. Flow can be closed while the extension stores or prepares a prompt.
 
 For local testing:
 
@@ -81,7 +81,7 @@ Open `http://127.0.0.1:8000`. The default development mailer writes reset emails
    The command asks for a password without echoing it; use at least 12 characters. If the address already belongs to an account, it enables admin access without changing that account's password. Sign in at `/login` and open **Control room**.
 7. In **Control room → AI provider connection**, choose Google Gemini or an OpenAI-compatible provider and enter its API key. The model list loads after you finish typing; you can also click **Load available models** to use a key already saved for that same provider and endpoint. Select a model, click **Test selected model** to get a short text reply, then save the connection. The test does not save settings or create a prompt-history item. If an API does not expose a model catalogue, you can enter its model ID manually. The key is sent to this app's server for model discovery/testing; the browser never calls the provider directly. The optional extension-frame image is forwarded for prompt generation and not retained.
 8. In **Control room → Voice sample generation**, enter a separate Google API key with Gemini TTS access and the enabled speech model ID. The key is encrypted and used only by the server. Each of the 240 supported preference combinations is generated only when first previewed and then cached privately; no bulk generation runs automatically.
-9. Use **Control room → Project duration choices** to enable or disable the two duration questions for all accounts. Both global switches default on. From **User management → Manage account**, an administrator can also disable either choice for a specific account. A choice is available only when both its global and per-account switches are on; otherwise it is hidden and the effective duration is fixed at eight seconds.
+9. Use **Control room → Project duration choices** to show or hide the two duration questions for all accounts. Both global switches default off, so AI initially chooses each duration between 4 and 10 seconds. Enable a global switch and the matching account switch under **User management → Manage account** to show that question; users can then choose a fixed length or let AI decide. If either switch is off, the question is hidden and the effective duration is AI-selected, never over 10 seconds.
 
 Public account registration is enabled. Sign-in is required to open projects and generate prompts. Configure your deployment's privacy notice and account-retention policy for your audience. Administrators can review user activity and create three-hour temporary test accounts from **User management**.
 
@@ -130,7 +130,7 @@ The API key field is write-only in the UI: after saving, VeoPrompter shows only 
 php artisan test
 ```
 
-The test suite covers the master prompt's synchronization with root `prompt.txt`, sign-in-gated project workflows, reusable owner-scoped settings, private generation history, three-hour test-account expiry, presence reporting, admin-only provider configuration, encrypted credentials, model-list discovery, test-connection requests, and provider request construction. Run the suite in an environment with PHP, Composer dependencies, and PDO SQLite installed.
+The test suite covers the master prompt's synchronization with root `prompt.txt`, sign-in-gated project workflows, reusable owner-scoped settings, AI-selected and manually bounded clip counts and durations, global-plus-account duration policies, private generation history, three-hour test-account expiry, presence reporting, admin-only provider configuration, encrypted credentials, model-list discovery, test-connection requests, and provider request construction. Run the suite in an environment with PHP, Composer dependencies, and PDO SQLite installed.
 
 ## Project layout
 

@@ -23,7 +23,7 @@ Unless the user requests otherwise:
 - Format: short educational animation.
 - Visual style: polished, high-quality 3D family-friendly animation, unless the user requests 2D, realistic, stop-motion, or another specific style.
 - Structure: 4 clips by default; use exactly the number the user requests when specified.
-- Clip duration: approximately 8 seconds by default. Use the user's selected duration exactly; if the video tool has a different limit, adapt without silently changing the requested count or timing.
+- Clip duration: AI chooses each clip's exact whole-second duration between 4 and 10 seconds by default, based on the action; never exceed 10 seconds when AI chooses. Use any user-selected fixed duration exactly.
 - Narration: one consistent, friendly female American English narrator.
 - Language: English throughout narration, spoken dialogue, signs, and on-screen text unless the user asks for another language.
 - Tone: clear, warm, engaging, educational, not rushed.
@@ -129,13 +129,13 @@ F. No unintended additions
 Do not introduce new characters, props, text, logos, subtitles, watermarks, scene changes, or visual effects unless the story explicitly needs them. Avoid malformed anatomy, duplicated limbs, flicker, warping, object popping, sudden camera resets, and inconsistent shadows.
 
 G. Action and duration
-Each clip should contain one main action or beat that advances the selected format. Use the exact requested duration; eight seconds is only the default. Give the action a readable setup, change, and result without crowding in extra events. Make contact, weight, scale, direction, cause and effect, and object-state changes physically plausible. Avoid simultaneous actions that compete for attention. Preserve a brief, settled final beat for the handoff whenever the duration allows.
+Each clip should contain one main action or beat that advances the selected format. Use the exact requested duration when fixed. When AI is asked to decide or no duration is supplied, choose and state an exact whole-second duration from 4 to 10 seconds based on the action; never exceed 10 seconds. Give the action a readable setup, change, and result without crowding in extra events. Make contact, weight, scale, direction, cause and effect, and object-state changes physically plausible. Avoid simultaneous actions that compete for attention. Preserve a brief, settled final beat for the handoff whenever the duration allows.
 
 H. Narration timing
 Only write speech when narration or dialogue is requested. Use the selected language and voice (English and the default narrator only when unspecified). Fit exact words to the available speaking time at a natural pace, with room for pauses and visual comprehension; as a rough guide, allow about 2–2.5 words per second of actual speech time. An 8-second clip will often need only about 10–15 spoken words, adjusted for language, delivery, and silence. Match each line to visible action and do not narrate continuously or explain what the image cannot support.
 
 SECTION 7 — CLIP PLAN AND CONTINUITY MAP
-Plan exactly the number of clips requested; use four only when the user has not specified a count. Design one coherent arc for the selected format: an immediate visual hook, purposeful development with no filler or repeated beats, and a satisfying payoff or conclusion. In educational mode, make each clip teach one clear point; in other modes, advance the requested story, message, mood, or product goal. For every clip, specify:
+Plan exactly the requested number of clips; use four only when the count is unspecified. When AI is asked to choose the count, select 2–8 clips and use the smallest number needed for a complete, no-filler arc. State the selected total in the overview and provide exactly that many clips. Design one coherent arc for the selected format: an immediate visual hook, purposeful development with no filler or repeated beats, and a satisfying payoff or conclusion. In educational mode, make each clip teach one clear point; in other modes, advance the requested story, message, mood, or product goal. For every clip, specify:
 - Clip number and short title.
 - Purpose for the selected format (one learning point in educational mode).
 - Opening frame: exact character and object positions, pose, expression, camera framing, camera angle, lighting, and any movement already in progress.
@@ -148,10 +148,10 @@ Plan exactly the number of clips requested; use four only when the user has not 
 Treat every clip's ending as the source of the next clip's opening, for any requested number of clips. No unexplained resets, jumps, or state changes. Keep a simple continuity ledger for identities, positions, prop states, motion, camera, lighting, and audio; carry forward only changes that the viewer sees happen.
 
 SECTION 8 — FOUR COPY-AND-PASTE VIDEO PROMPTS
-Provide exactly one separate, complete prompt for each requested clip; four clips are the default, not a limit. Each prompt must make sense when copied alone into the video tool. Do not write “same as above,” “use previous prompt,” or rely on context that the video model may not receive. Use consecutive clip numbers beginning with 1, without gaps or duplicates, and the exact copy heading pattern “COPY CLIP 1 PROMPT,” “COPY CLIP 2 PROMPT,” and so on. Keep the existing SECTION 8 heading and prompt labels so the extension can split the result.
+Provide exactly one separate, complete prompt for each selected clip; four clips are the default only when count is unspecified, and an AI-selected count must stay between 2 and 8. Each prompt must make sense when copied alone into the video tool. Do not write “same as above,” “use previous prompt,” or rely on context that the video model may not receive. Use consecutive clip numbers beginning with 1, without gaps or duplicates, and the exact copy heading pattern “COPY CLIP 1 PROMPT,” “COPY CLIP 2 PROMPT,” and so on. Keep the existing SECTION 8 heading and prompt labels so the extension can split the result.
 
 Every clip prompt must include:
-1. Clip number, purpose, and approximate duration.
+1. Clip number, purpose, and exact selected duration. For AI-selected timing, state the chosen whole-second length from 4 to 10 seconds.
 2. Visual style.
 3. Canonical character or recurring-subject description with the most important identifying details; do not invent a character when the format has none.
 4. Environment, props, lighting, and camera setup.
@@ -235,7 +235,7 @@ The AI must:
 3. Preserve the established character, scene, props, camera, lens impression, visual style, color grading, lighting, and shadows.
 4. Use the user's requested next action while keeping it physically plausible and continuous with the visible state.
 5. Include the mandatory continuation instruction VERBATIM in the extension prompt.
-6. Make the extension prompt self-contained, so it can be pasted directly into the video tool.
+6. Make the extension prompt self-contained, so it can be pasted directly into the video tool. If duration is AI-selected, choose and state one exact whole-second length from 4 to 10 seconds; never exceed 10 seconds.
 7. Describe the opening state based on the supplied frame and end with a settled frame suitable for another extension.
 8. Preserve the same narrator and audio style if audio is requested. Do not claim audio can be matched perfectly from a still image alone.
 9. Avoid restarting the action, looping the previous action, freezing, changing the scene, or introducing unexplained characters or props.
