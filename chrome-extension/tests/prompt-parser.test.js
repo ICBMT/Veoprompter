@@ -82,9 +82,15 @@ test('splits section-per-clip v2 output and supports AI-selected counts above ei
     ];
 
     for (let clip = 1; clip <= clipCount; clip += 1) {
+        const transitionLine = clip === 1
+            ? 'TRANSITION TYPE: INITIAL CLIP — NO PREVIOUS HANDOFF'
+            : clip === 6
+                ? 'TRANSITION TYPE: TYPE C — NARRATIVE / TEMPORAL TRANSITION'
+                : 'TRANSITION TYPE: TYPE A — DIRECT CONTINUATION';
         lines.push(
             `SECTION ${7 + clip} — COPY CLIP ${clip} PROMPT`,
             '```text',
+            transitionLine,
             `Clip ${clip}: a self-contained prompt with a ${clip === 1 ? 3 : 6}-second action.`,
             '```',
         );
@@ -100,9 +106,44 @@ test('splits section-per-clip v2 output and supports AI-selected counts above ei
     assert.deepEqual(parsed.chunks.slice(1).map((chunk) => chunk.clipNumber), Array.from({ length: clipCount }, (_, index) => index + 1));
     assert.match(parsed.chunks[1].text, /Clip 1: a self-contained prompt with a 3-second action/);
     assert.match(parsed.chunks[10].text, /Clip 10: a self-contained prompt/);
+    assert.equal(parsed.chunks[6].transitionType, 'C');
+    assert.equal(parsed.chunks[6].label, 'Transition clip 6 · Type C');
     assert.match(parsed.chunks[10].text, /SECTION 9\+ — FINAL CONTINUITY AUDIT/);
     assert.match(parsed.chunks[10].text, /All ten handoffs are coherent/);
     assert.match(parsed.notice, /10 clip prompts separated/);
+});
+
+test('classifies Type A, Type B, and Type C clips for the extension handoff', () => {
+    const parsed = parsePrompt([
+        'SECTION 1 — PROJECT OVERVIEW',
+        'A short story with a deliberate time transition.',
+        'SECTION 8 — COPY-AND-PASTE VIDEO PROMPTS',
+        'COPY CLIP 1 PROMPT',
+        'TRANSITION TYPE: INITIAL CLIP — NO PREVIOUS HANDOFF',
+        'The character plants a seed.',
+        'COPY CLIP 2 PROMPT',
+        'TRANSITION TYPE: TYPE A — DIRECT CONTINUATION',
+        'Continue this exact scene from the frame shown. The character waters the seed.',
+        'COPY CLIP 3 PROMPT',
+        'TRANSITION TYPE: TYPE B — NATURAL ACTION TRANSITION',
+        'The character carries a watering can through the garden gate.',
+        'COPY TRANSITION CLIP 4 PROMPT',
+        'TRANSITION TYPE: TYPE C — NARRATIVE / TEMPORAL TRANSITION',
+        'Before: a young plant. Transformation: seasons pass in a purposeful time-lapse. After: a mature tree.',
+        'SECTION 9 — EXACT HANDOFF SPECIFICATION',
+        'The mature tree is the canonical state for the next clip.',
+    ].join('\n'));
+
+    assert.equal(parsed.format, 'clip-sequence');
+    assert.deepEqual(parsed.chunks.slice(1).map((chunk) => chunk.transitionType), [null, 'A', 'B', 'C']);
+    assert.equal(parsed.chunks[2].label, 'Clip 2 · Type A');
+    assert.equal(parsed.chunks[3].label, 'Clip 3 · Type B');
+    assert.equal(parsed.chunks[4].label, 'Transition clip 4 · Type C · final handoff');
+    assert.match(parsed.chunks[4].transitionLabel, /narrative \/ temporal transition/);
+    assert.doesNotMatch(parsed.chunks[4].text, /Continue this exact scene/);
+    assert.match(parsed.chunks[4].text, /Before: a young plant/);
+    assert.match(parsed.chunks[4].text, /SECTION 9 — EXACT HANDOFF SPECIFICATION/);
+    assert.match(parsed.notice, /1 dedicated Type C transition clip identified/);
 });
 
 test('keeps a one-clip result copy-ready and includes trailing continuity sections', () => {

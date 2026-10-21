@@ -26,6 +26,12 @@ class MasterSpecificationTest extends TestCase
         $this->assertStringContainsString('AI-DIRECTED CLIP DURATION', $specification);
         $this->assertStringContainsString('do not default to four or impose an arbitrary maximum', $specification);
         $this->assertStringContainsString('a simple reveal may need only a few seconds', $specification);
+        $this->assertStringContainsString('TRANSITION CLIP SYSTEM', $specification);
+        $this->assertStringContainsString('TYPE A — DIRECT CONTINUATION', $specification);
+        $this->assertStringContainsString('TYPE B — NATURAL ACTION TRANSITION', $specification);
+        $this->assertStringContainsString('TYPE C — NARRATIVE / TEMPORAL TRANSITION', $specification);
+        $this->assertStringContainsString('TRANSITION TYPE: TYPE C — NARRATIVE / TEMPORAL TRANSITION', $specification);
+        $this->assertStringContainsString('Do not include it in a Type C narrative/temporal transition clip', $specification);
         $this->assertStringContainsString('MANDATORY CONTINUATION INSTRUCTION', $specification);
         $this->assertStringContainsString('Whatever was already in motion keeps its direction and speed through the cut rather than restarting', $specification);
         $this->assertStringContainsString('Never generate images or videos.', $specification);

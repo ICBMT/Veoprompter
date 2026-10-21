@@ -6,7 +6,7 @@ VeoPrompter is a Laravel 13 prompt studio for creating detailed, continuity-firs
 
 - Creates educational story plans with the existing accuracy check, character and world bibles, a character-reference **image prompt**, continuity maps, and independently copyable clip prompts; non-educational modes use format-aware treatments without forcing lessons or mascots.
 - Continues a video from a written final-frame description and, optionally, a supplied still image.
-- Carries character, scene, camera, object, lighting, and sound details across clips; continuation prompts include the required verbatim handoff instruction from the master specification.
+- Plans each clip handoff as a direct continuation, a visible natural-action bridge, or an intentional narrative/temporal transition. Meaningful Type C transition clips are never filler and count within the selected total; Type A clips and Type B clips that begin directly from the previous final frame use the verbatim continuation instruction; Type C clips do not. Character, scene, camera, object, lighting, and sound continuity remain governed by the master specification.
 - Requires sign-in before opening the prompt workspace or generating a prompt.
 - Lets signed-in users create projects with reusable preferences for default video type, audience, visual style, character type/profile, clip count, video and extension duration, aspect ratio, learning depth for explainers, narration, language, voice, accent, tone, music, and sound effects. New projects default to curious children and families, short educational animation, polished family-friendly 3D, an AI-directed clip count, vertical 9:16 framing, a female American English narrator, and subtle music/effects. Users can choose a fixed count from 2–8 or let AI determine the minimum practical number without an arbitrary cap. AI-selected durations are chosen independently for each clip and extension, using the shortest practical whole-second length up to 10 seconds. Preferences can be edited later and are applied server-side to every generation in that project.
 - Lets administrators control clip-duration and extension-duration questions globally and per user account. Both global controls default off; when a question is hidden, AI selects the shortest prompt-appropriate duration, up to 10 seconds, rather than forcing eight seconds.
@@ -20,7 +20,7 @@ Generated prompts improve the odds of consistency but cannot guarantee that a vi
 
 ## Chrome extension for Google Flow
 
-The optional Manifest V3 extension lives in [`chrome-extension/`](chrome-extension/). It splits a prompt into Sections 1–7 followed by every numbered clip in order, with continuity notes and final audits attached to the final clip. It understands both the app's standard Section 8 clip list and the newer section-per-clip prompt layout, so AI-directed counts and durations need no special extension settings. Unrecognized formats stay together as one part. Flow can be closed while the extension stores or prepares a prompt.
+The optional Manifest V3 extension lives in [`chrome-extension/`](chrome-extension/). It splits a prompt into Sections 1–7 followed by every numbered clip in order, with continuity notes and final audits attached to the final clip. It understands both the app's standard Section 8 clip list and the newer section-per-clip prompt layout; parsed Type A/B/C handoff metadata is visible in part labels, and dedicated Type C transition clips are identified as such. AI-directed counts and durations need no special extension settings. Unrecognized formats stay together as one part. Flow can be closed while the extension stores or prepares a prompt.
 
 For local testing:
 
@@ -128,9 +128,10 @@ The API key field is write-only in the UI: after saving, VeoPrompter shows only 
 
 ```bash
 php artisan test
+node --test chrome-extension/tests/*.test.js
 ```
 
-The test suite covers the master prompt's synchronization with root `prompt.txt`, sign-in-gated project workflows, reusable owner-scoped settings, AI-directed clip counts alongside bounded manual choices, AI-directed durations capped at 10 seconds, global-plus-account duration policies, private generation history, three-hour test-account expiry, presence reporting, admin-only provider configuration, encrypted credentials, model-list discovery, test-connection requests, and provider request construction. Run the suite in an environment with PHP, Composer dependencies, and PDO SQLite installed.
+The test suite covers the master prompt's synchronization with root `prompt.txt`, transition-planning rules and continuation exceptions, sign-in-gated project workflows, reusable owner-scoped settings, AI-directed clip counts alongside bounded manual choices, AI-directed durations capped at 10 seconds, global-plus-account duration policies, private generation history, three-hour test-account expiry, presence reporting, admin-only provider configuration, encrypted credentials, model-list discovery, test-connection requests, and provider request construction. The extension tests cover grouped and section-per-clip parsing, Type A/B/C labeling, and safe click-to-paste. Run the PHP suite with PHP, Composer dependencies, and PDO SQLite installed; run extension tests with Node using the command below.
 
 ## Project layout
 

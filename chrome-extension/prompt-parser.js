@@ -1,7 +1,7 @@
 const SECTION_HEADING = /^SECTION\s+(\d+)(?:\b|\s|[—–:-])/i;
 const CLIP_HEADING_PATTERNS = [
-    /^(?:COPY\s+)?CLIP\s+(\d+)\s+(?:COPY[- ]AND[- ]PASTE\s+)?(?:VIDEO\s+)?PROMPT\b\s*(?:>|:|—|–|-)?\s*(.*)$/i,
-    /^CLIP\s+(\d+)\s*(?:[—–:-]\s*)?(?:COPY[- ]AND[- ]PASTE\s+)?(?:VIDEO\s+)?PROMPT\b\s*(?:>|:|—|–|-)?\s*(.*)$/i,
+    /^(?:COPY\s+)?(?:TRANSITION\s+)?CLIP\s+(\d+)(?:\s+TRANSITION)?\s+(?:COPY[- ]AND[- ]PASTE\s+)?(?:VIDEO\s+)?PROMPT\b\s*(?:>|:|—|–|-)?\s*(.*)$/i,
+    /^(?:TRANSITION\s+)?CLIP\s+(\d+)\s*(?:[—–:-]\s*)?(?:TRANSITION\s+)?(?:COPY[- ]AND[- ]PASTE\s+)?(?:VIDEO\s+)?PROMPT\b\s*(?:>|:|—|–|-)?\s*(.*)$/i,
 ];
 
 function decoratedHeading(line) {
@@ -36,6 +36,7 @@ function clipHeading(line) {
                     number: Number(match[1]),
                     inlineText: match[2].trim(),
                     sectionWrapped: candidate.sectionWrapped,
+                    transitionHeading: /^(?:COPY\s+)?TRANSITION\s+CLIP\b/i.test(candidate.text),
                 };
             }
         }
@@ -86,6 +87,23 @@ function extensionPrompt(lines) {
     return cleanCopyBlock(body.slice(0, stop < 0 ? body.length : stop));
 }
 
+function transitionType(text) {
+    const marker = text.match(/(?:INCOMING\s+)?TRANSITION\s+TYPE\s*:\s*([^\r\n]+)/i);
+    if (marker) {
+        const explicit = marker[1].match(/\bTYPE\s*([ABC])\b/i);
+        return explicit ? explicit[1].toUpperCase() : null;
+    }
+
+    const descriptive = text.match(/\bTYPE\s+([ABC])\s*[—–:-]\s*(?:DIRECT\s+CONTINUATION|NATURAL\s+ACTION\s+TRANSITION|NARRATIVE\s*\/\s*TEMPORAL\s+TRANSITION)\b/i);
+    return descriptive ? descriptive[1].toUpperCase() : null;
+}
+
+const TRANSITION_LABELS = {
+    A: 'direct continuation',
+    B: 'natural action transition',
+    C: 'narrative / temporal transition',
+};
+
 function fallback(raw, reason) {
     return {
         format: 'complete-prompt',
@@ -96,11 +114,12 @@ function fallback(raw, reason) {
 
 /**
  * Split either the app's Section 8 clip list or a section-per-clip v2 response
- * into context and individually copy-ready prompts. Continuity/audit sections
- * after the final clip are attached to that final handoff.
+ * into context and individually copy-ready prompts. Incoming Type A/B/C handoffs
+ * are labeled for the popup; continuity/audit sections after the final clip are
+ * attached to that final handoff.
  *
  * @param {string} raw
- * @returns {{format: string, chunks: Array<{kind: string, label: string, text: string, clipNumber?: number}>, notice: string}}
+ * @returns {{format: string, chunks: Array<{kind: string, label: string, text: string, clipNumber?: number, transitionType?: string|null, transitionLabel?: string|null}>, notice: string}}
  */
 export function parsePrompt(raw) {
     if (typeof raw !== 'string' || !raw.trim()) {
@@ -174,10 +193,19 @@ export function parsePrompt(raw) {
         }
 
         if (clipText) {
+            const transition = transitionType(clipText) ?? (clip.transitionHeading ? 'C' : null);
+            const label = transition === 'C'
+                ? `Transition clip ${clip.number} · Type C`
+                : transition
+                    ? `Clip ${clip.number} · Type ${transition}`
+                    : `Clip ${clip.number}`;
+
             chunks.push({
                 kind: 'clip',
                 clipNumber: clip.number,
-                label: `Clip ${clip.number}${hasHandoff ? ' · final handoff' : ''}`,
+                transitionType: transition,
+                transitionLabel: transition ? TRANSITION_LABELS[transition] : null,
+                label: `${label}${hasHandoff ? ' · final handoff' : ''}`,
                 text: clipText,
             });
         }
@@ -189,7 +217,11 @@ export function parsePrompt(raw) {
     }
 
     const hasHandoff = trailerStart < lines.length;
-    const notice = `${clipCount} clip prompt${clipCount === 1 ? '' : 's'} separated${hasHandoff ? '; the closing handoff and continuity sections are attached to the final clip' : ''}.`;
+    const transitionCount = chunks.filter((chunk) => chunk.transitionType === 'C').length;
+    const transitionNotice = transitionCount
+        ? `; ${transitionCount} dedicated Type C transition clip${transitionCount === 1 ? '' : 's'} identified`
+        : '';
+    const notice = `${clipCount} clip prompt${clipCount === 1 ? '' : 's'} separated${hasHandoff ? '; the closing handoff and continuity sections are attached to the final clip' : ''}${transitionNotice}.`;
 
     return {
         format: 'clip-sequence',
