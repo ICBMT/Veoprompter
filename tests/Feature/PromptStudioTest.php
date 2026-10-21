@@ -47,6 +47,9 @@ class PromptStudioTest extends TestCase
             ->assertSee('data-project-wizard', false)
             ->assertSee('data-wizard-step', false)
             ->assertSee('data-wizard-when="narration:1"', false)
+            ->assertSee('data-wizard-when="narration:1&amp;speech_mode:voiceover"', false)
+            ->assertSee('name="speech_mode"', false)
+            ->assertSee('Characters speak in-scene')
             ->assertSee('data-voice-preview-button', false)
             ->assertSee('data-wizard-title="Choose a video type"', false)
             ->assertSee('Cinematic story / short film')
@@ -59,7 +62,7 @@ class PromptStudioTest extends TestCase
             ->assertSee('Disney/Pixar-style 3D animation')
             ->assertSee('Japanese anime-style animation')
             ->assertSee('Preview this language')
-            ->assertSee('Preview this voice')
+            ->assertSee('Preview this narrator voice')
             ->assertSee('Preview this accent')
             ->assertSee('Preview the complete setup')
             ->assertSee('data-wizard-review-voice-preview', false);
@@ -127,12 +130,16 @@ class PromptStudioTest extends TestCase
                 && str_contains($systemInstruction, 'TRANSITION CLIP SYSTEM')
                 && str_contains($systemInstruction, 'Type A direct continuation, Type B natural action transition, or Type C narrative/temporal transition')
                 && str_contains($systemInstruction, 'do not include it in a Type C transition clip')
+                && str_contains($systemInstruction, 'SPOKEN AUDIO MODE — VOICE-OVER: Use one consistent off-screen narrator')
                 && str_contains($systemInstruction, 'CLIP COUNT — AI DIRECTS: Choose the minimum practical number of connected clips needed to communicate the idea clearly and give it a complete arc.')
                 && str_contains($systemInstruction, 'no arbitrary four-clip or eight-clip ceiling for this AI-selected choice')
-                && str_contains($systemInstruction, 'CLIP DURATION — AI DIRECTS: Choose the shortest practical exact whole-second duration for each clip independently')
-                && str_contains($systemInstruction, 'Short visual beats may be about 3 seconds')
+                && str_contains($systemInstruction, 'CLIP DURATION — AI DIRECTS: Choose an exact whole-second duration independently for each clip based on its real complexity, not a shortest-by-default rule')
+                && str_contains($systemInstruction, 'Use about 2–3 seconds for one simple reveal or movement')
+                && str_contains($systemInstruction, '7–10 seconds when coordinated beats, multiple subjects, a transformation')
                 && str_contains($brief, 'Aspect ratio: 9:16')
-                && str_contains($brief, 'Clip duration: AI decides; choose the shortest practical exact whole-second duration for the action and narration, up to 10 seconds')
+                && str_contains($brief, 'Speech mode: Voice-over narration by one consistent off-screen narrator')
+                && str_contains($brief, 'Spoken language: English')
+                && str_contains($brief, 'Clip duration: AI decides from complexity: about 2–3 seconds for a simple beat, 4–6 for a moderately layered action, and 7–10 when coordinated action, transformations, camera moves, multiple subjects, or speech genuinely need room')
                 && str_contains($brief, 'Number of clips: AI decides; choose the minimum practical total number of connected clips')
                 && str_contains($brief, 'Transition planning: Classify every incoming handoff as Type A (direct continuation), Type B (visible natural action), or Type C (intentional narrative/temporal transition with before → change → after)')
                 && str_contains($brief, 'Background music: Include subtle music that never overpowers speech')
@@ -146,6 +153,61 @@ class PromptStudioTest extends TestCase
         });
 
         $this->assertSame('auto', $owner->promptProjects()->firstOrFail()->brief['clip_count']);
+    }
+
+    public function test_character_dialogue_uses_distinct_character_voice_profiles_and_never_requests_a_narrator(): void
+    {
+        Http::fake([
+            'https://generativelanguage.googleapis.com/*' => Http::response([
+                'candidates' => [['content' => ['parts' => [['text' => "## PROJECT OVERVIEW\nTwo characters discuss pollination.\n\n### COPY CLIP 1 PROMPT\n```text\nMina speaks in a clear, youthful voice.\n```"]]]]],
+            ], 200),
+        ]);
+        AiSetting::create([
+            'provider' => 'gemini',
+            'model' => 'gemini-2.5-flash',
+            'api_key' => 'test-provider-secret',
+        ]);
+        $owner = User::factory()->create();
+        $project = $this->makeProject($owner, [
+            'narration' => '1',
+            'speech_mode' => ProjectSettings::SPEECH_MODE_CHARACTER_DIALOGUE,
+            'language' => 'Urdu',
+            'character_type' => 'fictional',
+            'character_details' => 'Mina, a cautious young inventor with copper goggles.',
+        ]);
+
+        $this->actingAs($owner)
+            ->postJson(route('studio.generate', $project), $this->storyBrief())
+            ->assertOk()
+            ->assertJsonPath('saved_to_history', true);
+
+        $run = $owner->promptProjects()->firstOrFail();
+        $savedBrief = $run->brief;
+        $this->assertSame(ProjectSettings::SPEECH_MODE_CHARACTER_DIALOGUE, $savedBrief['speech_mode']);
+        $this->assertSame('Urdu', $savedBrief['language']);
+        $this->get(route('history.show', $run))
+            ->assertOk()
+            ->assertSee('On-screen character dialogue')
+            ->assertSee('Urdu');
+
+        Http::assertSent(function (ClientRequest $request): bool {
+            $body = $request->data();
+            $systemInstruction = data_get($body, 'systemInstruction.parts.0.text', '');
+            $brief = data_get($body, 'contents.0.parts.0.text', '');
+
+            return str_contains($systemInstruction, 'SPOKEN AUDIO MODE — ON-SCREEN CHARACTER DIALOGUE')
+                && str_contains($systemInstruction, 'No off-screen narrator or voice-over')
+                && str_contains($systemInstruction, 'Give each speaking character an individually specified, distinctive voice identity')
+                && str_contains($systemInstruction, 'Include the relevant character voice profiles in every standalone clip prompt')
+                && str_contains($brief, 'Speech mode: On-screen character dialogue; no narrator')
+                && str_contains($brief, 'Spoken language: Urdu')
+                && str_contains($brief, 'Narration: Off; no voice-over narrator')
+                && str_contains($brief, 'Character dialogue: On; on-screen speakers in Urdu')
+                && str_contains($brief, 'Character voice direction: Create a distinct, detailed voice identity')
+                && str_contains($brief, 'Mina, a cautious young inventor with copper goggles.');
+        });
+
+        Http::assertSentCount(1);
     }
 
     public function test_new_visual_styles_guide_generated_prompts_and_are_saved_with_readable_history_labels(): void
@@ -403,12 +465,59 @@ class PromptStudioTest extends TestCase
             $systemInstructions = data_get($request->data(), 'systemInstruction.parts.0.text', '');
             $brief = data_get($request->data(), 'contents.0.parts.0.text', '');
 
-            return str_contains($systemInstructions, 'EXTENSION DURATION — AI DIRECTS: Choose the shortest practical exact whole-second duration')
-                && str_contains($brief, 'Clip duration: AI decides; choose the shortest practical exact whole-second duration for the action and narration, up to 10 seconds')
+            return str_contains($systemInstructions, 'EXTENSION DURATION — AI DIRECTS: Choose an exact whole-second duration that gives this continuation enough time to read clearly')
+                && str_contains($brief, 'Clip duration: AI decides from complexity: about 2–3 seconds for a simple beat, 4–6 for a moderately layered action, and 7–10 when coordinated action, transformations, camera moves, multiple subjects, or speech genuinely need room')
                 && str_contains($brief, 'Workflow: Extend an existing video');
         });
 
         $this->assertSame('auto', $owner->promptProjects()->firstOrFail()->brief['clip_duration']);
+    }
+
+    public function test_character_dialogue_extension_preserves_saved_voice_mode_without_claiming_to_hear_unseen_audio(): void
+    {
+        Http::fake([
+            'https://generativelanguage.googleapis.com/*' => Http::response([
+                'candidates' => [['content' => ['parts' => [['text' => "## EXTENSION PROMPT\nMina continues in-scene.\n"]]]]],
+            ], 200),
+        ]);
+        AiSetting::create([
+            'provider' => 'gemini',
+            'model' => 'gemini-2.5-flash',
+            'api_key' => 'test-provider-secret',
+        ]);
+        $owner = User::factory()->create();
+        $project = $this->makeProject($owner, [
+            'narration' => '1',
+            'speech_mode' => ProjectSettings::SPEECH_MODE_CHARACTER_DIALOGUE,
+            'language' => 'Urdu',
+            'character_type' => 'fictional',
+            'character_details' => 'Mina, a thoughtful young inventor with copper goggles.',
+        ]);
+
+        $this->actingAs($owner)
+            ->postJson(route('studio.generate', $project), [
+                'mode' => 'extend',
+                'next_action' => 'Mina gently lifts the lantern and says a short line to her robot companion.',
+                'visible_start' => 'Mina stands beside her robot companion, holding an unlit lantern.',
+            ])
+            ->assertOk()
+            ->assertJsonPath('mode', 'extend')
+            ->assertJsonPath('saved_to_history', true);
+
+        Http::assertSent(function (ClientRequest $request): bool {
+            $systemInstructions = data_get($request->data(), 'systemInstruction.parts.0.text', '');
+            $brief = data_get($request->data(), 'contents.0.parts.0.text', '');
+
+            return str_contains($systemInstructions, 'SPOKEN AUDIO MODE — ON-SCREEN CHARACTER DIALOGUE: Do not add a narrator or voice-over')
+                && str_contains($systemInstructions, 'A still frame reveals no voice')
+                && str_contains($systemInstructions, 'never claim it matches unseen prior audio')
+                && str_contains($brief, 'Speech mode: On-screen character dialogue; no narrator')
+                && str_contains($brief, 'Extension speech continuity: No narrator. Preserve character voice profiles')
+                && str_contains($brief, 'A still frame reveals no voice; do not claim to match unseen audio')
+                && str_contains($brief, 'Mina, a thoughtful young inventor with copper goggles.');
+        });
+
+        Http::assertSentCount(1);
     }
 
     public function test_provider_http_503_is_reported_as_temporary_unavailability_not_as_an_api_key_error(): void

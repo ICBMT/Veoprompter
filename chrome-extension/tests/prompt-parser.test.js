@@ -162,6 +162,27 @@ test('keeps a one-clip result copy-ready and includes trailing continuity sectio
     assert.match(parsed.chunks[1].text, /Final handoff details\./);
 });
 
+test('preserves character-specific voice identities in each copied standalone clip prompt', () => {
+    const parsed = parsePrompt([
+        'SECTION 3 — CHARACTER BIBLE',
+        'Mina: copper goggles, thoughtful personality; fixed voice is light mezzo pitch, warm brass-like timbre, measured cadence, crisp Urdu articulation.',
+        'Rafi: small blue robot; fixed voice is low-mid pitch, rounded synthetic resonance, clipped cadence, soft metallic texture.',
+        'SECTION 8 — COPY-AND-PASTE VIDEO PROMPTS',
+        'COPY CLIP 1 PROMPT',
+        '```text',
+        'Mina and Rafi stand beside the flower. Keep Mina’s warm mezzo voice distinct from Rafi’s rounded synthetic voice.',
+        'DIALOGUE — Mina: “The pollen travels with the bee.” Rafi: “I see it land on the next flower.”',
+        'Preserve each named character’s exact voice identity and speaker mapping throughout this clip.',
+        '```',
+    ].join('\n'));
+
+    assert.equal(parsed.format, 'clip-sequence');
+    assert.match(parsed.chunks[0].text, /fixed voice is light mezzo pitch/);
+    assert.match(parsed.chunks[1].text, /Keep Mina’s warm mezzo voice distinct from Rafi’s rounded synthetic voice/);
+    assert.match(parsed.chunks[1].text, /DIALOGUE — Mina:/);
+    assert.match(parsed.chunks[1].text, /Preserve each named character’s exact voice identity/);
+});
+
 test('extracts the self-contained copy block from an extension prompt', () => {
     const parsed = parsePrompt([
         'Visible starting state: a robot is at a workbench.',

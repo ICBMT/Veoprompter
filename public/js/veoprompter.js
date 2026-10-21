@@ -687,6 +687,10 @@
     const customStyle = form.querySelector('[data-custom-style]');
     const customStyleInput = form.querySelector('#style_detail');
     const voiceFields = form.querySelector('[data-voice-fields]');
+    const speechModeField = form.querySelector('[data-speech-mode-field]');
+    const speechModeControl = form.querySelector('#speech_mode');
+    const speechModeHelp = form.querySelector('[data-speech-mode-help]');
+    const voiceoverOnlyFields = [...form.querySelectorAll('[data-voiceover-fields], [data-voiceover-only]')];
     const narrationRadios = [...form.querySelectorAll('input[name="narration"]')];
     const characterTypeControl = form.querySelector('[data-character-type-select]');
     const characterTypeChoices = [...form.querySelectorAll('input[name="character_type"]')];
@@ -708,15 +712,27 @@
 
     const updateNarration = () => {
         const enabled = form.querySelector('input[name="narration"]:checked')?.value === '1';
+        const speechMode = form.querySelector('input[name="speech_mode"]:checked')?.value
+            || speechModeControl?.value
+            || 'voiceover';
+        if (speechModeField) speechModeField.hidden = !enabled;
+        if (speechModeHelp) speechModeHelp.hidden = !enabled || speechMode !== 'character-dialogue';
         if (voiceFields) {
             voiceFields.hidden = !enabled;
-            voiceFields.querySelectorAll('input, select, textarea').forEach((field) => {
+            voiceFields.querySelectorAll('input, select, textarea, button').forEach((field) => {
                 field.disabled = !enabled;
             });
         }
+        voiceoverOnlyFields.forEach((field) => {
+            field.hidden = !enabled || speechMode !== 'voiceover';
+        });
         form.querySelectorAll('[data-voice-preview-button]').forEach((button) => {
-            button.disabled = !enabled;
-            button.title = enabled ? '' : 'Turn narration on to preview a voice.';
+            button.disabled = !enabled || speechMode !== 'voiceover';
+            button.title = !enabled
+                ? 'Turn spoken audio on to preview a narrator.'
+                : speechMode !== 'voiceover'
+                    ? 'This Gemini TTS sample is for the voice-over narrator; character voices are defined separately in the prompts.'
+                    : '';
         });
         narrationRadios.forEach((radio) => {
             radio.closest('.toggle-choice')?.classList.toggle('is-active', radio.checked);
@@ -726,6 +742,8 @@
     styleChoices.forEach((choice) => choice.addEventListener('change', updateCustomStyle));
     styleControl?.addEventListener('change', updateCustomStyle);
     narrationRadios.forEach((radio) => radio.addEventListener('change', updateNarration));
+    speechModeControl?.addEventListener('change', updateNarration);
+    form.querySelectorAll('input[name="speech_mode"]').forEach((radio) => radio.addEventListener('change', updateNarration));
     characterTypeChoices.forEach((choice) => choice.addEventListener('change', updateCharacterDetails));
     if (!characterTypeChoices.length) characterTypeControl?.addEventListener('change', updateCharacterDetails);
     form.querySelectorAll('.aspect-choice input').forEach((input) => {
@@ -787,6 +805,7 @@
                 narrator_accent: readValue(form, 'narrator_accent', 'American English'),
                 narrator_tone: readValue(form, 'narrator_tone', 'warm and friendly'),
                 narration: readValue(form, 'narration', '1'),
+                speech_mode: readValue(form, 'speech_mode', 'voiceover'),
             };
         }
 
@@ -798,6 +817,7 @@
             narrator_accent: source?.dataset.narratorAccent || 'American English',
             narrator_tone: source?.dataset.narratorTone || 'warm and friendly',
             narration: '1',
+            speech_mode: source?.dataset.speechMode || 'voiceover',
         };
     };
 
@@ -874,7 +894,11 @@
     const playSample = async (button) => {
         const config = readConfig(button);
         if (config.narration !== '1') {
-            setStatus(button, 'Turn narration on in project settings before previewing a voice.');
+            setStatus(button, 'Turn spoken audio on in project settings before previewing a narrator.');
+            return;
+        }
+        if (config.speech_mode !== 'voiceover') {
+            setStatus(button, 'This sample is for the voice-over narrator. Character-specific voices are defined in the prompts instead.');
             return;
         }
         if (!endpoint || !csrfToken) {
@@ -961,7 +985,7 @@
 
     document.querySelectorAll('.project-settings-form').forEach((form) => {
         form.addEventListener('change', (event) => {
-            if (['language', 'narrator_voice', 'narrator_accent', 'narrator_tone', 'narration'].includes(event.target.name)) {
+            if (['language', 'narrator_voice', 'narrator_accent', 'narrator_tone', 'narration', 'speech_mode'].includes(event.target.name)) {
                 stopPreview();
             }
         });
@@ -1061,8 +1085,10 @@
     const isRelevant = (step) => {
         const condition = step.dataset.wizardWhen;
         if (!condition) return true;
-        const [name, expected] = condition.split(':');
-        return chosenValue(name) === expected;
+        return condition.split('&').every((requirement) => {
+            const [name, expected] = requirement.split(':');
+            return chosenValue(name) === expected;
+        });
     };
 
     const activeSteps = () => allSteps.filter(isRelevant);
@@ -1087,15 +1113,18 @@
         const visualStyle = chosenValue('visual_style');
         const characterType = chosenValue('character_type');
         const narration = chosenValue('narration');
+        const speechMode = chosenValue('speech_mode') || 'voiceover';
         const videoType = chosenValue('video_type');
         const hiddenRows = new Set();
         const reviewVoicePreview = form.querySelector('[data-wizard-review-voice-preview]');
-        if (reviewVoicePreview) reviewVoicePreview.hidden = narration !== '1';
+        if (reviewVoicePreview) reviewVoicePreview.hidden = narration !== '1' || speechMode !== 'voiceover';
         if (visualStyle !== 'custom') hiddenRows.add('style_detail');
         if (videoType !== 'educational') hiddenRows.add('educational_depth');
         if (characterType !== 'fictional') hiddenRows.add('character_details');
         if (narration !== '1') {
-            ['language', 'narrator_voice', 'narrator_accent', 'narrator_tone'].forEach((key) => hiddenRows.add(key));
+            ['speech_mode', 'language', 'narrator_voice', 'narrator_accent', 'narrator_tone'].forEach((key) => hiddenRows.add(key));
+        } else if (speechMode !== 'voiceover') {
+            ['narrator_voice', 'narrator_accent', 'narrator_tone'].forEach((key) => hiddenRows.add(key));
         }
 
         form.querySelectorAll('[data-wizard-summary-for]').forEach((summary) => {
@@ -1198,7 +1227,7 @@
         updateChoiceStyles();
         updateReview();
         if (validationMessage) validationMessage.hidden = true;
-        if (['visual_style', 'character_type', 'narration', 'video_type'].includes(event.target.name)) render();
+        if (['visual_style', 'character_type', 'narration', 'speech_mode', 'video_type'].includes(event.target.name)) render();
     });
 
     form.addEventListener('submit', (event) => {

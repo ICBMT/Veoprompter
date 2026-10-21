@@ -54,6 +54,7 @@ class StudioController extends Controller
             'aspect_ratio' => ['required', Rule::in(['16:9', '9:16', '1:1', '4:3'])],
             'educational_depth' => ['required', Rule::in(['clear', 'balanced', 'deep-dive'])],
             'narration' => ['required', Rule::in(['1', '0'])],
+            'speech_mode' => ['nullable', Rule::in([ProjectSettings::SPEECH_MODE_VOICEOVER, ProjectSettings::SPEECH_MODE_CHARACTER_DIALOGUE])],
             'language' => ['nullable', 'required_if:narration,1', Rule::in(['English', 'Urdu', 'Spanish', 'French', 'Arabic', 'Hindi'])],
             'narrator_voice' => ['nullable', 'required_if:narration,1', Rule::in(['feminine', 'masculine'])],
             'narrator_accent' => ['nullable', 'required_if:narration,1', Rule::in(['American English', 'British English', 'Pakistani English', 'Australian English', 'Neutral'])],

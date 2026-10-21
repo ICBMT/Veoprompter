@@ -11,6 +11,8 @@ final class ProjectSettings
 {
     public const AI_CHOICE = 'auto';
     public const AI_DURATION_MAX = 10;
+    public const SPEECH_MODE_VOICEOVER = 'voiceover';
+    public const SPEECH_MODE_CHARACTER_DIALOGUE = 'character-dialogue';
     public const MANUAL_DURATION_MIN = 4;
     public const MANUAL_DURATION_MAX = 20;
     public const MANUAL_CLIP_COUNT_MIN = 2;
@@ -46,6 +48,7 @@ final class ProjectSettings
             'aspect_ratio' => '9:16',
             'educational_depth' => 'clear',
             'narration' => '1',
+            'speech_mode' => self::SPEECH_MODE_VOICEOVER,
             'language' => 'English',
             'narrator_voice' => 'feminine',
             'narrator_accent' => 'American English',
@@ -53,6 +56,17 @@ final class ProjectSettings
             'music' => true,
             'sound_effects' => true,
         ];
+    }
+
+    public static function speechModeLabel(mixed $speechMode, mixed $narration = '1'): string
+    {
+        if ((string) $narration !== '1') {
+            return 'No spoken audio';
+        }
+
+        return (string) $speechMode === self::SPEECH_MODE_CHARACTER_DIALOGUE
+            ? 'On-screen character dialogue'
+            : 'Voice-over narration';
     }
 
     /** @return array{clip_duration: bool, extend_duration: bool} */
@@ -129,6 +143,9 @@ final class ProjectSettings
     public static function applyDurationOptions(array $settings, array $durationOptions = []): array
     {
         $settings = array_replace(self::defaults(), $settings);
+        if (! in_array($settings['speech_mode'] ?? null, [self::SPEECH_MODE_VOICEOVER, self::SPEECH_MODE_CHARACTER_DIALOGUE], true)) {
+            $settings['speech_mode'] = self::SPEECH_MODE_VOICEOVER;
+        }
         $settings['clip_count'] = self::normalizeChoice($settings['clip_count'] ?? self::AI_CHOICE, self::AI_CHOICE);
         $settings['clip_duration'] = ($durationOptions['clip_duration'] ?? true)
             ? self::normalizeChoice($settings['clip_duration'] ?? self::AI_CHOICE, self::AI_CHOICE)
@@ -236,6 +253,7 @@ final class ProjectSettings
             'aspect_ratio' => ['required', Rule::in(['16:9', '9:16', '1:1', '4:3'])],
             'educational_depth' => ['required', Rule::in(['clear', 'balanced', 'deep-dive'])],
             'narration' => ['required', Rule::in(['1', '0'])],
+            'speech_mode' => ['nullable', Rule::in([self::SPEECH_MODE_VOICEOVER, self::SPEECH_MODE_CHARACTER_DIALOGUE])],
             'language' => ['nullable', 'required_if:narration,1', Rule::in(['English', 'Urdu', 'Spanish', 'French', 'Arabic', 'Hindi'])],
             'narrator_voice' => ['nullable', 'required_if:narration,1', Rule::in(['feminine', 'masculine'])],
             'narrator_accent' => ['nullable', 'required_if:narration,1', Rule::in(['American English', 'British English', 'Pakistani English', 'Australian English', 'Neutral'])],

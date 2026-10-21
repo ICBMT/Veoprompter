@@ -77,14 +77,14 @@
             <div class="admin-form-grid">
                 <div class="admin-field admin-field--wide">
                     <input type="hidden" name="allow_clip_duration_choice" value="0">
-                    <label class="switch-row"><span><strong>Show the video clip-duration question</strong><small>When off, AI chooses the shortest practical whole-second duration for each clip, up to 10 seconds.</small></span><input type="checkbox" name="allow_clip_duration_choice" value="1" @checked($settings->allow_clip_duration_choice)><i class="switch-track"></i></label>
+                    <label class="switch-row"><span><strong>Show the video clip-duration question</strong><small>When off, AI keeps simple beats brief and gives complex action or speech more time when needed, up to 10 seconds without padding.</small></span><input type="checkbox" name="allow_clip_duration_choice" value="1" @checked($settings->allow_clip_duration_choice)><i class="switch-track"></i></label>
                 </div>
                 <div class="admin-field admin-field--wide">
                     <input type="hidden" name="allow_extension_duration_choice" value="0">
-                    <label class="switch-row"><span><strong>Show the video-extension duration question</strong><small>When off, AI chooses the shortest practical whole-second duration for the continuation, up to 10 seconds.</small></span><input type="checkbox" name="allow_extension_duration_choice" value="1" @checked($settings->allow_extension_duration_choice)><i class="switch-track"></i></label>
+                    <label class="switch-row"><span><strong>Show the video-extension duration question</strong><small>When off, AI keeps simple continuations brief and gives complex action or speech more time when needed, up to 10 seconds without padding.</small></span><input type="checkbox" name="allow_extension_duration_choice" value="1" @checked($settings->allow_extension_duration_choice)><i class="switch-track"></i></label>
                 </div>
             </div>
-            <div class="admin-help"><span aria-hidden="true">ⓘ</span><div><strong>These are global controls, off by default.</strong> Turning a choice off hides that setup question and lets AI choose the shortest practical duration, up to 10 seconds. Turn it on to let eligible accounts choose an AI-selected or fixed duration. Account-level switches in User management can further restrict access; they cannot bypass a global off switch.</div></div>
+            <div class="admin-help"><span aria-hidden="true">ⓘ</span><div><strong>These are global controls, off by default.</strong> Turning a choice off hides that setup question and lets AI match the duration to beat complexity—short for simple actions, longer for complex action, transformations, camera moves, or speech, up to 10 seconds without padding. Turn it on to let eligible accounts choose an AI-selected or fixed duration. Account-level switches in User management can further restrict access; they cannot bypass a global off switch.</div></div>
             <div class="admin-form-footer"><p>Both controls start off. Enable them here and for an account to show that duration question.</p><button class="button-primary" type="submit"><span>Save duration options</span><span class="button-icon" aria-hidden="true">↗</span></button></div>
         </form>
     </section>

@@ -8,6 +8,14 @@
     $characterLabels = ['ai-choice' => 'AI chooses', 'human-male' => 'Human male', 'human-female' => 'Human female', 'robot' => 'Robot', 'fictional' => 'Fictional character'];
     $characterLabel = $characterLabels[$settings['character_type'] ?? 'ai-choice'] ?? 'Custom character';
     $videoTypeLabel = $videoTypes[$settings['video_type'] ?? 'educational'] ?? 'Educational explainer';
+    $speechMode = $settings['speech_mode'] ?? 'voiceover';
+    $hasSpokenAudio = ($settings['narration'] ?? '1') === '1';
+    $canPreviewVoiceover = $hasSpokenAudio && $speechMode === 'voiceover';
+    $speechSummary = ! $hasSpokenAudio
+        ? 'Off'
+        : ($speechMode === 'character-dialogue'
+            ? ($settings['language'] ?? 'English').' · On-screen character dialogue'
+            : ($settings['language'] ?? 'English').' · '.($settings['narrator_voice'] ?? 'feminine').' narrator · '.($settings['narrator_tone'] ?? 'warm and friendly'));
 @endphp
 <div class="studio-page" data-studio data-project-id="{{ $project->id }}">
     <section class="studio-hero project-workspace-hero">
@@ -42,7 +50,7 @@
             <span><small>CHARACTER</small><strong>{{ $characterLabel }}</strong></span>
             <span><small>STYLE</small><strong>{{ \App\Support\ProjectSettings::visualStyleLabel($settings['visual_style'] ?? '3d-family-animation', $settings['style_detail'] ?? null) }}</strong></span>
             <span><small>FORMAT</small><strong>{{ \App\Support\ProjectSettings::formatClipCount($settings['clip_count']) }} · {{ \App\Support\ProjectSettings::formatDuration($settings['clip_duration']) }} / {{ \App\Support\ProjectSettings::formatDuration($settings['extend_duration']) }} extension · {{ $settings['aspect_ratio'] }}</strong></span>
-            <span><small>NARRATION</small><strong>{{ $settings['narration'] === '1' ? $settings['language'].' · '.$settings['narrator_voice'].' · '.$settings['narrator_tone'] : 'Off' }}</strong></span>
+            <span><small>SPOKEN AUDIO</small><strong>{{ $speechSummary }}</strong></span>
         </div>
 
         <div class="mode-tabs" role="tablist" aria-label="Choose a prompt workflow">
@@ -105,12 +113,12 @@
                         <div><span>Extension length</span><strong>{{ \App\Support\ProjectSettings::formatDuration($settings['extend_duration'], true) }} for the next clip</strong></div>
                         <div><span>Frame shape</span><strong>{{ $settings['aspect_ratio'] }}</strong></div>
                         @if(($settings['video_type'] ?? 'educational') === 'educational')<div><span>Learning depth</span><strong>{{ str_replace('-', ' ', $settings['educational_depth']) }}</strong></div>@endif
-                        <div><span>Narration</span><strong>{{ $settings['narration'] === '1' ? $settings['language'].' · '.$settings['narrator_voice'].' · '.$settings['narrator_accent'].' · '.$settings['narrator_tone'] : 'Off' }}</strong></div>
+                        <div><span>Spoken audio</span><strong>{{ $speechSummary }}@if($canPreviewVoiceover) · {{ $settings['narrator_accent'] }}@endif</strong></div>
                         <div><span>Sound direction</span><strong>{{ $settings['music'] ? 'Music' : 'No music' }} · {{ $settings['sound_effects'] ? 'Sound effects' : 'No sound effects' }}</strong></div>
                     </div>
-                    @if($settings['narration'] === '1')
+                    @if($canPreviewVoiceover)
                         <div class="voice-preview-card voice-preview-card--workspace">
-                            <div><strong>Voice sample</strong><p>Hear the generated sample for the project’s selected language, voice, accent, and tone.</p></div>
+                            <div><strong>Narrator sample</strong><p>Hear the Gemini TTS sample for the project’s selected language, narrator voice, accent, and tone. Character-specific voices are described in prompts instead.</p></div>
                             <button class="button-secondary voice-preview-button" type="button" data-voice-preview-button><span aria-hidden="true">▶</span> Preview voice</button>
                             <span class="voice-preview-status" data-voice-preview-status role="status" aria-live="polite"></span>
                         </div>
@@ -129,8 +137,8 @@
             <div class="result-meta"><span class="result-status"><i></i> <span data-ready-label>PROMPT KIT READY</span></span><span>TEXT ONLY · NO VIDEO GENERATED</span></div>
             <div class="history-result-notice" data-history-notice role="status" aria-live="polite" hidden></div>
             <div class="output-content" data-output-content></div>
-            <div class="voice-config-source" data-voice-config hidden data-language="{{ $settings['language'] }}" data-narrator-voice="{{ $settings['narrator_voice'] }}" data-narrator-accent="{{ $settings['narrator_accent'] }}" data-narrator-tone="{{ $settings['narrator_tone'] }}"></div>
-            <div class="generated-voice-preview" data-generated-voice-preview @if($settings['narration'] !== '1') hidden @endif><div><span class="section-index">VOICE SAMPLE</span><strong>A quick preview of your chosen narrator</strong><p>Generated by Gemini TTS for your selected preferences; the sample is cached after its first play.</p></div><button class="button-secondary voice-preview-button" type="button" data-voice-preview-button><span aria-hidden="true">▶</span> Play sample</button><span class="voice-preview-status" data-voice-preview-status role="status" aria-live="polite"></span></div>
+            <div class="voice-config-source" data-voice-config hidden data-language="{{ $settings['language'] }}" data-narrator-voice="{{ $settings['narrator_voice'] }}" data-narrator-accent="{{ $settings['narrator_accent'] }}" data-narrator-tone="{{ $settings['narrator_tone'] }}" data-speech-mode="{{ $speechMode }}"></div>
+            <div class="generated-voice-preview" data-generated-voice-preview @if(!$canPreviewVoiceover) hidden @endif><div><span class="section-index">VOICE SAMPLE</span><strong>A quick preview of your chosen narrator</strong><p>Generated by Gemini TTS for your selected preferences; the sample is cached after its first play. Character-specific voices are defined in prompts instead.</p></div><button class="button-secondary voice-preview-button" type="button" data-voice-preview-button><span aria-hidden="true">▶</span> Play sample</button><span class="voice-preview-status" data-voice-preview-status role="status" aria-live="polite"></span></div>
         </section>
     </section>
 

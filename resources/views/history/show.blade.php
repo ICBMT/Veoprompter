@@ -43,7 +43,10 @@
             <div><span>Visual style</span><strong>{{ empty($project->brief['visual_style']) ? '—' : \App\Support\ProjectSettings::visualStyleLabel($project->brief['visual_style'], $project->brief['style_detail'] ?? null) }}</strong></div>
             @if(!empty($project->brief['character_type']))<div><span>Main character</span><strong>{{ $characterLabels[$project->brief['character_type']] ?? 'Custom character' }}@if(!empty($project->brief['character_details'])) · {{ $project->brief['character_details'] }}@endif</strong></div>@endif
             <div><span>Clip format</span><strong>{{ $clipFormat }}</strong></div>
-            @if(!empty($project->brief['narration']))<div><span>Narration</span><strong>{{ $project->brief['narration'] === '1' ? ($project->brief['language'] ?? 'English').' · '.($project->brief['narrator_voice'] ?? 'Voice unspecified').' · '.($project->brief['narrator_accent'] ?? 'Accent unspecified').' · '.($project->brief['narrator_tone'] ?? 'Tone unspecified') : 'Off' }}</strong></div>@endif
+            @if(array_key_exists('narration', $project->brief))
+                @php($savedSpeechMode = $project->brief['speech_mode'] ?? 'voiceover')
+                <div><span>Spoken audio</span><strong>{{ \App\Support\ProjectSettings::speechModeLabel($savedSpeechMode, $project->brief['narration']) }}@if($project->brief['narration'] === '1' && $savedSpeechMode === 'character-dialogue') · {{ $project->brief['language'] ?? 'English' }}@elseif($project->brief['narration'] === '1') · {{ $project->brief['language'] ?? 'English' }} · {{ $project->brief['narrator_voice'] ?? 'Voice unspecified' }} · {{ $project->brief['narrator_accent'] ?? 'Accent unspecified' }} · {{ $project->brief['narrator_tone'] ?? 'Tone unspecified' }}@endif</strong></div>
+            @endif
             <div><span>Sound</span><strong>{{ !empty($project->brief['music']) ? 'Music' : 'No music' }} · {{ !empty($project->brief['sound_effects']) ? 'Sound effects' : 'No sound effects' }}</strong></div>
         </div>
     </section>

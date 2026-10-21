@@ -155,7 +155,7 @@ class DurationChoiceControlsTest extends TestCase
         $this->actingAs($owner)
             ->get(route('projects.settings.edit', $project))
             ->assertOk()
-            ->assertSee('Duration is automatically selected for each new video.')
+            ->assertSee('Simple beats stay short; complex action or speech can use up to 10 seconds without padding.')
             ->assertSee('AI decides · up to 10 seconds')
             ->assertSee('id="extend_duration"', false);
 

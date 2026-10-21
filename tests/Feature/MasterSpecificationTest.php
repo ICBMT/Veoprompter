@@ -25,7 +25,10 @@ class MasterSpecificationTest extends TestCase
         $this->assertStringContainsString('AI-DIRECTED CLIP ARCHITECTURE', $specification);
         $this->assertStringContainsString('AI-DIRECTED CLIP DURATION', $specification);
         $this->assertStringContainsString('do not default to four or impose an arbitrary maximum', $specification);
-        $this->assertStringContainsString('a simple reveal may need only a few seconds', $specification);
+        $this->assertStringContainsString('about 2–3 seconds for one simple reveal or movement', $specification);
+        $this->assertStringContainsString('Give genuinely complex moments more time than simple beats', $specification);
+        $this->assertStringContainsString('distinct voice identity', $specification);
+        $this->assertStringContainsString('character-dialogue mode', $specification);
         $this->assertStringContainsString('TRANSITION CLIP SYSTEM', $specification);
         $this->assertStringContainsString('TYPE A — DIRECT CONTINUATION', $specification);
         $this->assertStringContainsString('TYPE B — NATURAL ACTION TRANSITION', $specification);

@@ -41,7 +41,7 @@ class AiSettingsController extends Controller
         $settings->save();
 
         return redirect()->to(route('admin.settings', [], false))
-            ->with('success', 'Duration controls saved. When a choice is disabled, AI selects a suitable clip length up to 10 seconds.');
+            ->with('success', 'Duration controls saved. When a choice is disabled, AI matches each beat to its complexity, up to 10 seconds without padding.');
     }
 
     public function models(Request $request, AiProviderSetupService $providerSetup): JsonResponse

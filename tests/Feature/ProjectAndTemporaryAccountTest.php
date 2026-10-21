@@ -51,6 +51,7 @@ class ProjectAndTemporaryAccountTest extends TestCase
         $this->assertSame('Urdu space stories', $project->name);
         $this->assertSame('A shy moon fox with a silver tail', $project->settings['character_details']);
         $this->assertSame('Urdu', $project->settings['language']);
+        $this->assertSame('voiceover', $project->settings['speech_mode']);
         $this->assertSame('educational', $project->settings['video_type']);
         $this->assertSame(6, $project->settings['extend_duration']);
         $this->assertTrue($project->settings['music']);
@@ -74,6 +75,51 @@ class ProjectAndTemporaryAccountTest extends TestCase
         $this->assertSame('0', $project->settings['narration']);
         $this->assertSame('cinematic-story', $project->settings['video_type']);
         $this->assertSame('Urdu', $project->settings['language'], 'Disabled voice controls keep their saved values when narration is turned off.');
+    }
+
+    public function test_character_dialogue_mode_is_saved_as_a_project_default_and_editable(): void
+    {
+        $owner = User::factory()->create();
+        $payload = [
+            ...ProjectSettings::defaults(),
+            'name' => 'Character dialogue experiments',
+            'narration' => '1',
+            'speech_mode' => ProjectSettings::SPEECH_MODE_CHARACTER_DIALOGUE,
+            'language' => 'Urdu',
+            'character_type' => 'fictional',
+            'character_details' => 'Mina, a thoughtful young inventor with copper goggles.',
+        ];
+
+        $this->actingAs($owner)
+            ->post(route('projects.store'), $payload)
+            ->assertRedirect();
+
+        $project = $owner->studioProjects()->firstOrFail();
+        $this->assertSame(ProjectSettings::SPEECH_MODE_CHARACTER_DIALOGUE, $project->settings['speech_mode']);
+        $this->assertSame('Urdu', $project->settings['language']);
+
+        $this->get(route('projects.settings.edit', $project))
+            ->assertOk()
+            ->assertSee('Who should speak?')
+            ->assertSee('On-screen character dialogue')
+            ->assertSee('data-speech-mode-field', false)
+            ->assertSee('value="character-dialogue" selected', false)
+            ->assertSee('Each speaking character gets a distinct, description-based voice identity');
+
+        $this->get(route('projects.index'))
+            ->assertOk()
+            ->assertSee('character dialogue');
+    }
+
+    public function test_invalid_speech_modes_are_rejected_in_project_settings(): void
+    {
+        $owner = User::factory()->create();
+        $payload = [...ProjectSettings::defaults(), 'name' => 'Invalid speech mode', 'speech_mode' => 'multiple-narrators'];
+
+        $this->actingAs($owner)
+            ->from(route('projects.create'))
+            ->post(route('projects.store'), $payload)
+            ->assertSessionHasErrors('speech_mode');
     }
 
     public function test_new_visual_styles_are_valid_saved_editable_and_displayed_with_readable_names(): void
