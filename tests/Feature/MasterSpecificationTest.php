@@ -21,13 +21,18 @@ class MasterSpecificationTest extends TestCase
         $rootSpecification = substr($source, $contentStart + strlen($opening), $contentEnd - ($contentStart + strlen($opening)));
         $this->assertSame($rootSpecification, $specification, 'The AI prompt used at runtime must remain an exact copy of root prompt.txt.');
 
+        $this->assertStringContainsString('PLAN BEFORE WRITING', $specification);
+        $this->assertStringContainsString('AI-DIRECTED CLIP ARCHITECTURE', $specification);
+        $this->assertStringContainsString('AI-DIRECTED CLIP DURATION', $specification);
+        $this->assertStringContainsString('do not default to four or impose an arbitrary maximum', $specification);
+        $this->assertStringContainsString('a simple reveal may need only a few seconds', $specification);
         $this->assertStringContainsString('MANDATORY CONTINUATION INSTRUCTION', $specification);
         $this->assertStringContainsString('Whatever was already in motion keeps its direction and speed through the cut rather than restarting', $specification);
         $this->assertStringContainsString('Never generate images or videos.', $specification);
 
         preg_match_all('/^SECTION\s+(\d+)\s+—/mu', $specification, $sections);
         $this->assertSame(range(1, 14), array_map('intval', $sections[1]));
-        $this->assertStringContainsString('SECTION 8 — FOUR COPY-AND-PASTE VIDEO PROMPTS', $specification);
+        $this->assertStringContainsString('SECTION 8 — COPY-AND-PASTE VIDEO PROMPTS', $specification);
         $this->assertStringContainsString('COPY CLIP 1 PROMPT', $specification);
         $this->assertStringContainsString('COPY EXTENSION VIDEO PROMPT', $specification);
         $this->assertStringContainsString('SILENT 10-POINT QUALITY GATE', $specification);

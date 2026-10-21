@@ -52,7 +52,7 @@ test('separates Sections 1–7 and any number of clip prompts, appending handoff
     assert.match(parsed.notice, /4 clip prompts separated/);
 });
 
-test('keeps variable clip counts above the four-clip default in order for the extension', () => {
+test('keeps variable clip counts in order for the extension', () => {
     const clipCount = 6;
     const clipPrompts = Array.from({ length: clipCount }, (_, index) => `COPY CLIP ${index + 1} PROMPT > Clip ${index + 1} prompt.`);
     const parsed = parsePrompt([
@@ -70,6 +70,39 @@ test('keeps variable clip counts above the four-clip default in order for the ex
     assert.deepEqual(parsed.chunks.slice(1).map((chunk) => chunk.clipNumber), [1, 2, 3, 4, 5, 6]);
     assert.match(parsed.chunks[6].text, /SECTION 9 — EXACT HANDOFF SPECIFICATION/);
     assert.match(parsed.chunks[6].text, /SECTION 10 — FINAL CONTINUITY AUDIT/);
+});
+
+test('splits section-per-clip v2 output and supports AI-selected counts above eight', () => {
+    const clipCount = 10;
+    const lines = [
+        'SECTION 1 — PROJECT OVERVIEW',
+        'AI-selected count: 10.',
+        'SECTION 7 — CONTINUITY MAP',
+        'Each ending connects to the next opening.',
+    ];
+
+    for (let clip = 1; clip <= clipCount; clip += 1) {
+        lines.push(
+            `SECTION ${7 + clip} — COPY CLIP ${clip} PROMPT`,
+            '```text',
+            `Clip ${clip}: a self-contained prompt with a ${clip === 1 ? 3 : 6}-second action.`,
+            '```',
+        );
+    }
+
+    lines.push('SECTION 9+ — FINAL CONTINUITY AUDIT', 'All ten handoffs are coherent.');
+    const parsed = parsePrompt(lines.join('\n'));
+
+    assert.equal(parsed.format, 'clip-sequence');
+    assert.equal(parsed.chunks.length, clipCount + 1);
+    assert.match(parsed.chunks[0].text, /SECTION 7 — CONTINUITY MAP/);
+    assert.doesNotMatch(parsed.chunks[0].text, /SECTION 8/);
+    assert.deepEqual(parsed.chunks.slice(1).map((chunk) => chunk.clipNumber), Array.from({ length: clipCount }, (_, index) => index + 1));
+    assert.match(parsed.chunks[1].text, /Clip 1: a self-contained prompt with a 3-second action/);
+    assert.match(parsed.chunks[10].text, /Clip 10: a self-contained prompt/);
+    assert.match(parsed.chunks[10].text, /SECTION 9\+ — FINAL CONTINUITY AUDIT/);
+    assert.match(parsed.chunks[10].text, /All ten handoffs are coherent/);
+    assert.match(parsed.notice, /10 clip prompts separated/);
 });
 
 test('keeps a one-clip result copy-ready and includes trailing continuity sections', () => {

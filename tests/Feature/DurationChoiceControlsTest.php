@@ -27,7 +27,19 @@ class DurationChoiceControlsTest extends TestCase
             'extend_duration' => false,
         ], ProjectSettings::durationOptionsFor($user));
 
-        $effective = ProjectSettings::applyDurationOptions(ProjectSettings::defaults(), ProjectSettings::durationOptionsFor($user));
+        $defaults = ProjectSettings::defaults();
+        $this->assertSame('Curious children and families', $defaults['audience']);
+        $this->assertSame('educational', $defaults['video_type']);
+        $this->assertSame('3d-family-animation', $defaults['visual_style']);
+        $this->assertSame('auto', $defaults['clip_count']);
+        $this->assertSame('9:16', $defaults['aspect_ratio']);
+        $this->assertSame('1', $defaults['narration']);
+        $this->assertSame('American English', $defaults['narrator_accent']);
+        $this->assertTrue($defaults['music']);
+        $this->assertTrue($defaults['sound_effects']);
+
+        $effective = ProjectSettings::applyDurationOptions($defaults, ProjectSettings::durationOptionsFor($user));
+        $this->assertSame('auto', $effective['clip_count']);
         $this->assertSame('auto', $effective['clip_duration']);
         $this->assertSame('auto', $effective['extend_duration']);
     }
@@ -232,7 +244,8 @@ class DurationChoiceControlsTest extends TestCase
             ->assertSee('name="clip_count" value="auto"', false)
             ->assertSee('name="clip_duration" value="auto"', false)
             ->assertSee('name="extend_duration" value="auto"', false)
-            ->assertSee('Let AI decide');
+            ->assertSee('Let AI decide')
+            ->assertSee('An AI-selected count is not capped at eight.');
 
         $this->actingAs($owner)
             ->post(route('projects.store'), $this->projectPayload([

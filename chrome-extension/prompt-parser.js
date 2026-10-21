@@ -23,13 +23,32 @@ function sectionNumber(line) {
 
 function clipHeading(line) {
     const value = decoratedHeading(line);
+    const sectionTitle = value.match(/^SECTION\s+\d+\+?(?:\s*[—–:-]\s*|\s+)(.+)$/i);
+    const candidates = sectionTitle
+        ? [{ text: sectionTitle[1].trim(), sectionWrapped: true }, { text: value, sectionWrapped: false }]
+        : [{ text: value, sectionWrapped: false }];
 
-    for (const pattern of CLIP_HEADING_PATTERNS) {
-        const match = value.match(pattern);
-        if (match) return { number: Number(match[1]), inlineText: match[2].trim() };
+    for (const candidate of candidates) {
+        for (const pattern of CLIP_HEADING_PATTERNS) {
+            const match = candidate.text.match(pattern);
+            if (match) {
+                return {
+                    number: Number(match[1]),
+                    inlineText: match[2].trim(),
+                    sectionWrapped: candidate.sectionWrapped,
+                };
+            }
+        }
     }
 
     return null;
+}
+
+function sectionLineBefore(lines, index) {
+    let previous = index - 1;
+    while (previous >= 0 && !lines[previous].trim()) previous -= 1;
+
+    return previous >= 0 && sectionNumber(lines[previous]) !== null ? previous : index;
 }
 
 function cleanCopyBlock(lines) {
@@ -76,9 +95,9 @@ function fallback(raw, reason) {
 }
 
 /**
- * Split a VeoPrompter result into the context and individually copy-ready clips.
- * Section 9 onward is attached to the final clip so the Flow handoff notes stay
- * with the clip sequence without becoming a separate chat message.
+ * Split either the app's Section 8 clip list or a section-per-clip v2 response
+ * into context and individually copy-ready prompts. Continuity/audit sections
+ * after the final clip are attached to that final handoff.
  *
  * @param {string} raw
  * @returns {{format: string, chunks: Array<{kind: string, label: string, text: string, clipNumber?: number}>, notice: string}}
@@ -91,14 +110,18 @@ export function parsePrompt(raw) {
     const text = raw.replace(/\r\n?/g, '\n');
     const lines = text.split('\n');
     const sectionEight = lines.findIndex((line) => sectionNumber(line) === 8);
-    const sectionStart = sectionEight >= 0 ? sectionEight + 1 : 0;
+    const scanStart = sectionEight >= 0 ? sectionEight : 0;
     const clipHeadings = [];
 
-    for (let index = sectionStart; index < lines.length; index += 1) {
-        const number = sectionNumber(lines[index]);
-        if (index > sectionStart && number !== null && number > 8) break;
+    for (let index = scanStart; index < lines.length; index += 1) {
         const clip = clipHeading(lines[index]);
-        if (clip) clipHeadings.push({ ...clip, line: index });
+        if (!clip) continue;
+
+        clipHeadings.push({
+            ...clip,
+            line: index,
+            startLine: clip.sectionWrapped ? index : sectionLineBefore(lines, index),
+        });
     }
 
     if (!clipHeadings.length) {
@@ -114,16 +137,18 @@ export function parsePrompt(raw) {
         return fallback(text, 'This format was not recognized, so the complete prompt will be copied as one part.');
     }
 
-    const firstClipLine = clipHeadings[0].line;
-    const contextEnd = sectionEight >= 0 ? sectionEight : firstClipLine;
+    const contextEnd = sectionEight >= 0 ? sectionEight : clipHeadings[0].startLine;
     const contextText = cleanCopyBlock(lines.slice(0, contextEnd));
-    const sectionEnd = (() => {
-        for (let index = firstClipLine + 1; index < lines.length; index += 1) {
-            const number = sectionNumber(lines[index]);
-            if (number !== null && number > 8) return index;
+    const lastClipLine = clipHeadings[clipHeadings.length - 1].line;
+    let trailerStart = lines.length;
+
+    for (let index = lastClipLine + 1; index < lines.length; index += 1) {
+        if (sectionNumber(lines[index]) !== null) {
+            trailerStart = index;
+            break;
         }
-        return lines.length;
-    })();
+    }
+
     const chunks = [];
 
     if (contextText) {
@@ -135,14 +160,16 @@ export function parsePrompt(raw) {
     }
 
     clipHeadings.forEach((clip, index) => {
-        const nextClipLine = clipHeadings[index + 1]?.line ?? sectionEnd;
+        const nextClipStart = clipHeadings[index + 1]?.startLine;
+        const bodyEnd = nextClipStart ?? trailerStart;
         const clipLines = [];
         if (clip.inlineText) clipLines.push(clip.inlineText);
-        clipLines.push(...lines.slice(clip.line + 1, Math.min(nextClipLine, sectionEnd)));
+        clipLines.push(...lines.slice(clip.line + 1, Math.max(clip.line + 1, bodyEnd)));
         let clipText = cleanCopyBlock(clipLines);
+        const hasHandoff = index === clipHeadings.length - 1 && trailerStart < lines.length;
 
-        if (index === clipHeadings.length - 1 && sectionEnd < lines.length) {
-            const handoff = cleanCopyBlock(lines.slice(sectionEnd));
+        if (hasHandoff) {
+            const handoff = cleanCopyBlock(lines.slice(trailerStart));
             if (handoff) clipText = [clipText, handoff].filter(Boolean).join('\n\n');
         }
 
@@ -150,7 +177,7 @@ export function parsePrompt(raw) {
             chunks.push({
                 kind: 'clip',
                 clipNumber: clip.number,
-                label: `Clip ${clip.number}${index === clipHeadings.length - 1 && sectionEnd < lines.length ? ' · final handoff' : ''}`,
+                label: `Clip ${clip.number}${hasHandoff ? ' · final handoff' : ''}`,
                 text: clipText,
             });
         }
@@ -161,7 +188,7 @@ export function parsePrompt(raw) {
         return fallback(text, 'Clip labels were found, but their prompts were empty. The complete prompt will be copied as one part.');
     }
 
-    const hasHandoff = sectionEnd < lines.length;
+    const hasHandoff = trailerStart < lines.length;
     const notice = `${clipCount} clip prompt${clipCount === 1 ? '' : 's'} separated${hasHandoff ? '; the closing handoff and continuity sections are attached to the final clip' : ''}.`;
 
     return {

@@ -124,10 +124,15 @@ class PromptStudioTest extends TestCase
                 && $request->hasHeader('x-goog-api-key', 'test-provider-secret')
                 && str_contains($systemInstruction, 'AI VIDEO STORYTELLER — MASTER SPECIFICATION')
                 && str_contains($systemInstruction, 'MANDATORY CONTINUATION INSTRUCTION')
-                && str_contains($systemInstruction, 'CLIP COUNT — AI DECIDES: Choose an exact total of 2–8 connected clips.')
-                && str_contains($systemInstruction, 'CLIP DURATION — AI DECIDES: Choose an exact whole-second duration from 4 through 10 seconds for each clip independently')
-                && str_contains($brief, 'Clip duration: AI decides; choose an exact whole-second duration from 4 to 10 seconds')
-                && str_contains($brief, 'Number of clips: AI decides; choose 2–8 connected clips')
+                && str_contains($systemInstruction, 'CLIP COUNT — AI DIRECTS: Choose the minimum practical number of connected clips needed to communicate the idea clearly and give it a complete arc.')
+                && str_contains($systemInstruction, 'no arbitrary four-clip or eight-clip ceiling for this AI-selected choice')
+                && str_contains($systemInstruction, 'CLIP DURATION — AI DIRECTS: Choose the shortest practical exact whole-second duration for each clip independently')
+                && str_contains($systemInstruction, 'Short visual beats may be about 3 seconds')
+                && str_contains($brief, 'Aspect ratio: 9:16')
+                && str_contains($brief, 'Clip duration: AI decides; choose the shortest practical exact whole-second duration for the action and narration, up to 10 seconds')
+                && str_contains($brief, 'Number of clips: AI decides; choose the minimum practical number of connected clips')
+                && str_contains($brief, 'Background music: Include subtle music that never overpowers speech')
+                && str_contains($brief, 'Sound effects: Use only restrained, action-matched sound effects')
                 && str_contains($brief, 'Why do bees visit flowers?')
                 && str_contains($brief, 'Saved family audience')
                 && ! str_contains($brief, 'Untrusted browser override')
@@ -394,8 +399,8 @@ class PromptStudioTest extends TestCase
             $systemInstructions = data_get($request->data(), 'systemInstruction.parts.0.text', '');
             $brief = data_get($request->data(), 'contents.0.parts.0.text', '');
 
-            return str_contains($systemInstructions, 'EXTENSION DURATION — AI DECIDES: Choose one exact whole-second duration from 4 through 10 seconds')
-                && str_contains($brief, 'Clip duration: AI decides; choose an exact whole-second duration from 4 to 10 seconds')
+            return str_contains($systemInstructions, 'EXTENSION DURATION — AI DIRECTS: Choose the shortest practical exact whole-second duration')
+                && str_contains($brief, 'Clip duration: AI decides; choose the shortest practical exact whole-second duration for the action and narration, up to 10 seconds')
                 && str_contains($brief, 'Workflow: Extend an existing video');
         });
 

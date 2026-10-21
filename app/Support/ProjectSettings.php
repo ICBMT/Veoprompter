@@ -10,10 +10,11 @@ use Illuminate\Validation\Rule;
 final class ProjectSettings
 {
     public const AI_CHOICE = 'auto';
-    public const AI_DURATION_MIN = 4;
     public const AI_DURATION_MAX = 10;
-    public const AI_CLIP_COUNT_MIN = 2;
-    public const AI_CLIP_COUNT_MAX = 8;
+    public const MANUAL_DURATION_MIN = 4;
+    public const MANUAL_DURATION_MAX = 20;
+    public const MANUAL_CLIP_COUNT_MIN = 2;
+    public const MANUAL_CLIP_COUNT_MAX = 8;
 
     /** @return array<string, string> */
     public static function videoTypes(): array
@@ -33,23 +34,23 @@ final class ProjectSettings
     public static function defaults(): array
     {
         return [
-            'audience' => 'Curious kids and families',
+            'audience' => 'Curious children and families',
             'video_type' => 'educational',
             'visual_style' => '3d-family-animation',
             'style_detail' => '',
             'character_type' => 'ai-choice',
             'character_details' => '',
-            'clip_count' => 4,
+            'clip_count' => self::AI_CHOICE,
             'clip_duration' => self::AI_CHOICE,
             'extend_duration' => self::AI_CHOICE,
-            'aspect_ratio' => '16:9',
+            'aspect_ratio' => '9:16',
             'educational_depth' => 'clear',
             'narration' => '1',
             'language' => 'English',
             'narrator_voice' => 'feminine',
             'narrator_accent' => 'American English',
             'narrator_tone' => 'warm and friendly',
-            'music' => false,
+            'music' => true,
             'sound_effects' => true,
         ];
     }
@@ -84,7 +85,7 @@ final class ProjectSettings
     public static function formatClipCount(mixed $value): string
     {
         if (self::isAiChoice($value)) {
-            return 'AI decides · 2–8 clips';
+            return 'AI decides · adaptive clip count';
         }
 
         return is_numeric($value) ? ((int) $value).' clips' : '—';
@@ -93,7 +94,9 @@ final class ProjectSettings
     public static function formatDuration(mixed $value, bool $long = false): string
     {
         if (self::isAiChoice($value)) {
-            return $long ? 'AI decides · up to 10 seconds' : 'AI decides · up to 10 sec';
+            return $long
+                ? 'AI decides · up to '.self::AI_DURATION_MAX.' seconds'
+                : 'AI decides · up to '.self::AI_DURATION_MAX.' sec';
         }
 
         if (! is_numeric($value)) {
@@ -126,7 +129,7 @@ final class ProjectSettings
     public static function applyDurationOptions(array $settings, array $durationOptions = []): array
     {
         $settings = array_replace(self::defaults(), $settings);
-        $settings['clip_count'] = self::normalizeChoice($settings['clip_count'] ?? 4, 4);
+        $settings['clip_count'] = self::normalizeChoice($settings['clip_count'] ?? self::AI_CHOICE, self::AI_CHOICE);
         $settings['clip_duration'] = ($durationOptions['clip_duration'] ?? true)
             ? self::normalizeChoice($settings['clip_duration'] ?? self::AI_CHOICE, self::AI_CHOICE)
             : self::AI_CHOICE;
@@ -223,12 +226,12 @@ final class ProjectSettings
             'style_detail' => ['nullable', 'required_if:visual_style,custom', 'string', 'max:500'],
             'character_type' => ['required', Rule::in(['ai-choice', 'human-male', 'human-female', 'robot', 'fictional'])],
             'character_details' => ['nullable', 'required_if:character_type,fictional', 'string', 'max:500'],
-            'clip_count' => ['required', Rule::in([self::AI_CHOICE, ...range(self::AI_CLIP_COUNT_MIN, self::AI_CLIP_COUNT_MAX)])],
+            'clip_count' => ['required', Rule::in([self::AI_CHOICE, ...range(self::MANUAL_CLIP_COUNT_MIN, self::MANUAL_CLIP_COUNT_MAX)])],
             'clip_duration' => ($durationOptions['clip_duration'] ?? true)
-                ? ['required', Rule::in([self::AI_CHOICE, ...range(4, 20)])]
+                ? ['required', Rule::in([self::AI_CHOICE, ...range(self::MANUAL_DURATION_MIN, self::MANUAL_DURATION_MAX)])]
                 : ['required', Rule::in([self::AI_CHOICE])],
             'extend_duration' => ($durationOptions['extend_duration'] ?? true)
-                ? ['required', Rule::in([self::AI_CHOICE, ...range(4, 20)])]
+                ? ['required', Rule::in([self::AI_CHOICE, ...range(self::MANUAL_DURATION_MIN, self::MANUAL_DURATION_MAX)])]
                 : ['required', Rule::in([self::AI_CHOICE])],
             'aspect_ratio' => ['required', Rule::in(['16:9', '9:16', '1:1', '4:3'])],
             'educational_depth' => ['required', Rule::in(['clear', 'balanced', 'deep-dive'])],
@@ -248,7 +251,7 @@ final class ProjectSettings
     public static function fromValidated(array $validated, array $existing = [], array $durationOptions = []): array
     {
         $settings = array_replace(self::defaults(), $existing, Arr::only($validated, array_keys(self::defaults())));
-        $settings['clip_count'] = self::normalizeChoice($settings['clip_count'] ?? 4, 4);
+        $settings['clip_count'] = self::normalizeChoice($settings['clip_count'] ?? self::AI_CHOICE, self::AI_CHOICE);
         $settings['clip_duration'] = self::normalizeChoice($settings['clip_duration'] ?? self::AI_CHOICE, self::AI_CHOICE);
         $settings['extend_duration'] = self::normalizeChoice($settings['extend_duration'] ?? self::AI_CHOICE, self::AI_CHOICE);
         $settings['music'] = in_array($settings['music'], [true, 1, '1'], true);
