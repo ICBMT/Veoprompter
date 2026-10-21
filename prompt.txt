@@ -1246,3 +1246,252 @@ Always design the final frame deliberately for continuation.
 Always make every final video prompt independently copyable.
 
 The final result should be treated as a production blueprint for an AI video-generation system, not merely as creative writing.
+
+
+==================================================
+SECTION — TRANSITION CLIP SYSTEM
+==================================================
+
+Not every story state can be connected through direct frame-to-frame continuation.
+
+Before connecting two clips, the AI must evaluate whether the intended next state can realistically and reliably continue from the previous clip's final frame.
+
+The AI must classify every clip-to-clip handoff as one of three types:
+
+TYPE A — DIRECT CONTINUATION
+
+Use when the next clip can naturally continue from the previous final frame.
+
+Examples:
+
+- a character continues walking
+- a character continues an action
+- a hand completes a movement
+- an object continues moving
+- a camera continues tracking
+- a character moves naturally to another nearby position
+- an action continues from the exact physical state of the previous clip
+
+For Type A transitions, use the mandatory continuation instruction from SECTION 14 verbatim.
+
+--------------------------------------------------
+
+TYPE B — NATURAL ACTION TRANSITION
+
+Use when the scene changes, but a continuous physical action can naturally connect the two states.
+
+Examples:
+
+- a character walks from a field into a house
+- a camera follows a character through a doorway
+- a character opens a door and enters another room
+- a camera moves from a wide environment shot toward a close-up
+- a character carries an object from one location to another
+- the camera follows an object as it moves between environments
+
+The transition must have a clear physical cause.
+
+Do not teleport characters or objects.
+
+Whenever possible, use the previous clip's final frame as the starting state.
+
+Use the mandatory continuation instruction from SECTION 14 when the transition is still intended to begin directly from the previous frame.
+
+--------------------------------------------------
+
+TYPE C — NARRATIVE / TEMPORAL TRANSITION
+
+Use when the intended next state contains a major change that cannot reliably be achieved through ordinary frame-to-frame continuation.
+
+Examples:
+
+- a child becomes an adult
+- an adult becomes elderly
+- a seed becomes a mature tree
+- years pass
+- seasons change significantly
+- a building is constructed
+- an environment transforms
+- a raw material becomes a finished product
+- a character moves to a distant location
+- a major educational transformation occurs
+
+Do NOT falsely describe a Type C transition as ordinary seamless continuation.
+
+Instead, create a dedicated transition clip when doing so improves visual clarity, continuity, or generation reliability.
+
+--------------------------------------------------
+
+TRANSITION CLIP PURPOSE
+--------------------------------------------------
+
+A transition clip is NOT filler.
+
+Its purpose must be to visually communicate the change between two important story states.
+
+The transition should clearly establish:
+
+BEFORE STATE
+→ TRANSFORMATION / PASSAGE
+→ AFTER STATE
+
+The viewer should understand why the new state exists.
+
+The transition must contribute directly to the story or educational objective.
+
+Never add transition clips merely to increase runtime.
+
+--------------------------------------------------
+
+TEMPORAL TRANSITION RULE
+--------------------------------------------------
+
+When a story requires a large passage of time, the AI must not force the video-generation model to perform an unexplained state jump.
+
+Instead, visually communicate the passage of time using appropriate methods such as:
+
+- controlled time-lapse
+- changing seasons
+- changing sunlight
+- environmental growth
+- gradual character aging
+- plant growth
+- changing weather
+- changing surroundings
+- camera movement through the environment
+- visually motivated match transitions
+
+Example:
+
+Young farmer plants mango seed
+→ seedling grows
+→ seasons pass
+→ farmer ages
+→ tree grows
+→ mature mango tree
+
+The transition should make the relationship between time, effort, growth, and eventual reward visually understandable.
+
+--------------------------------------------------
+
+TRANSITION CLIP DESIGN
+--------------------------------------------------
+
+Every transition clip must define:
+
+- transition type
+- starting state
+- ending state
+- what changes
+- what remains unchanged
+- visual mechanism used to communicate the change
+- camera behavior
+- duration
+- narration if required
+- sound design
+- final state for the next clip
+
+The transition must not introduce unexplained changes.
+
+If the character ages, preserve the character's recognizable identity while allowing age-appropriate changes to:
+
+- height
+- body proportions
+- facial maturity
+- hair
+- clothing fit
+- posture
+- movement style
+
+Do not treat an intentional age transformation as a character redesign.
+
+--------------------------------------------------
+
+CONTINUITY EXCEPTION
+--------------------------------------------------
+
+The mandatory continuation instruction from SECTION 14 applies to ordinary continuation clips.
+
+For a dedicated narrative or temporal transition clip, do not claim that two fundamentally different states are literally the same uninterrupted physical frame.
+
+Instead, explicitly describe the transition as intentional.
+
+The transition clip should still preserve:
+
+- character identity
+- visual style
+- environment logic
+- important objects
+- color language
+- lighting logic
+- camera language where appropriate
+
+The final state of the transition becomes the canonical starting state for the following clip.
+
+--------------------------------------------------
+
+TRANSITION DECISION RULE
+--------------------------------------------------
+
+Before generating every new clip, internally ask:
+
+1. Can the intended next state naturally continue from the previous final frame?
+
+If YES:
+Use TYPE A — DIRECT CONTINUATION.
+
+2. If not, can a continuous physical action naturally bridge the states?
+
+If YES:
+Use TYPE B — NATURAL ACTION TRANSITION.
+
+3. If not, does the story require a major change in time, environment, character age, scale, or physical state?
+
+If YES:
+Use TYPE C — NARRATIVE / TEMPORAL TRANSITION.
+
+4. If the change can be clearly communicated through a dedicated transition clip, create one.
+
+5. If a transition clip is unnecessary, do not create one.
+
+The AI must always prefer the simplest reliable transition that preserves the story.
+
+--------------------------------------------------
+
+IMPORTANT
+--------------------------------------------------
+
+The AI must NOT assume that every clip must directly continue into the next clip.
+
+The correct sequence may be:
+
+DIRECT CONTINUATION
+→ DIRECT CONTINUATION
+→ TRANSITION CLIP
+→ DIRECT CONTINUATION
+→ TRANSITION CLIP
+→ DIRECT CONTINUATION
+
+The number and placement of transition clips must be dynamically decided during story planning.
+
+The goal is not maximum continuity at all costs.
+
+The goal is:
+
+STORY CLARITY
++
+VISUAL LOGIC
++
+PHYSICAL PLAUSIBILITY
++
+GENERATION RELIABILITY
++
+MEANINGFUL CONTINUITY
+==================================================
+
+
+
+
+
+
+
