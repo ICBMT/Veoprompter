@@ -44,6 +44,15 @@ class MasterSpecificationTest extends TestCase
         $this->assertStringContainsString('TYPE B — NATURAL ACTION TRANSITION', $specification);
         $this->assertStringContainsString('TYPE C — NARRATIVE / TEMPORAL TRANSITION', $specification);
         $this->assertStringContainsString('TRANSITION TYPE: TYPE C — NARRATIVE / TEMPORAL TRANSITION', $specification);
+        $this->assertStringContainsString('Speech-to-visual action lock', $specification);
+        $this->assertStringContainsString('SPEECH/VISUAL MAP:', $specification);
+        $this->assertStringContainsString('never narrate an off-screen, omitted, earlier, later, or merely implied action', $specification);
+        $this->assertStringContainsString('accurate, clearly identified cutaway, diagram, overlay', $specification);
+        $this->assertStringContainsString('OUTGOING HANDOFF TYPE: TYPE A — DIRECT CONTINUATION', $specification);
+        $this->assertStringContainsString('OUTGOING HANDOFF TYPE: TYPE B — NATURAL ACTION TRANSITION', $specification);
+        $this->assertStringContainsString('OUTGOING HANDOFF TYPE: TYPE C — NARRATIVE / TEMPORAL TRANSITION', $specification);
+        $this->assertStringContainsString('OUTGOING HANDOFF TYPE: FINAL — NO NEXT HANDOFF', $specification);
+        $this->assertStringContainsString("prior clip's `OUTGOING HANDOFF TYPE:` exactly matches the destination clip's `TRANSITION TYPE:`", $specification);
         $this->assertStringContainsString('Do not include it in a Type C narrative/temporal transition clip', $specification);
         $this->assertStringContainsString('MANDATORY CONTINUATION INSTRUCTION', $specification);
         $this->assertStringContainsString('Whatever was already in motion keeps its direction and speed through the cut rather than restarting', $specification);

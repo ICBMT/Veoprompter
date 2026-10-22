@@ -14,11 +14,20 @@ const connectionList = document.querySelector('[data-connection-list]');
 const progressTrack = document.querySelector('.progress-track');
 const characterCast = document.querySelector('[data-character-cast]');
 const characterCastValue = document.querySelector('[data-character-cast-value]');
+const handoffWarning = document.querySelector('[data-handoff-warning]');
+const handoffCue = document.querySelector('[data-handoff-cue]');
+const handoffKind = document.querySelector('[data-handoff-kind]');
+const handoffGuidance = document.querySelector('[data-handoff-guidance]');
+const outgoingHandoff = document.querySelector('[data-handoff-outgoing]');
 
 let activeTab = null;
 let popupState = { connectedAppOrigins: [], activePrompt: null };
 let currentAction = 'none';
 let actionPending = false;
+
+function totalClipNumber(chunks) {
+    return chunks.filter((chunk) => chunk.kind === 'clip').length;
+}
 
 function currentOrigin(value) {
     try {
@@ -92,6 +101,12 @@ function renderPrompt(prompt) {
     document.querySelector('[data-prompt-title]').textContent = prompt.title || 'VeoPrompter prompt';
     document.querySelector('[data-prompt-notice]').textContent = prompt.notice || 'Your prompt is stored locally in this browser.';
 
+    const warnings = Array.isArray(prompt.handoffWarnings) ? prompt.handoffWarnings : [];
+    handoffWarning.hidden = warnings.length === 0;
+    handoffWarning.textContent = warnings.length
+        ? `Handoff check: ${warnings.join(' ')}`
+        : '';
+
     const chunks = Array.isArray(prompt.chunks) ? prompt.chunks : [];
     const total = chunks.length;
     const nextIndex = Math.min(Math.max(Number(prompt.nextIndex) || 0, 0), total);
@@ -111,6 +126,34 @@ function renderPrompt(prompt) {
     const visibleCast = typeof nextChunk?.visibleCast === 'string' ? nextChunk.visibleCast.trim() : '';
     characterCast.hidden = visibleCast === '';
     characterCastValue.textContent = visibleCast;
+
+    const handoffGuidanceByType = {
+        A: ['TYPE A · DIRECT CONTINUATION', 'Open on the exact prior ending; preserve cast, object/process state, motion, and camera without a reset.'],
+        B: ['TYPE B · NATURAL ACTION TRANSITION', 'Show the full visible physical action that bridges the prior and next states.'],
+        C: ['TYPE C · NARRATIVE / TEMPORAL', 'Mark an intentional, non-seamless before → visible change → after progression.'],
+    };
+    let incomingHandoff = null;
+    if (nextChunk?.kind === 'extension') {
+        incomingHandoff = ['EXTENSION FROM VISIBLE FRAME', 'Continue only from details visible in the supplied frame or stated in the brief; do not infer unseen events.'];
+    } else if (nextChunk?.kind === 'clip' && nextChunk.transitionType) {
+        incomingHandoff = handoffGuidanceByType[nextChunk.transitionType] || null;
+    } else if (nextChunk?.kind === 'clip' && Number(nextChunk.clipNumber) === 1) {
+        incomingHandoff = ['INITIAL CLIP', 'Establish the opening cast, scene, and exact visible starting state.'];
+    } else if (nextChunk?.kind === 'clip' && Number(nextChunk.clipNumber) > 1) {
+        incomingHandoff = ['INCOMING HANDOFF TYPE MISSING', 'Review the previous ending and this clip’s opening; do not assume a seamless continuation.'];
+    }
+
+    handoffCue.hidden = !incomingHandoff;
+    handoffCue.classList.toggle('handoff-cue--warning', incomingHandoff?.[0] === 'INCOMING HANDOFF TYPE MISSING');
+    handoffKind.textContent = incomingHandoff?.[0] || '';
+    handoffGuidance.textContent = incomingHandoff?.[1] || '';
+    const outgoingType = nextChunk?.outgoingTransitionType;
+    outgoingHandoff.textContent = outgoingType === 'FINAL'
+        ? 'Outgoing handoff: final clip — no next handoff.'
+        : ['A', 'B', 'C'].includes(outgoingType)
+            ? `Outgoing handoff: Type ${outgoingType}${nextChunk.clipNumber === totalClipNumber(chunks) ? '' : ' · must match the next clip’s incoming type'}.`
+            : '';
+    outgoingHandoff.hidden = outgoingHandoff.textContent === '';
 
     if (nextChunk) {
         setMainAction(`Copy ${nextChunk.label}`, 'copy');

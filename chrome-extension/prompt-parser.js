@@ -88,14 +88,60 @@ function extensionPrompt(lines) {
 }
 
 function transitionType(text) {
-    const marker = text.match(/(?:INCOMING\s+)?TRANSITION\s+TYPE\s*:\s*([^\r\n]+)/i);
+    const incomingLines = text.split('\n').filter((line) => {
+        const normalized = line.replace(/\*\*/g, '').replace(/__/g, '');
+        return !/^\s*(?:[-*+]\s*)?OUTGOING\s+HANDOFF\s+TYPE\s*:/i.test(normalized);
+    });
+    const incomingText = incomingLines.join('\n');
+    const marker = incomingText.match(/(?:INCOMING\s+)?TRANSITION\s+TYPE\s*:\s*([^\r\n]+)/i);
     if (marker) {
         const explicit = marker[1].match(/\bTYPE\s*([ABC])\b/i);
         return explicit ? explicit[1].toUpperCase() : null;
     }
 
-    const descriptive = text.match(/\bTYPE\s+([ABC])\s*[—–:-]\s*(?:DIRECT\s+CONTINUATION|NATURAL\s+ACTION\s+TRANSITION|NARRATIVE\s*\/\s*TEMPORAL\s+TRANSITION)\b/i);
+    const descriptive = incomingText.match(/\bTYPE\s+([ABC])\s*[—–:-]\s*(?:DIRECT\s+CONTINUATION|NATURAL\s+ACTION\s+TRANSITION|NARRATIVE\s*\/\s*TEMPORAL\s+TRANSITION)\b/i);
     return descriptive ? descriptive[1].toUpperCase() : null;
+}
+
+function outgoingTransitionType(text) {
+    const lines = text.split('\n').map((line) => line.replace(/\*\*/g, '').replace(/__/g, ''));
+    const line = lines.find((candidate) => /^\s*(?:[-*+]\s*)?OUTGOING\s+HANDOFF\s+TYPE\s*:/i.test(candidate));
+    const marker = line?.match(/^\s*(?:[-*+]\s*)?OUTGOING\s+HANDOFF\s+TYPE\s*:\s*([^\r\n]+)/i);
+    if (!marker) return null;
+
+    if (/\bFINAL\b/i.test(marker[1])) return 'FINAL';
+    const explicit = marker[1].match(/\bTYPE\s*([ABC])\b/i);
+    return explicit ? explicit[1].toUpperCase() : null;
+}
+
+function handoffWarnings(chunks) {
+    const clips = chunks.filter((chunk) => chunk.kind === 'clip');
+    const hasNewContract = clips.some((chunk) => chunk.outgoingTransitionType)
+        || clips.some((chunk) => /^\s*SPEECH\/VISUAL\s+MAP\s*:/im.test(chunk.text));
+    if (!hasNewContract) return [];
+
+    const warnings = [];
+    clips.slice(0, -1).forEach((previous, index) => {
+        const next = clips[index + 1];
+        if (!previous.outgoingTransitionType) {
+            warnings.push(`Clip ${previous.clipNumber} is missing its outgoing handoff type.`);
+            return;
+        }
+        if (!next.transitionType) {
+            warnings.push(`Clip ${next.clipNumber} is missing an incoming transition type; Clip ${previous.clipNumber} cannot be checked against it.`);
+            return;
+        }
+        if (previous.outgoingTransitionType !== next.transitionType) {
+            warnings.push(`Clip ${previous.clipNumber} ends with Type ${previous.outgoingTransitionType}, but Clip ${next.clipNumber} begins with Type ${next.transitionType}.`);
+        }
+    });
+
+    const finalClip = clips.at(-1);
+    if (finalClip && finalClip.outgoingTransitionType !== 'FINAL') {
+        warnings.push(`Clip ${finalClip.clipNumber} must end with OUTGOING HANDOFF TYPE: FINAL — NO NEXT HANDOFF.`);
+    }
+
+    return warnings;
 }
 
 function visibleCharacterCast(text) {
@@ -123,17 +169,18 @@ function fallback(raw, reason) {
         format: 'complete-prompt',
         chunks: [{ kind: 'complete', label: 'Complete prompt', text, visibleCast: cast }],
         notice: reason,
+        handoffWarnings: [],
     };
 }
 
 /**
  * Split either the app's Section 8 clip list or a section-per-clip v2 response
- * into context and individually copy-ready prompts. Incoming Type A/B/C handoffs
- * are labeled for the popup; continuity/audit sections after the final clip are
- * attached to that final handoff.
+ * into context and individually copy-ready prompts. Incoming and outgoing
+ * Type A/B/C handoffs are labeled and cross-checked; continuity/audit sections
+ * after the final clip are attached to that final handoff.
  *
  * @param {string} raw
- * @returns {{format: string, chunks: Array<{kind: string, label: string, text: string, visibleCast?: string|null, clipNumber?: number, transitionType?: string|null, transitionLabel?: string|null}>, notice: string}}
+ * @returns {{format: string, chunks: Array<{kind: string, label: string, text: string, visibleCast?: string|null, clipNumber?: number, transitionType?: string|null, transitionLabel?: string|null, outgoingTransitionType?: string|null}>, notice: string, handoffWarnings: string[]}}
  */
 export function parsePrompt(raw) {
     if (typeof raw !== 'string' || !raw.trim()) {
@@ -164,6 +211,7 @@ export function parsePrompt(raw) {
                 format: 'extension-prompt',
                 chunks: [{ kind: 'extension', label: 'Extension prompt', text: copyPrompt, visibleCast: visibleCharacterCast(copyPrompt) }],
                 notice: 'A single copy-ready extension prompt was found.',
+                handoffWarnings: [],
             };
         }
 
@@ -219,6 +267,7 @@ export function parsePrompt(raw) {
                 clipNumber: clip.number,
                 transitionType: transition,
                 transitionLabel: transition ? TRANSITION_LABELS[transition] : null,
+                outgoingTransitionType: outgoingTransitionType(clipText),
                 label: `${label}${hasHandoff ? ' · final handoff' : ''}`,
                 text: clipText,
                 visibleCast: visibleCharacterCast(clipText),
@@ -236,11 +285,13 @@ export function parsePrompt(raw) {
     const transitionNotice = transitionCount
         ? `; ${transitionCount} dedicated Type C transition clip${transitionCount === 1 ? '' : 's'} identified`
         : '';
+    const warnings = handoffWarnings(chunks);
     const notice = `${clipCount} clip prompt${clipCount === 1 ? '' : 's'} separated${hasHandoff ? '; the closing handoff and continuity sections are attached to the final clip' : ''}${transitionNotice}.`;
 
     return {
         format: 'clip-sequence',
         chunks,
         notice,
+        handoffWarnings: warnings,
     };
 }

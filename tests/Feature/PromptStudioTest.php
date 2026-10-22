@@ -52,6 +52,7 @@ class PromptStudioTest extends TestCase
             ->assertSee('data-wizard-when="narration:1&amp;speech_mode:voiceover"', false)
             ->assertSee('name="speech_mode"', false)
             ->assertSee('Characters speak in-scene')
+            ->assertSee('action visibly performed in that clip')
             ->assertSee('data-voice-preview-button', false)
             ->assertSee('data-wizard-title="Choose a video type"', false)
             ->assertSee('Cinematic story / short film')
@@ -132,6 +133,8 @@ class PromptStudioTest extends TestCase
                 && str_contains($systemInstruction, 'TRANSITION CLIP SYSTEM')
                 && str_contains($systemInstruction, 'Type A direct continuation, Type B natural action transition, or Type C narrative/temporal transition')
                 && str_contains($systemInstruction, 'CHARACTER IDENTITY ENFORCEMENT — THE CANONICAL CHARACTER BIBLE IS THE SINGLE SOURCE OF TRUTH')
+                && str_contains($systemInstruction, 'SPEECH/VISUAL ACTION LOCK — Map every exact voice-over or dialogue line to a timed action')
+                && str_contains($systemInstruction, 'MATCHED HANDOFF CONTRACT — Compare each prior ending with the next opening')
                 && str_contains($systemInstruction, 'For multi-shot clips, give every shot its exact cast/count plus a full repeated identity lock')
                 && str_contains($systemInstruction, 'do not include it in a Type C transition clip')
                 && str_contains($systemInstruction, 'SPOKEN AUDIO MODE — VOICE-OVER: Use one consistent off-screen narrator')
@@ -142,6 +145,7 @@ class PromptStudioTest extends TestCase
                 && str_contains($systemInstruction, '7–10 seconds when coordinated beats, multiple subjects, a transformation')
                 && str_contains($brief, 'Aspect ratio: 9:16')
                 && str_contains($brief, 'Speech mode: Voice-over narration by one consistent off-screen narrator')
+                && str_contains($brief, 'Speech-to-visual alignment: For every exact narration or dialogue line, map its timing to the visible action/object/result in this same clip')
                 && str_contains($brief, 'Spoken language: English')
                 && str_contains($brief, 'Clip duration: AI decides from complexity: about 2–3 seconds for a simple beat, 4–6 for a moderately layered action, and 7–10 when coordinated action, transformations, camera moves, multiple subjects, or speech genuinely need room')
                 && str_contains($brief, 'Number of clips: AI decides; choose the minimum practical total number of connected clips')
@@ -151,7 +155,7 @@ class PromptStudioTest extends TestCase
                 && str_contains($brief, 'SHOT N CHARACTER IDENTITY LOCK:')
                 && str_contains($brief, 'Saved character type: robot.')
                 && str_contains($brief, 'Saved character idea: A tiny golden bee with a blue satchel.')
-                && str_contains($brief, 'Transition planning: Choose the simplest handoff that is physically, causally, and temporally possible. Type A begins on the exact prior final frame and preserves its object/process state; Type B shows the continuous visible action or transfer that changes that state; Type C deliberately marks a meaningful time/place/process transition with clear before → visible change → after.')
+                && str_contains($brief, 'Transition planning: Before drafting, compare every prior ending with the next opening across exact cast/identity, poses and positions, objects, materials/process state, environment, camera/motion, lighting, and audible action. Match each prior `OUTGOING HANDOFF TYPE:` exactly to the destination `TRANSITION TYPE:`.')
                 && str_contains($brief, 'Background music: Include subtle music that never overpowers speech')
                 && str_contains($brief, 'Sound effects: Use only restrained, action-matched sound effects')
                 && str_contains($brief, 'Why do bees visit flowers?')
@@ -163,6 +167,39 @@ class PromptStudioTest extends TestCase
         });
 
         $this->assertSame('auto', $owner->promptProjects()->firstOrFail()->brief['clip_count']);
+    }
+
+    public function test_spoken_audio_off_requires_a_none_speech_map_and_no_spoken_words(): void
+    {
+        Http::fake([
+            'https://generativelanguage.googleapis.com/*' => Http::response([
+                'candidates' => [['content' => ['parts' => [['text' => "## PROJECT OVERVIEW\nA silent bee story.\n"]]]]],
+            ], 200),
+        ]);
+        AiSetting::create([
+            'provider' => 'gemini',
+            'model' => 'gemini-2.5-flash',
+            'api_key' => 'test-provider-secret',
+        ]);
+        $owner = User::factory()->create();
+        $project = $this->makeProject($owner, ['narration' => '0']);
+
+        $this->actingAs($owner)
+            ->postJson(route('studio.generate', $project), $this->storyBrief())
+            ->assertOk()
+            ->assertJsonPath('saved_to_history', true);
+
+        Http::assertSent(function (ClientRequest $request): bool {
+            $systemInstruction = data_get($request->data(), 'systemInstruction.parts.0.text', '');
+            $brief = data_get($request->data(), 'contents.0.parts.0.text', '');
+
+            return str_contains($systemInstruction, 'SPOKEN AUDIO MODE — OFF: Include no voice-over narrator, character dialogue, lyrics, or other spoken words')
+                && str_contains($systemInstruction, '`SPEECH/VISUAL MAP: None — spoken audio is off`')
+                && str_contains($brief, 'Spoken audio: Off')
+                && str_contains($brief, 'Speech-to-visual alignment: Speech is off; write `SPEECH/VISUAL MAP: None — spoken audio is off` in every clip and include no spoken words.');
+        });
+
+        Http::assertSentCount(1);
     }
 
     public function test_quality_focused_clip_count_builds_logically_sequenced_process_stages_and_plausible_handoffs(): void
@@ -248,8 +285,10 @@ class PromptStudioTest extends TestCase
             return str_contains($systemInstruction, 'SPOKEN AUDIO MODE — ON-SCREEN CHARACTER DIALOGUE')
                 && str_contains($systemInstruction, 'No off-screen narrator or voice-over')
                 && str_contains($systemInstruction, 'Give each speaking character an individually specified, distinctive voice identity')
-                && str_contains($systemInstruction, 'Include the relevant character voice profiles in every standalone clip prompt')
+                && str_contains($systemInstruction, 'Keep each named speaker visibly on screen during the line and map every exact line to the action/result visibly performed in that same clip')
+                && str_contains($systemInstruction, 'Include `SPEECH/VISUAL MAP:` and relevant character voice profiles in every standalone clip prompt')
                 && str_contains($brief, 'Speech mode: On-screen character dialogue; no narrator')
+                && str_contains($brief, 'Speech-to-visual alignment: For every exact narration or dialogue line, map its timing to the visible action/object/result in this same clip')
                 && str_contains($brief, 'Spoken language: Urdu')
                 && str_contains($brief, 'Narration: Off; no voice-over narrator')
                 && str_contains($brief, 'Character dialogue: On; on-screen speakers in Urdu')
@@ -560,13 +599,16 @@ class PromptStudioTest extends TestCase
             $brief = data_get($request->data(), 'contents.0.parts.0.text', '');
 
             return str_contains($systemInstructions, 'SPOKEN AUDIO MODE — ON-SCREEN CHARACTER DIALOGUE: Do not add a narrator or voice-over')
+                && str_contains($systemInstructions, 'map each exact line to the action/result visibly performed in this extension only')
                 && str_contains($systemInstructions, 'A still frame reveals no voice')
                 && str_contains($systemInstructions, 'never claim it matches unseen prior audio')
                 && str_contains($brief, 'Character identity enforcement: EXTENSION CHARACTER LOCK: No final-frame image is attached; use only the written visible-state description.')
                 && str_contains($brief, 'Include `VISIBLE CHARACTER CAST:` and `CHARACTER IDENTITY LOCK:` plus complete evidence-based identity details')
                 && str_contains($brief, 'Requested next action: Mina gently lifts the lantern and says a short line to her robot companion.')
                 && str_contains($brief, 'Speech mode: On-screen character dialogue; no narrator')
+                && str_contains($brief, 'Speech-to-visual alignment: For every exact narration or dialogue line, map its timing to the visible action/object/result in this same clip')
                 && str_contains($brief, 'Extension speech continuity: No narrator. Preserve character voice profiles')
+                && str_contains($brief, 'Keep the visible on-screen speaker present during each line and map dialogue only to an action/result visibly performed in this extension')
                 && str_contains($brief, 'A still frame reveals no voice; do not claim to match unseen audio')
                 && str_contains($brief, 'Mina, a thoughtful young inventor with copper goggles.');
         });

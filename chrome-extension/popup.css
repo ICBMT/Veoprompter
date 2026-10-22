@@ -135,6 +135,37 @@ button, a, summary { -webkit-tap-highlight-color: transparent; }
 .character-cast > span { padding-top: 1px; color: #9bd9eb; font-size: 8px; font-weight: 780; letter-spacing: .85px; }
 .character-cast > strong { color: #e0f5fa; font-size: 9px; font-weight: 620; line-height: 1.55; overflow-wrap: anywhere; }
 
+.handoff-cue {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    align-items: start;
+    gap: 5px 9px;
+    margin-top: 9px;
+    padding: 9px 10px;
+    border: 1px solid rgb(148 173 237 / 24%);
+    border-radius: 8px;
+    background: linear-gradient(110deg, rgb(51 57 91 / 38%), rgb(26 39 58 / 72%));
+}
+
+.handoff-cue > span { padding-top: 2px; color: #b9c8ff; font-size: 7px; font-weight: 780; letter-spacing: .8px; }
+.handoff-cue > strong { color: #eef0ff; font-size: 9px; font-weight: 710; line-height: 1.45; overflow-wrap: anywhere; }
+.handoff-cue > p { grid-column: 1 / -1; margin: 0; color: #bfcae0; font-size: 9px; line-height: 1.5; }
+.handoff-cue > small { grid-column: 1 / -1; color: #9daecb; font-size: 8px; line-height: 1.45; }
+.handoff-cue--warning { border-color: rgb(221 163 88 / 40%); background: linear-gradient(110deg, rgb(93 61 31 / 43%), rgb(51 39 30 / 75%)); }
+.handoff-cue--warning > span, .handoff-cue--warning > strong { color: #ffd99f; }
+.handoff-cue--warning > p, .handoff-cue--warning > small { color: #edd4b2; }
+
+.handoff-warning {
+    margin: 8px 0 0;
+    padding: 8px 9px;
+    color: #ffdfaa;
+    border: 1px solid rgb(218 155 73 / 37%);
+    border-radius: 8px;
+    background: rgb(76 49 25 / 46%);
+    font-size: 9px;
+    line-height: 1.5;
+}
+
 .empty-state { display: flex; flex-direction: column; align-items: flex-start; margin: 17px 0 14px; padding: 17px 16px 16px; }
 .empty-mark {
     display: grid;

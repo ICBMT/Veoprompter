@@ -121,21 +121,27 @@ test('classifies Type A, Type B, and Type C clips for the extension handoff', ()
         'COPY CLIP 1 PROMPT',
         'TRANSITION TYPE: INITIAL CLIP — NO PREVIOUS HANDOFF',
         'The character plants a seed.',
+        'OUTGOING HANDOFF TYPE: TYPE A — DIRECT CONTINUATION',
         'COPY CLIP 2 PROMPT',
         'TRANSITION TYPE: TYPE A — DIRECT CONTINUATION',
         'Continue this exact scene from the frame shown. The character waters the seed.',
+        'OUTGOING HANDOFF TYPE: TYPE B — NATURAL ACTION TRANSITION',
         'COPY CLIP 3 PROMPT',
         'TRANSITION TYPE: TYPE B — NATURAL ACTION TRANSITION',
         'The character carries a watering can through the garden gate.',
+        'OUTGOING HANDOFF TYPE: TYPE C — NARRATIVE / TEMPORAL TRANSITION',
         'COPY TRANSITION CLIP 4 PROMPT',
         'TRANSITION TYPE: TYPE C — NARRATIVE / TEMPORAL TRANSITION',
         'Before: a young plant. Transformation: seasons pass in a purposeful time-lapse. After: a mature tree.',
+        'OUTGOING HANDOFF TYPE: FINAL — NO NEXT HANDOFF',
         'SECTION 9 — EXACT HANDOFF SPECIFICATION',
         'The mature tree is the canonical state for the next clip.',
     ].join('\n'));
 
     assert.equal(parsed.format, 'clip-sequence');
     assert.deepEqual(parsed.chunks.slice(1).map((chunk) => chunk.transitionType), [null, 'A', 'B', 'C']);
+    assert.deepEqual(parsed.chunks.slice(1).map((chunk) => chunk.outgoingTransitionType), ['A', 'B', 'C', 'FINAL']);
+    assert.deepEqual(parsed.handoffWarnings, []);
     assert.equal(parsed.chunks[2].label, 'Clip 2 · Type A');
     assert.equal(parsed.chunks[3].label, 'Clip 3 · Type B');
     assert.equal(parsed.chunks[4].label, 'Transition clip 4 · Type C · final handoff');
@@ -144,6 +150,60 @@ test('classifies Type A, Type B, and Type C clips for the extension handoff', ()
     assert.match(parsed.chunks[4].text, /Before: a young plant/);
     assert.match(parsed.chunks[4].text, /SECTION 9 — EXACT HANDOFF SPECIFICATION/);
     assert.match(parsed.notice, /1 dedicated Type C transition clip identified/);
+});
+
+test('flags a mismatch between the previous clip outgoing type and the next incoming type', () => {
+    const parsed = parsePrompt([
+        'SECTION 8 — COPY-AND-PASTE VIDEO PROMPTS',
+        'COPY CLIP 1 PROMPT',
+        'TRANSITION TYPE: INITIAL CLIP — NO PREVIOUS HANDOFF',
+        'The character plants the seed.',
+        '**OUTGOING HANDOFF TYPE:** TYPE A — DIRECT CONTINUATION',
+        'COPY CLIP 2 PROMPT',
+        'TRANSITION TYPE: TYPE B — NATURAL ACTION TRANSITION',
+        'The character carries the seed tray to the greenhouse.',
+        'OUTGOING HANDOFF TYPE: FINAL — NO NEXT HANDOFF',
+    ].join('\n'));
+
+    assert.deepEqual(parsed.chunks.map((chunk) => chunk.outgoingTransitionType), ['A', 'FINAL']);
+    assert.equal(parsed.handoffWarnings.length, 1);
+    assert.match(parsed.handoffWarnings[0], /Clip 1 ends with Type A, but Clip 2 begins with Type B/);
+});
+
+test('flags missing outgoing and final markers when the new speech-map contract is present', () => {
+    const parsed = parsePrompt([
+        'SECTION 8 — COPY-AND-PASTE VIDEO PROMPTS',
+        'COPY CLIP 1 PROMPT',
+        'TRANSITION TYPE: INITIAL CLIP — NO PREVIOUS HANDOFF',
+        'SPEECH/VISUAL MAP: 0–2s, the bee lands on the flower → “A bee lands.”',
+        'COPY CLIP 2 PROMPT',
+        'TRANSITION TYPE: TYPE A — DIRECT CONTINUATION',
+        'SPEECH/VISUAL MAP: 0–2s, pollen moves onto the bee → “Pollen sticks to its legs.”',
+    ].join('\n'));
+
+    assert.equal(parsed.handoffWarnings.length, 2);
+    assert.match(parsed.handoffWarnings[0], /Clip 1 is missing its outgoing handoff type/);
+    assert.match(parsed.handoffWarnings[1], /Clip 2 must end with OUTGOING HANDOFF TYPE: FINAL/);
+});
+
+test('does not mistake an outgoing marker for a missing incoming type', () => {
+    const parsed = parsePrompt([
+        'SECTION 8 — COPY-AND-PASTE VIDEO PROMPTS',
+        'COPY CLIP 1 PROMPT',
+        'TRANSITION TYPE: INITIAL CLIP — NO PREVIOUS HANDOFF',
+        'The character begins watering.',
+        'OUTGOING HANDOFF TYPE: TYPE A — DIRECT CONTINUATION',
+        'COPY CLIP 2 PROMPT',
+        'The same action continues.',
+        'OUTGOING HANDOFF TYPE: TYPE A — DIRECT CONTINUATION',
+        'COPY CLIP 3 PROMPT',
+        'TRANSITION TYPE: TYPE A — DIRECT CONTINUATION',
+        'The action completes.',
+        'OUTGOING HANDOFF TYPE: FINAL — NO NEXT HANDOFF',
+    ].join('\n'));
+
+    assert.equal(parsed.chunks[1].transitionType, null);
+    assert.match(parsed.handoffWarnings[0], /Clip 2 is missing an incoming transition type/);
 });
 
 test('keeps a one-clip result copy-ready and includes trailing continuity sections', () => {
