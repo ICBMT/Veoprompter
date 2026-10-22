@@ -91,12 +91,13 @@
             </section>
 
             <section class="wizard-step" data-wizard-step data-wizard-group="VIDEO FORMAT" data-wizard-title="Choose the number of clips">
-                <div class="wizard-question"><span class="wizard-question-number" data-wizard-number>08</span><h2 tabindex="-1">How many clips should this video have?</h2><p>Choose a fixed count, or let AI find the minimum practical number of clips for a complete sequence. An AI-selected count is not capped at eight.</p></div>
+                <div class="wizard-question"><span class="wizard-question-number" data-wizard-number>08</span><h2 tabindex="-1">How many clips should this video have?</h2><p>Choose a fixed count, let AI use the minimum practical number, or let it use more clips when that improves logical flow and visual quality. Neither AI choice has an eight-clip cap.</p></div>
                 <div class="wizard-choice-grid wizard-choice-grid--four wizard-choice-grid--compact">
+                    <label class="wizard-choice wizard-choice--number wizard-choice--ai"><input type="radio" name="clip_count" value="auto" data-summary-label="Let AI decide · minimum practical count" @checked((string) old('clip_count', $settings['clip_count']) === 'auto') required><span class="wizard-choice-title">AI decides · minimum</span><span class="wizard-choice-description">Minimum practical number</span></label>
+                    <label class="wizard-choice wizard-choice--number wizard-choice--ai"><input type="radio" name="clip_count" value="quality" data-summary-label="Let AI decide · maximum quality" @checked((string) old('clip_count', $settings['clip_count']) === 'quality')><span class="wizard-choice-title">AI decides · maximum quality</span><span class="wizard-choice-description">Separate important stages for clarity</span></label>
                     @for($count = 2; $count <= 8; $count++)
-                        <label class="wizard-choice wizard-choice--number"><input type="radio" name="clip_count" value="{{ $count }}" data-summary-label="{{ $count }} clips" @checked((int) old('clip_count', $settings['clip_count']) === $count) @if($count === 2) required @endif><span class="wizard-choice-title">{{ $count }}</span><span class="wizard-choice-description">clips</span></label>
+                        <label class="wizard-choice wizard-choice--number"><input type="radio" name="clip_count" value="{{ $count }}" data-summary-label="{{ $count }} clips" @checked((int) old('clip_count', $settings['clip_count']) === $count)><span class="wizard-choice-title">{{ $count }}</span><span class="wizard-choice-description">clips</span></label>
                     @endfor
-                    <label class="wizard-choice wizard-choice--number wizard-choice--ai"><input type="radio" name="clip_count" value="auto" data-summary-label="Let AI decide · adaptive count" @checked((string) old('clip_count', $settings['clip_count']) === 'auto')><span class="wizard-choice-title">Let AI decide</span><span class="wizard-choice-description">Minimum practical number</span></label>
                 </div>
             </section>
 

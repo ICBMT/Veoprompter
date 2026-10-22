@@ -49,7 +49,7 @@ class StudioController extends Controller
             'character_type' => ['required', Rule::in(['ai-choice', 'human-male', 'human-female', 'robot', 'fictional'])],
             'character_details' => ['nullable', 'required_if:character_type,fictional', 'string', 'max:500'],
             'character_idea' => ['nullable', 'string', 'max:500'],
-            'clip_count' => ['nullable', 'required_if:mode,story', Rule::in([ProjectSettings::AI_CHOICE, ...range(ProjectSettings::MANUAL_CLIP_COUNT_MIN, ProjectSettings::MANUAL_CLIP_COUNT_MAX)])],
+            'clip_count' => ['nullable', 'required_if:mode,story', Rule::in([ProjectSettings::AI_CHOICE, ProjectSettings::AI_QUALITY_CLIP_COUNT, ...range(ProjectSettings::MANUAL_CLIP_COUNT_MIN, ProjectSettings::MANUAL_CLIP_COUNT_MAX)])],
             'clip_duration' => ['required', Rule::in([ProjectSettings::AI_CHOICE, ...range(ProjectSettings::MANUAL_DURATION_MIN, ProjectSettings::MANUAL_DURATION_MAX)])],
             'aspect_ratio' => ['required', Rule::in(['16:9', '9:16', '1:1', '4:3'])],
             'educational_depth' => ['required', Rule::in(['clear', 'balanced', 'deep-dive'])],

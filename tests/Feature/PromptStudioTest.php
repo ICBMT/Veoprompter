@@ -46,6 +46,8 @@ class PromptStudioTest extends TestCase
             ->assertOk()
             ->assertSee('data-project-wizard', false)
             ->assertSee('data-wizard-step', false)
+            ->assertSee('name="clip_count" value="quality"', false)
+            ->assertSee('AI decides · maximum quality')
             ->assertSee('data-wizard-when="narration:1"', false)
             ->assertSee('data-wizard-when="narration:1&amp;speech_mode:voiceover"', false)
             ->assertSee('name="speech_mode"', false)
@@ -141,7 +143,8 @@ class PromptStudioTest extends TestCase
                 && str_contains($brief, 'Spoken language: English')
                 && str_contains($brief, 'Clip duration: AI decides from complexity: about 2–3 seconds for a simple beat, 4–6 for a moderately layered action, and 7–10 when coordinated action, transformations, camera moves, multiple subjects, or speech genuinely need room')
                 && str_contains($brief, 'Number of clips: AI decides; choose the minimum practical total number of connected clips')
-                && str_contains($brief, 'Transition planning: Classify every incoming handoff as Type A (direct continuation), Type B (visible natural action), or Type C (intentional narrative/temporal transition with before → change → after)')
+                && str_contains($brief, 'Logical visual/process continuity: Track identity and changing state for every important character, material, component, object, quantity, location, orientation, condition, and process stage—not only visual appearance.')
+                && str_contains($brief, 'Transition planning: Choose the simplest handoff that is physically, causally, and temporally possible. Type A begins on the exact prior final frame and preserves its object/process state; Type B shows the continuous visible action or transfer that changes that state; Type C deliberately marks a meaningful time/place/process transition with clear before → visible change → after.')
                 && str_contains($brief, 'Background music: Include subtle music that never overpowers speech')
                 && str_contains($brief, 'Sound effects: Use only restrained, action-matched sound effects')
                 && str_contains($brief, 'Why do bees visit flowers?')
@@ -153,6 +156,46 @@ class PromptStudioTest extends TestCase
         });
 
         $this->assertSame('auto', $owner->promptProjects()->firstOrFail()->brief['clip_count']);
+    }
+
+    public function test_quality_focused_clip_count_builds_logically_sequenced_process_stages_and_plausible_handoffs(): void
+    {
+        Http::fake([
+            'https://generativelanguage.googleapis.com/*' => Http::response([
+                'candidates' => [['content' => ['parts' => [['text' => "## PROJECT OVERVIEW\nA quality-focused vehicle-manufacturing sequence.\n"]]]]],
+            ], 200),
+        ]);
+        AiSetting::create([
+            'provider' => 'gemini',
+            'model' => 'gemini-2.5-flash',
+            'api_key' => 'test-provider-secret',
+        ]);
+        $owner = User::factory()->create();
+        $project = $this->makeProject($owner, ['clip_count' => ProjectSettings::AI_QUALITY_CLIP_COUNT]);
+        $brief = [...$this->storyBrief(), 'topic' => 'How are vehicles manufactured?'];
+
+        $this->actingAs($owner)
+            ->postJson(route('studio.generate', $project), $brief)
+            ->assertOk()
+            ->assertJsonPath('saved_to_history', true);
+
+        $savedRun = $owner->promptProjects()->firstOrFail();
+        $this->assertSame(ProjectSettings::AI_QUALITY_CLIP_COUNT, $savedRun->brief['clip_count']);
+
+        Http::assertSent(function (ClientRequest $request): bool {
+            $systemInstruction = data_get($request->data(), 'systemInstruction.parts.0.text', '');
+            $creativeBrief = data_get($request->data(), 'contents.0.parts.0.text', '');
+
+            return str_contains($systemInstruction, 'CLIP COUNT — AI DIRECTS FOR MAXIMUM QUALITY: Optimize the sequence for logical clarity, visible cause and effect, correct chronology, complete process stages')
+                && str_contains($systemInstruction, 'LOGICAL AND PROCESS-STATE CONTINUITY')
+                && str_contains($systemInstruction, 'Do not imply that flat sheets instantly become a finished car')
+                && str_contains($systemInstruction, 'If no physically and temporally plausible handoff exists, revise the beat order')
+                && str_contains($creativeBrief, 'Number of clips: AI decides for maximum quality; use enough connected clips to make every meaningful cause-and-effect beat')
+                && str_contains($creativeBrief, 'Logical visual/process continuity: Track identity and changing state for every important character, material, component')
+                && str_contains($creativeBrief, 'How are vehicles manufactured?');
+        });
+
+        Http::assertSentCount(1);
     }
 
     public function test_character_dialogue_uses_distinct_character_voice_profiles_and_never_requests_a_narrator(): void

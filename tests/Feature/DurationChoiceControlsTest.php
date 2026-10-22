@@ -242,10 +242,11 @@ class DurationChoiceControlsTest extends TestCase
             ->get(route('projects.create'))
             ->assertOk()
             ->assertSee('name="clip_count" value="auto"', false)
+            ->assertSee('name="clip_count" value="quality"', false)
             ->assertSee('name="clip_duration" value="auto"', false)
             ->assertSee('name="extend_duration" value="auto"', false)
             ->assertSee('Let AI decide')
-            ->assertSee('An AI-selected count is not capped at eight.');
+            ->assertSee('Neither AI choice has an eight-clip cap.');
 
         $this->actingAs($owner)
             ->post(route('projects.store'), $this->projectPayload([

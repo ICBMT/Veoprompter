@@ -77,6 +77,32 @@ class ProjectAndTemporaryAccountTest extends TestCase
         $this->assertSame('Urdu', $project->settings['language'], 'Disabled voice controls keep their saved values when narration is turned off.');
     }
 
+    public function test_quality_focused_ai_clip_count_is_saved_and_visible_in_project_settings(): void
+    {
+        $owner = User::factory()->create();
+        $payload = [
+            ...ProjectSettings::defaults(),
+            'name' => 'Quality-first manufacturing sequence',
+            'clip_count' => ProjectSettings::AI_QUALITY_CLIP_COUNT,
+        ];
+
+        $this->actingAs($owner)
+            ->post(route('projects.store'), $payload)
+            ->assertRedirect();
+
+        $project = $owner->studioProjects()->firstOrFail();
+        $this->assertSame(ProjectSettings::AI_QUALITY_CLIP_COUNT, $project->settings['clip_count']);
+
+        $this->get(route('projects.settings.edit', $project))
+            ->assertOk()
+            ->assertSee('value="quality" title="Let AI add meaningful clips when they improve causal clarity, complete process stages, or pacing; no arbitrary count cap or filler." selected', false)
+            ->assertSee('Let AI decide · maximum quality');
+
+        $this->get(route('projects.index'))
+            ->assertOk()
+            ->assertSee('AI decides · maximum-quality count');
+    }
+
     public function test_character_dialogue_mode_is_saved_as_a_project_default_and_editable(): void
     {
         $owner = User::factory()->create();

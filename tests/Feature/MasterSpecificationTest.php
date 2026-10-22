@@ -23,6 +23,11 @@ class MasterSpecificationTest extends TestCase
 
         $this->assertStringContainsString('PLAN BEFORE WRITING', $specification);
         $this->assertStringContainsString('AI-DIRECTED CLIP ARCHITECTURE', $specification);
+        $this->assertStringContainsString('maximum-quality option', $specification);
+        $this->assertStringContainsString('quality-focused option', $specification);
+        $this->assertStringContainsString('LOGICAL AND PROCESS-STATE CONTINUITY', $specification);
+        $this->assertStringContainsString('workpiece or components moving through intermediate states', $specification);
+        $this->assertStringContainsString('Never use Type C to excuse a missing operation', $specification);
         $this->assertStringContainsString('AI-DIRECTED CLIP DURATION', $specification);
         $this->assertStringContainsString('do not default to four or impose an arbitrary maximum', $specification);
         $this->assertStringContainsString('about 2–3 seconds for one simple reveal or movement', $specification);
