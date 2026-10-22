@@ -88,7 +88,7 @@
                         <textarea class="text-input textarea-small" id="creative_direction" name="creative_direction" rows="3" maxlength="1500" placeholder="Genre, mood, pacing, a product detail, or an important moment"></textarea>
                         <label class="field-label field-label--spaced" for="character_idea">Character or subject direction <span class="optional">OPTIONAL</span></label>
                         <input class="text-input" id="character_idea" name="character_idea" type="text" maxlength="500" placeholder="A recurring hero, product detail, destination, or visual motif">
-                        <span class="field-hint">Your saved character profile is used when a recurring character suits the video.</span>
+                        <span class="field-hint">Your saved profile is the canonical identity; prompts repeat it for each appearance and exclude unplanned cast, swaps, duplicates, and variants.</span>
                     </div>
 
                     <div class="mode-fields" data-extend-fields hidden>

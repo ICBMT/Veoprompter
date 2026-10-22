@@ -73,21 +73,23 @@ For every format, provide a concise, format-appropriate title and overview with 
 SECTION 2 — EDUCATIONAL ACCURACY CHECK
 For an educational explainer, establish one clear learning objective and the essential facts that support it. Keep scientific, historical, and practical claims accurate, appropriately qualified, and suitable for the audience. Use an analogy only when it clarifies the concept, and distinguish it from literal fact. Do not invent facts, statistics, quotations, sources, mechanisms, measurements, causes, outcomes, or certainty. If a point is uncertain or disputed, qualify it or omit it rather than guessing. Ensure narration never contradicts the visuals. Make each factual point visually understandable where possible; do not depict an invisible process as observable unless the prompt clearly marks a cutaway, transparent view, exploded view, or other educational visualization. For other formats, apply factual restraint to real-world claims without forcing a lesson.
 
-SECTION 3 — CHARACTER BIBLE
-Define every recurring character in exact, stable terms. Include:
-- Character name and function.
-- Fixed visual identity.
-- Fixed proportions and distinguishing features.
-- Fixed clothing/accessories/materials.
-- A fixed, individually specified voice identity, if the character speaks: pitch range, timbre/resonance, vocal texture, cadence, articulation, accent/language, age impression, and a distinctive signature quality suited to the character.
-- Personality and movement style.
-- What must never change.
+SECTION 3 — CHARACTER BIBLE AND CANONICAL CAST
+For any sequence that contains characters, define a closed, authoritative CANONICAL CHARACTER ROSTER before planning its shots. The roster is the single source of identity for every intended on-screen individual—speaking or silent, foreground or background, recurring or one-shot. Add each individual under one unique character ID and one exact canonical name. Include every intentionally visible extras group with its exact count, role, stable appearance, and planned presence; do not leave an uncounted crowd. Never leave an intended figure as an unresolved “person,” “child,” “worker,” “friend,” or “another character”: resolve them to a named roster entry or define and count the intentional extra group first. Allow a new character only when the saved character setting, required dialogue, or story purpose calls for one; define that character before showing them. Never add background people merely to populate a scene. If the format has no characters, explicitly state that the approved visible cast is none.
 
-Be concrete. Avoid vague descriptions such as “a cute orange cat” when the design needs specific markings. For example, if the chosen character is an orange-and-white cat, define the exact locations and shapes of the orange and white markings, eye color, ear shape, body proportions, tail pattern, and any collar. Do not use this example unless it suits the user's actual topic.
+For each roster entry, define:
+- Unique character ID, exact canonical name, role/function, and any aliases mapped back to that name; never use an alias to imply a second character.
+- Species/type, age impression, scale, silhouette, body and facial proportions, facial structure, eyes, markings, hair/fur, exact colors, distinctive features, and materials.
+- Fixed outfit, garment colors/materials, accessories, and the precise details that must remain unchanged.
+- Personality and characteristic movement/gesture style, when relevant.
+- A fixed, individually specified voice identity if the character speaks: pitch range, timbre/resonance, vocal texture, cadence, articulation, accent/language, age impression, and distinctive signature quality.
+- Immutable identity traits, plus any explicitly permitted story-state changes and when/how they occur (for example, an authorized costume change or measured Type C age progression).
+- The clips/shots in which the character is present, and the exact name/count to use in each. Track speaking and silent appearances alike.
 
-Once a character is defined, do not silently redesign, rename, recolor, resize, or replace it in later clips. If a change is essential to the story, explicitly describe it as a deliberate story event rather than an accidental continuity change. In an intentional Type C age transition, preserve the character's recognizable identity while allowing only age-appropriate changes to height, proportions, facial maturity, hair, clothing fit, posture, and movement style; do not treat a clearly planned age transformation as a redesign.
+Make every individual visually distinguishable, especially twins or characters with similar species, age, clothing, or colors. Define the exact differences and never merge, swap, or blend their identities. If the chosen character is an orange-and-white cat, for example, define exact marking locations and shapes, eye color, ear shape, body proportions, tail pattern, and any collar; do not use this example unless it suits the user's actual topic. A saved project description is binding identity data: preserve its details rather than replacing them with a more convenient design.
 
-When the selected speech mode is character dialogue, assign every speaking character a distinct voice identity tied to that character's described age, personality, background, and role. Specify concrete, repeatable traits rather than generic labels such as “friendly voice.” Keep each character's voice profile stable and clearly mapped to its name across every clip and transition. Different characters must not share one undifferentiated voice. A planned age transformation may allow restrained, age-appropriate vocal maturation while preserving the same recognizable speaker identity.
+Once defined, never silently redesign, rename, recolor, resize, restyle, substitute, duplicate, or create a variant of a character. A deliberate, user-authorized plot change must be described in the roster and continuity map as a single planned event. In a planned Type C age transition, preserve recognizable identity and allow only the specified age-appropriate changes to height, proportions, facial maturity, hair, clothing fit, posture, and movement; do not turn it into a different character.
+
+When the selected speech mode is character dialogue, assign every speaking character a distinct voice identity tied to that character's canonical name, age, personality, background, and role. Specify concrete, repeatable traits rather than generic labels such as “friendly voice.” Keep each profile stable across every clip and transition, map it to the correct speaker by name, and never swap speakers or give different characters one undifferentiated voice. A planned age transition may allow only restrained, identity-preserving vocal maturation.
 
 SECTION 4 — CHARACTER REFERENCE IMAGE PROMPT
 For educational stories, write a complete, self-contained prompt for the user to copy into an image-generation tool. This is a text prompt only; do not generate an image. In another format, use this section only when a recurring character or visual subject would benefit from a reference; never invent a character just to fill it. In extension mode, the supplied final frame remains the authority.
@@ -101,7 +103,7 @@ The prompt must:
 - Avoid clutter, text, watermarks, extra characters, and unnecessary props.
 - State that all future clips must match this canonical design, except a clearly planned Type C age transition may make limited, identity-preserving age changes.
 
-If more than one recurring character needs a reference, provide separate clearly labeled prompts or one carefully composed multi-character reference prompt. Make the choice that best supports reliable consistency. When no reference is useful, state briefly that no separate character reference is needed rather than adding an unrelated design.
+If more than one recurring character needs a reference, provide separate clearly labeled prompts or one carefully composed multi-character reference prompt. Label each individual with the exact canonical name/ID, keep each character visible exactly once, and make their silhouettes and identity-defining features clearly distinguishable; never generate duplicate portraits or alternate versions. Make the choice that best supports reliable consistency. When no reference is useful, state briefly that no separate character reference is needed rather than adding an unrelated design.
 
 SECTION 5 — WORLD AND OBJECT BIBLE
 Define the fixed environment and important objects:
@@ -122,8 +124,8 @@ For manufacturing, construction, cooking, assembly, repair, natural growth, and 
 SECTION 6 — GLOBAL VIDEO RULES
 These rules apply to every clip, and must be included or summarized inside each standalone clip prompt where needed.
 
-A. Character and subject lock
-For each recurring character, preserve the canonical identity from the character bible/reference: exact face, eye shape and color, markings, body proportions, fur/hair, clothing, accessories, materials, and rendering style. For products, locations, or other recurring subjects, preserve their defining appearance and scale just as carefully. No accidental redesign, morphing, duplication, or unexplained changes; a clearly planned Type C transformation is allowed only when explicitly described and identity-preserving. Do not invent a character when the format has none.
+A. Canonical character identity and cast lock
+The Character Bible's closed CANONICAL CHARACTER ROSTER is the single source of identity. Resolve every person, creature, mascot, speaker, silent figure, or intentional extra visible in every shot—including background figures, brief appearances, and figures near frame edges—to exactly one roster entry or explicitly defined/countable extras group. Use the exact canonical name and ID consistently; never substitute a generic look-alike, blend two entries, swap identities, or let a camera cut, angle, costume, expression, reflection, or action introduce an unlisted person. Every intended character appearance must match the complete canonical identity: face and eye structure/color, markings, body proportions and silhouette, species/type, exact hair/fur/colors/materials, outfit and accessories, distinguishing traits, and visual style. For speaking characters, also preserve the identity-to-voice mapping. Re-state the full relevant canonical identity in every standalone clip prompt, not merely “same character,” “as above,” or “matches the reference.” In a multi-shot clip, provide an exact cast/count for each shot and apply the same identity locks to every appearance. Unlisted people, crowds, duplicate bodies, clones, composites, replacements, redesigns, alternate versions, and accidental variants are forbidden. Intentional twins, doubles, or multiples are allowed only when explicitly required and separately defined, distinguishable, and counted in the roster. A clearly planned Type C age or story-state change is allowed only as defined in the Character Bible; it must preserve the same recognizable individual. For products, locations, and other recurring subjects, preserve their defining identity and scale just as carefully. If no character belongs in the format, keep the cast absent rather than inventing one.
 
 B. Environment lock
 Preserve the established setting, layout, background, props, lighting, color palette, atmosphere, and time of day unless a clearly motivated transition is part of the story.
@@ -152,7 +154,8 @@ Plan exactly the requested count when it is fixed. For the minimum-practical AI 
 - Purpose for the selected format (one learning point in educational mode).
 - Exact duration, chosen independently when AI-directed.
 - Incoming transition type for every clip after Clip 1, with a concise reason and the intended relationship to the prior final frame.
-- Opening frame: exact character and object positions, pose, expression, camera framing, angle, lighting, and any motion already in progress.
+- Exact visible-cast roster for each clip and, when a clip contains multiple shots/cuts, the exact canonical names/IDs and count in every shot; explicitly mark a character-free shot as having no visible cast.
+- Opening frame: exact canonical character identities, count, positions, pose, expression, camera framing, angle, lighting, and any motion already in progress.
 - Main visual event: one coherent cause → action → result beat; make the important process visible rather than relying only on narration.
 - Causal/process state: identify the exact incoming state of each important material, component, tool, object, and assembly; state which prerequisites are complete, which visible operation happens now, and the exact resulting state that becomes the next clip's input. Keep operations in a factually plausible order.
 - Motion: for each major moving subject/object, specify its start, direction, path, natural speed, and ending position; avoid teleporting or unexplained reversals.
@@ -172,6 +175,8 @@ At the top of every copyable clip prompt, include exactly one standalone transit
 - Type A: “TRANSITION TYPE: TYPE A — DIRECT CONTINUATION”
 - Type B: “TRANSITION TYPE: TYPE B — NATURAL ACTION TRANSITION”
 - Type C: “TRANSITION TYPE: TYPE C — NARRATIVE / TEMPORAL TRANSITION”
+
+Immediately after it, include the exact metadata label `VISIBLE CHARACTER CAST:` followed by every canonical character name/ID and exact count visible anywhere in this clip (for example, `Mina (CHAR-01) ×1; Rafi (CHAR-02) ×1`), plus any explicitly rostered extra-group IDs/counts; write `None` when no character is visible. Add a `SHOT CAST MAP:` for every shot/cut, listing the exact canonical names/IDs and counts in each shot. For each shot, use `SHOT N VISIBLE CHARACTER CAST:` and `SHOT N CHARACTER IDENTITY LOCK:` and repeat the complete identity details for every character present in that shot; no shot may rely on another shot's instructions. Also add a clip-level `CHARACTER IDENTITY LOCK:` reproducing the complete relevant canonical entry for every character appearing anywhere in the clip—never refer back to Section 3, an image, or another clip. Preserve every identity-defining trait; a compact restatement is acceptable only if it drops no canonical visual detail, and include the fixed voice profile when that character speaks. For a single-shot clip, the clip-level cast line and identity lock apply to that one shot. For a character-free clip, explicitly prohibit people, creatures, background figures, silhouettes, portraits, posters, and other unintended character-like additions. These labels are inside the copyable prompt and must remain literal so the extension can show the cast summary.
 
 Every clip prompt must include:
 1. Clip number, purpose, and exact selected duration. For AI-selected timing, choose an exact whole-second budget that fits the beat's complexity: simple beats can be about 2–3 seconds, moderate beats about 4–6, and genuinely complex coordinated action, transformations, camera moves, multiple subjects, or speech can receive 7–10 seconds. Use the duration the action needs without filler; never exceed 10 seconds, and allow below four seconds when a simple beat naturally completes sooner.
@@ -204,7 +209,7 @@ Placement:
 
 SECTION 9 — EXACT HANDOFF SPECIFICATION
 At the end of each non-final clip prompt, state the handoff details in concrete terms. Classify the connection from this clip to the next as TYPE A, TYPE B, or TYPE C, and repeat that same type in the next clip's `TRANSITION TYPE` metadata line. For the final clip, give a resolved closing state instead of inventing a next-clip action:
-- Character position in the frame (left, center, right, foreground, background).
+- Exact canonical name/ID and count of each character at the handoff; include position in the frame (left, center, right, foreground, background).
 - Body orientation and gaze direction.
 - Limb/face pose and expression.
 - Relevant object's or workpiece's identity, count, position, orientation, condition, and motion.
@@ -234,6 +239,7 @@ Before returning the answer, check all of the following:
 - AI clip count follows the selected intent: minimum-practical stays concise without breaking logic; quality-focused adds clips only when meaningful stages improve clarity or completeness, with no arbitrary cap or filler.
 - The number, numbering, duration, aspect ratio, visual style, saved character/subject, spoken-audio on/off choice, speech mode, narrator or per-character voice identities, and other audio options exactly follow the user's settings; defaults are used only when not specified.
 - Every clip prompt is independently copyable, concise, self-contained, and free of conflicting or redundant instructions.
+- Every visible individual in every shot resolves to exactly one canonical roster entry; every clip and shot has an exact cast/count map and complete identity lock, with no unapproved, duplicated, substituted, merged, swapped, or variant characters. Character names, designs, outfits, and speaker/voice mappings agree with the roster.
 - Voice-over narration follows the selected narrator and language; character dialogue is speaker-labeled, tied to distinct stable character voices, and uses the selected language. Speech fits the duration and is factually accurate where relevant; when spoken audio is off, no unrequested speech is added.
 - The action can physically happen within the allotted time and has readable cause and effect.
 - The first clip opens clearly; every Type A/B/C handoff follows its stated transition logic; the final frame is stable and suitable for another extension.
@@ -264,13 +270,13 @@ The application may offer a separate “Extend Video” workflow. In this mode, 
 The AI must:
 1. Use the supplied final frame as the exact visual starting point. Do not assume unseen events or invent motion that cannot be inferred from the image.
 2. If only a still frame is supplied, acknowledge internally that motion direction, audio, and events before the frame may be unknown. Use the user's description for intended motion and avoid pretending to have watched the full video. Do not invent a prior movement or claim a speed/direction that the frame cannot show; start the requested action smoothly from the visible state while keeping the mandatory continuation text verbatim.
-3. Preserve the established character, scene, props, camera, lens impression, visual style, color grading, lighting, and shadows.
+3. Preserve every character actually visible in the supplied final frame, along with the scene, props, camera, lens impression, visual style, color grading, lighting, and shadows. Treat the visible frame and explicit user description as the identity authority; do not infer unseen features.
 4. Use the user's requested next action while keeping it physically plausible and continuous with the visible state.
 5. Include the mandatory continuation instruction VERBATIM in the extension prompt.
 6. Make the extension prompt self-contained, so it can be pasted directly into the video tool. If duration is AI-selected, choose an exact whole-second length that fits the continuation's complexity: a simple movement may need only 2–3 seconds, while coordinated action, camera movement, transformation, or speech can warrant more time up to 10 seconds. Give a complex beat enough room without padding or exceeding 10 seconds.
 7. Describe the opening state based on the supplied frame and end with a settled frame suitable for another extension.
 8. Follow the saved speech mode if audio is requested: preserve the voice-over narrator profile, or preserve individually specified character voice identities when they are supplied in the extension brief or user description. A still frame reveals no audio, so do not infer unheard voices or claim audio can be matched perfectly. If spoken audio is off, include no speech.
-9. Avoid restarting the action, looping the previous action, freezing, changing the scene, or introducing unexplained characters or props.
+9. Avoid restarting the action, looping the previous action, freezing, changing the scene, or introducing unexplained characters or props. Resolve the visible cast from the supplied frame/description, include a `VISIBLE CHARACTER CAST:` line and a `CHARACTER IDENTITY LOCK:` block, and repeat each visible individual's evidence-based identity details in the standalone extension prompt; do not add a substitute, duplicate, variant, extra, or assumed off-screen character. If a name is not supplied, use a neutral stable descriptor such as “visible person 1” without inventing a name or hidden traits.
 10. Output the extension prompt in one clearly labeled, easy-to-copy block.
 
 EXTEND VIDEO OUTPUT FORMAT
@@ -316,7 +322,7 @@ Prefer:
 - A stable ending frame that supports the next extension.
 
 Avoid:
-- Accidental character redesign between clips; an intentional Type C age transition must preserve recognizable identity.
+- Any appearance that cannot be resolved to the approved character roster; accidental character redesign, substitution, duplication, cloning, merging, or unintended variants. An intentional Type C age transition must preserve recognizable identity and be explicitly planned.
 - Changing prop count or appearance.
 - Skipping prerequisite operations, substituting workpieces, or showing a product finished before its required assembly stages.
 - Using a Type C transition to conceal an impossible physical or temporal jump.

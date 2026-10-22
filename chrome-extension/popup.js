@@ -12,6 +12,8 @@ const backAction = document.querySelector('[data-back-action]');
 const restartAction = document.querySelector('[data-restart-action]');
 const connectionList = document.querySelector('[data-connection-list]');
 const progressTrack = document.querySelector('.progress-track');
+const characterCast = document.querySelector('[data-character-cast]');
+const characterCastValue = document.querySelector('[data-character-cast-value]');
 
 let activeTab = null;
 let popupState = { connectedAppOrigins: [], activePrompt: null };
@@ -106,6 +108,9 @@ function renderPrompt(prompt) {
     document.querySelector('[data-next-part]').textContent = nextChunk
         ? `Next: ${nextChunk.label}`
         : 'All parts copied';
+    const visibleCast = typeof nextChunk?.visibleCast === 'string' ? nextChunk.visibleCast.trim() : '';
+    characterCast.hidden = visibleCast === '';
+    characterCastValue.textContent = visibleCast;
 
     if (nextChunk) {
         setMainAction(`Copy ${nextChunk.label}`, 'copy');

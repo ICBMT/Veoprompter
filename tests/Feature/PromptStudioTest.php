@@ -131,6 +131,8 @@ class PromptStudioTest extends TestCase
                 && str_contains($systemInstruction, 'MANDATORY CONTINUATION INSTRUCTION')
                 && str_contains($systemInstruction, 'TRANSITION CLIP SYSTEM')
                 && str_contains($systemInstruction, 'Type A direct continuation, Type B natural action transition, or Type C narrative/temporal transition')
+                && str_contains($systemInstruction, 'CHARACTER IDENTITY ENFORCEMENT — THE CANONICAL CHARACTER BIBLE IS THE SINGLE SOURCE OF TRUTH')
+                && str_contains($systemInstruction, 'For multi-shot clips, give every shot its exact cast/count plus a full repeated identity lock')
                 && str_contains($systemInstruction, 'do not include it in a Type C transition clip')
                 && str_contains($systemInstruction, 'SPOKEN AUDIO MODE — VOICE-OVER: Use one consistent off-screen narrator')
                 && str_contains($systemInstruction, 'CLIP COUNT — AI DIRECTS: Choose the minimum practical number of connected clips needed to communicate the idea clearly and give it a complete arc.')
@@ -144,6 +146,11 @@ class PromptStudioTest extends TestCase
                 && str_contains($brief, 'Clip duration: AI decides from complexity: about 2–3 seconds for a simple beat, 4–6 for a moderately layered action, and 7–10 when coordinated action, transformations, camera moves, multiple subjects, or speech genuinely need room')
                 && str_contains($brief, 'Number of clips: AI decides; choose the minimum practical total number of connected clips')
                 && str_contains($brief, 'Logical visual/process continuity: Track identity and changing state for every important character, material, component, object, quantity, location, orientation, condition, and process stage—not only visual appearance.')
+                && str_contains($brief, 'Character identity enforcement: NEW-SEQUENCE CHARACTER LOCK: Respect the saved robot/animated-machine character type.')
+                && str_contains($brief, 'SHOT N VISIBLE CHARACTER CAST:')
+                && str_contains($brief, 'SHOT N CHARACTER IDENTITY LOCK:')
+                && str_contains($brief, 'Saved character type: robot.')
+                && str_contains($brief, 'Saved character idea: A tiny golden bee with a blue satchel.')
                 && str_contains($brief, 'Transition planning: Choose the simplest handoff that is physically, causally, and temporally possible. Type A begins on the exact prior final frame and preserves its object/process state; Type B shows the continuous visible action or transfer that changes that state; Type C deliberately marks a meaningful time/place/process transition with clear before → visible change → after.')
                 && str_contains($brief, 'Background music: Include subtle music that never overpowers speech')
                 && str_contains($brief, 'Sound effects: Use only restrained, action-matched sound effects')
@@ -247,6 +254,7 @@ class PromptStudioTest extends TestCase
                 && str_contains($brief, 'Narration: Off; no voice-over narrator')
                 && str_contains($brief, 'Character dialogue: On; on-screen speakers in Urdu')
                 && str_contains($brief, 'Character voice direction: Create a distinct, detailed voice identity')
+                && str_contains($brief, 'Character identity enforcement: NEW-SEQUENCE CHARACTER LOCK: The saved fictional character is canonical and must not be redesigned.')
                 && str_contains($brief, 'Mina, a cautious young inventor with copper goggles.');
         });
 
@@ -554,6 +562,9 @@ class PromptStudioTest extends TestCase
             return str_contains($systemInstructions, 'SPOKEN AUDIO MODE — ON-SCREEN CHARACTER DIALOGUE: Do not add a narrator or voice-over')
                 && str_contains($systemInstructions, 'A still frame reveals no voice')
                 && str_contains($systemInstructions, 'never claim it matches unseen prior audio')
+                && str_contains($brief, 'Character identity enforcement: EXTENSION CHARACTER LOCK: No final-frame image is attached; use only the written visible-state description.')
+                && str_contains($brief, 'Include `VISIBLE CHARACTER CAST:` and `CHARACTER IDENTITY LOCK:` plus complete evidence-based identity details')
+                && str_contains($brief, 'Requested next action: Mina gently lifts the lantern and says a short line to her robot companion.')
                 && str_contains($brief, 'Speech mode: On-screen character dialogue; no narrator')
                 && str_contains($brief, 'Extension speech continuity: No narrator. Preserve character voice profiles')
                 && str_contains($brief, 'A still frame reveals no voice; do not claim to match unseen audio')

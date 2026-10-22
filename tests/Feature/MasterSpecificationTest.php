@@ -23,6 +23,11 @@ class MasterSpecificationTest extends TestCase
 
         $this->assertStringContainsString('PLAN BEFORE WRITING', $specification);
         $this->assertStringContainsString('AI-DIRECTED CLIP ARCHITECTURE', $specification);
+        $this->assertStringContainsString('SECTION 3 — CHARACTER BIBLE AND CANONICAL CAST', $specification);
+        $this->assertStringContainsString('closed, authoritative CANONICAL CHARACTER ROSTER', $specification);
+        $this->assertStringContainsString('VISIBLE CHARACTER CAST:', $specification);
+        $this->assertStringContainsString('SHOT N CHARACTER IDENTITY LOCK:', $specification);
+        $this->assertStringContainsString('Unlisted people, crowds, duplicate bodies, clones, composites, replacements, redesigns, alternate versions, and accidental variants are forbidden.', $specification);
         $this->assertStringContainsString('maximum-quality option', $specification);
         $this->assertStringContainsString('quality-focused option', $specification);
         $this->assertStringContainsString('LOGICAL AND PROCESS-STATE CONTINUITY', $specification);

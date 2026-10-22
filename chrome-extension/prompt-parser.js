@@ -98,6 +98,18 @@ function transitionType(text) {
     return descriptive ? descriptive[1].toUpperCase() : null;
 }
 
+function visibleCharacterCast(text) {
+    const line = text.split('\n').find((candidate) => {
+        const normalized = candidate.replace(/\*\*/g, '').replace(/__/g, '');
+        return /^\s*(?:[-*+]\s*)?VISIBLE\s+CHARACTER\s+CAST\s*:/i.test(normalized);
+    });
+    if (!line) return null;
+
+    const normalized = line.replace(/\*\*/g, '').replace(/__/g, '');
+    const marker = normalized.match(/^\s*(?:[-*+]\s*)?VISIBLE\s+CHARACTER\s+CAST\s*:\s*(.+?)\s*$/i);
+    return marker ? marker[1].trim().replace(/\s+/g, ' ') || null : null;
+}
+
 const TRANSITION_LABELS = {
     A: 'direct continuation',
     B: 'natural action transition',
@@ -105,9 +117,11 @@ const TRANSITION_LABELS = {
 };
 
 function fallback(raw, reason) {
+    const text = raw.trim();
+    const cast = visibleCharacterCast(text);
     return {
         format: 'complete-prompt',
-        chunks: [{ kind: 'complete', label: 'Complete prompt', text: raw.trim() }],
+        chunks: [{ kind: 'complete', label: 'Complete prompt', text, visibleCast: cast }],
         notice: reason,
     };
 }
@@ -119,7 +133,7 @@ function fallback(raw, reason) {
  * attached to that final handoff.
  *
  * @param {string} raw
- * @returns {{format: string, chunks: Array<{kind: string, label: string, text: string, clipNumber?: number, transitionType?: string|null, transitionLabel?: string|null}>, notice: string}}
+ * @returns {{format: string, chunks: Array<{kind: string, label: string, text: string, visibleCast?: string|null, clipNumber?: number, transitionType?: string|null, transitionLabel?: string|null}>, notice: string}}
  */
 export function parsePrompt(raw) {
     if (typeof raw !== 'string' || !raw.trim()) {
@@ -148,7 +162,7 @@ export function parsePrompt(raw) {
         if (copyPrompt) {
             return {
                 format: 'extension-prompt',
-                chunks: [{ kind: 'extension', label: 'Extension prompt', text: copyPrompt }],
+                chunks: [{ kind: 'extension', label: 'Extension prompt', text: copyPrompt, visibleCast: visibleCharacterCast(copyPrompt) }],
                 notice: 'A single copy-ready extension prompt was found.',
             };
         }
@@ -207,6 +221,7 @@ export function parsePrompt(raw) {
                 transitionLabel: transition ? TRANSITION_LABELS[transition] : null,
                 label: `${label}${hasHandoff ? ' · final handoff' : ''}`,
                 text: clipText,
+                visibleCast: visibleCharacterCast(clipText),
             });
         }
     });

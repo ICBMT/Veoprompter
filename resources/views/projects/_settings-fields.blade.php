@@ -35,7 +35,7 @@
         </div>
 
         <div class="setting-field-block">
-            <div class="field-label-row"><label class="field-label" for="character_type">Main character type</label><button class="field-info" type="button" data-tooltip="When a video uses a recurring character, the project keeps its type consistent. Otherwise the AI can focus on the product, place, or primary visual subject." aria-label="Help: main character type">i</button></div>
+            <div class="field-label-row"><label class="field-label" for="character_type">Main character type</label><button class="field-info" type="button" data-tooltip="This saved type and description anchor the canonical character roster. Each clip and shot names its exact cast, repeats identity details, and avoids unplanned characters or variants. Choose no recurring character when the format is better focused on a product, place, or visual subject." aria-label="Help: main character type">i</button></div>
             <select class="text-input select-input" id="character_type" name="character_type" required data-character-type-select>
                 <option value="ai-choice" title="Let the model invent a topic-appropriate recurring character." @selected(old('character_type', $settings['character_type']) === 'ai-choice')>Let the AI choose</option>
                 <option value="human-male" title="Keep the lead character a human man or boy; add age or appearance in the description field." @selected(old('character_type', $settings['character_type']) === 'human-male')>Human male</option>
@@ -44,8 +44,8 @@
                 <option value="fictional" title="Create a custom fictional character or creature; a description is required below." @selected(old('character_type', $settings['character_type']) === 'fictional')>Fictional character or creature</option>
             </select>
             <label class="sr-only" for="character_details">Character description</label>
-            <textarea class="text-input textarea-small" id="character_details" name="character_details" rows="3" maxlength="500" @if(old('character_type', $settings['character_type']) === 'fictional') required @endif placeholder="Describe appearance, personality, or a custom fictional character">{{ old('character_details', $settings['character_details']) }}</textarea>
-            <span class="field-hint">Required for a fictional character; optional for the other choices.</span>
+            <textarea class="text-input textarea-small" id="character_details" name="character_details" rows="3" maxlength="500" @if(old('character_type', $settings['character_type']) === 'fictional') required @endif placeholder="Name, exact face/markings, colors, proportions, outfit, accessories, personality, and voice if needed">{{ old('character_details', $settings['character_details']) }}</textarea>
+            <span class="field-hint">Required for a fictional character; optional for the other choices. Treat it as the canonical design—unplanned substitutions and variants are blocked in the prompt.</span>
             @error('character_type')<p class="admin-error">{{ $message }}</p>@enderror
             @error('character_details')<p class="admin-error">{{ $message }}</p>@enderror
         </div>

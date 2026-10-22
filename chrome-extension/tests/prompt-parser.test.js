@@ -183,12 +183,48 @@ test('preserves character-specific voice identities in each copied standalone cl
     assert.match(parsed.chunks[1].text, /Preserve each named character’s exact voice identity/);
 });
 
+test('surfaces each clip’s canonical visible cast while preserving full identity locks in copied text', () => {
+    const parsed = parsePrompt([
+        'SECTION 3 — CHARACTER BIBLE AND CANONICAL CAST',
+        'Mina — CHAR-01: warm brown skin, round cheeks, copper goggles, indigo jacket, small scar above left brow.',
+        'Rafi — CHAR-02: compact teal robot, square head, amber optic eyes, silver chest plate.',
+        'SECTION 8 — COPY-AND-PASTE VIDEO PROMPTS',
+        'COPY CLIP 1 PROMPT',
+        'TRANSITION TYPE: INITIAL CLIP — NO PREVIOUS HANDOFF',
+        'VISIBLE CHARACTER CAST: Mina ×1.',
+        'CHARACTER IDENTITY LOCK:',
+        'Mina — CHAR-01: warm brown skin, round cheeks, copper goggles, indigo jacket, small scar above left brow.',
+        'SHOT CAST MAP:',
+        'SHOT 1 VISIBLE CHARACTER CAST: Mina ×1.',
+        'SHOT 1 CHARACTER IDENTITY LOCK: Mina — warm brown skin, round cheeks, copper goggles.',
+        'COPY CLIP 2 PROMPT',
+        'TRANSITION TYPE: TYPE A — DIRECT CONTINUATION',
+        'VISIBLE CHARACTER CAST: Mina ×1; Rafi ×1.',
+        'CHARACTER IDENTITY LOCK:',
+        'Mina — CHAR-01: warm brown skin, round cheeks, copper goggles, indigo jacket, small scar above left brow.',
+        'Rafi — CHAR-02: compact teal robot, square head, amber optic eyes, silver chest plate.',
+        'COPY CLIP 3 PROMPT',
+        'TRANSITION TYPE: TYPE B — NATURAL ACTION TRANSITION',
+        'VISIBLE CHARACTER CAST: None.',
+        'CHARACTER IDENTITY LOCK: None — no characters or person-like figures appear.',
+    ].join('\n'));
+
+    assert.equal(parsed.chunks[1].visibleCast, 'Mina ×1.');
+    assert.equal(parsed.chunks[2].visibleCast, 'Mina ×1; Rafi ×1.');
+    assert.equal(parsed.chunks[3].visibleCast, 'None.');
+    assert.match(parsed.chunks[1].text, /CHARACTER IDENTITY LOCK:[\s\S]*Mina — CHAR-01: warm brown skin, round cheeks, copper goggles, indigo jacket/);
+    assert.match(parsed.chunks[2].text, /Rafi — CHAR-02: compact teal robot, square head, amber optic eyes, silver chest plate/);
+    assert.match(parsed.chunks[2].text, /VISIBLE CHARACTER CAST: Mina ×1; Rafi ×1\./);
+});
+
 test('extracts the self-contained copy block from an extension prompt', () => {
     const parsed = parsePrompt([
         'Visible starting state: a robot is at a workbench.',
         '',
         '### COPY EXTENSION VIDEO PROMPT',
         '```text',
+        'VISIBLE CHARACTER CAST: Visible person 1 ×1.',
+        'CHARACTER IDENTITY LOCK: One adult with a red wool hat, gray coat, and oval glasses, as visible.',
         'Continue the exact scene from the shown frame. Keep the robot and lighting unchanged.',
         '```',
         '',
@@ -197,7 +233,8 @@ test('extracts the self-contained copy block from an extension prompt', () => {
 
     assert.equal(parsed.format, 'extension-prompt');
     assert.equal(parsed.chunks.length, 1);
-    assert.equal(parsed.chunks[0].text, 'Continue the exact scene from the shown frame. Keep the robot and lighting unchanged.');
+    assert.equal(parsed.chunks[0].visibleCast, 'Visible person 1 ×1.');
+    assert.equal(parsed.chunks[0].text, 'VISIBLE CHARACTER CAST: Visible person 1 ×1.\nCHARACTER IDENTITY LOCK: One adult with a red wool hat, gray coat, and oval glasses, as visible.\nContinue the exact scene from the shown frame. Keep the robot and lighting unchanged.');
 });
 
 test('falls back to one complete copy when the generated output is not in the recognized format', () => {
