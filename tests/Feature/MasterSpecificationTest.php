@@ -46,6 +46,16 @@ class MasterSpecificationTest extends TestCase
         $this->assertStringContainsString('TRANSITION TYPE: TYPE C — NARRATIVE / TEMPORAL TRANSITION', $specification);
         $this->assertStringContainsString('Speech-to-visual action lock', $specification);
         $this->assertStringContainsString('SPEECH/VISUAL MAP:', $specification);
+        $this->assertStringContainsString('CLIP DURATION: N seconds', $specification);
+        $this->assertStringContainsString('OPENING CONTINUITY STATE:', $specification);
+        $this->assertStringContainsString('VISIBLE CAUSE → ACTION → RESULT:', $specification);
+        $this->assertStringContainsString('2–2.5 words/second', $specification);
+        $this->assertStringContainsString('do not claim external research, source verification, or citations', $specification);
+        $this->assertStringContainsString('No external source retrieval was performed for this plan', $specification);
+        $this->assertStringContainsString('label each essential claim as established knowledge, a simplification, or uncertain/disputed', $specification);
+        $this->assertStringContainsString('Every clip has one primary idea', $specification);
+        $this->assertStringContainsString('never label an unresolved automatic check as passed', $specification);
+        $this->assertStringContainsString('The application separately runs deterministic checks', $specification);
         $this->assertStringContainsString('never narrate an off-screen, omitted, earlier, later, or merely implied action', $specification);
         $this->assertStringContainsString('accurate, clearly identified cutaway, diagram, overlay', $specification);
         $this->assertStringContainsString('OUTGOING HANDOFF TYPE: TYPE A — DIRECT CONTINUATION', $specification);
@@ -59,7 +69,7 @@ class MasterSpecificationTest extends TestCase
         $this->assertStringContainsString('Never generate images or videos.', $specification);
 
         preg_match_all('/^SECTION\s+(\d+)\s+—/mu', $specification, $sections);
-        $this->assertSame(range(1, 14), array_map('intval', $sections[1]));
+        $this->assertSame(range(1, 15), array_map('intval', $sections[1]));
         $this->assertStringContainsString('SECTION 8 — COPY-AND-PASTE VIDEO PROMPTS', $specification);
         $this->assertStringContainsString('COPY CLIP 1 PROMPT', $specification);
         $this->assertStringContainsString('COPY EXTENSION VIDEO PROMPT', $specification);

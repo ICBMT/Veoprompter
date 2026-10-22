@@ -51,6 +51,17 @@
         </div>
     </section>
 
+    @if(is_array($project->quality_review))
+        @php($qualityReview = $project->quality_review)
+        <section class="saved-quality-review" data-quality-review-status="{{ $qualityReview['status'] ?? 'not_checked' }}" aria-label="Automated prompt quality review">
+            <div class="quality-review-heading"><div><span class="section-index">AUTOMATED TEXT QA · NOT A FACT CHECK</span><strong>{{ match($qualityReview['status'] ?? 'not_checked') { 'passed' => 'Structured checks passed', 'needs_review' => 'Review recommended', default => 'Some checks could not run' } }}</strong></div>@if(!empty($qualityReview['corrected']))<span class="quality-review-corrected">TARGETED CORRECTION APPLIED</span>@endif</div>
+            @if(!empty($qualityReview['checks']))
+                <ul class="quality-review-checks">@foreach($qualityReview['checks'] as $check)<li data-check-status="{{ $check['status'] ?? 'not_run' }}"><strong>{{ $check['label'] ?? 'Quality check' }}</strong><span>{{ $check['detail'] ?? '' }}</span></li>@endforeach</ul>
+            @endif
+            @if(!empty($qualityReview['issues']))<div class="quality-review-issues"><strong>Items to review</strong><ul>@foreach($qualityReview['issues'] as $issue)<li>{{ $issue['message'] ?? 'A prompt issue needs review.' }}</li>@endforeach</ul></div>@endif
+        </section>
+    @endif
+
     <section class="saved-output-card">
         <div class="saved-output-heading"><div><span class="section-index">YOUR COPY-READY PROMPTS</span><p>Send the saved kit to the extension, then copy each part into a text field when ready.</p></div><span class="result-status"><i></i> SAVED</span></div>
         <pre class="history-output" id="saved-prompt-output">{{ $project->content }}</pre>

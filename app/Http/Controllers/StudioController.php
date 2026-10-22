@@ -75,7 +75,9 @@ class StudioController extends Controller
         $referenceFrame = $request->file('reference_frame');
 
         try {
-            $content = $generator->generate($settings, $validated, $referenceFrame);
+            $generation = $generator->generateWithQualityReview($settings, $validated, $referenceFrame);
+            $content = $generation['content'];
+            $qualityReview = $generation['quality_review'];
         } catch (PromptGenerationException $exception) {
             return response()->json(['message' => $exception->getMessage()], 502);
         } catch (Throwable $exception) {
@@ -102,6 +104,7 @@ class StudioController extends Controller
                 'mode' => $validated['mode'],
                 'brief' => $brief,
                 'content' => $content,
+                'quality_review' => $qualityReview,
                 'provider' => $settings->provider,
                 'model' => $settings->model,
                 'reference_frame_attached' => $referenceFrame !== null,
@@ -115,6 +118,7 @@ class StudioController extends Controller
 
         return response()->json([
             'content' => $content,
+            'quality_review' => $qualityReview,
             'mode' => $validated['mode'],
             'saved_to_history' => $run !== null,
             'history_error' => $historyError,

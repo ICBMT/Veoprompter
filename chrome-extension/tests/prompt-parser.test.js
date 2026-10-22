@@ -186,6 +186,17 @@ test('flags missing outgoing and final markers when the new speech-map contract 
     assert.match(parsed.handoffWarnings[1], /Clip 2 must end with OUTGOING HANDOFF TYPE: FINAL/);
 });
 
+test('checks an incoming transition marker even when no speech or outgoing field is present', () => {
+    const parsed = parsePrompt([
+        'SECTION 8 — COPY-AND-PASTE VIDEO PROMPTS',
+        'COPY CLIP 1 PROMPT',
+        'TRANSITION TYPE: INITIAL CLIP — NO PREVIOUS HANDOFF',
+        'A visible opening shot.',
+    ].join('\n'));
+
+    assert.ok(parsed.handoffWarnings.some((warning) => /must end with OUTGOING HANDOFF TYPE: FINAL/.test(warning)));
+});
+
 test('does not mistake an outgoing marker for a missing incoming type', () => {
     const parsed = parsePrompt([
         'SECTION 8 — COPY-AND-PASTE VIDEO PROMPTS',
@@ -311,4 +322,170 @@ test('reports empty input without throwing', () => {
     const parsed = parsePrompt('  \n  ');
     assert.equal(parsed.chunks[0].text, '');
     assert.match(parsed.notice, /prompt is empty/);
+});
+
+test('accepts a physically matched Type A state chain and a naturally timed spoken line', () => {
+    const scene = 'cast=Bee (CHAR-01) x1; objects=pollen grain P-01 on left hind leg; process=transfer not yet started; environment=flower bed; motion=bee hovering eastward';
+    const presentation = 'camera=medium close-up, static; lighting=soft morning sun; audio=quiet garden ambience';
+    const parsed = parsePrompt([
+        'SECTION 8 — COPY-AND-PASTE VIDEO PROMPTS',
+        'COPY CLIP 1 PROMPT',
+        'TRANSITION TYPE: INITIAL CLIP — NO PREVIOUS HANDOFF',
+        'CLIP DURATION: 4 seconds',
+        'PRIMARY IDEA: Pollen attaches to the bee.',
+        'VISUAL REPRESENTATION: LITERAL SCENE',
+        'VISIBLE CAUSE → ACTION → RESULT: The bee brushes a pollen-bearing anther and one grain sticks to its hind leg.',
+        `OPENING CONTINUITY STATE: ${scene}`,
+        `ENDING CONTINUITY STATE: ${scene}`,
+        `OPENING PRESENTATION STATE: ${presentation}`,
+        `ENDING PRESENTATION STATE: ${presentation}`,
+        'SPEECH/VISUAL MAP:',
+        '- 0.0–2.2s | VISIBLE ACTION: pollen visibly sticks to the bee’s hind leg | SPEAKER: Narrator | LINE: “A bee carries pollen.”',
+        'OUTGOING HANDOFF TYPE: TYPE A — DIRECT CONTINUATION',
+        'COPY CLIP 2 PROMPT',
+        'TRANSITION TYPE: TYPE A — DIRECT CONTINUATION',
+        'CLIP DURATION: 4 seconds',
+        'PRIMARY IDEA: The bee reaches the next flower.',
+        'VISUAL REPRESENTATION: LITERAL SCENE',
+        'VISIBLE CAUSE → ACTION → RESULT: The bee continues the same flight toward the next flower.',
+        `OPENING CONTINUITY STATE: ${scene}`,
+        'ENDING CONTINUITY STATE: bee at the next flower; pollen P-01 still on the same hind leg; environment=flower bed; motion=slowing to land',
+        `OPENING PRESENTATION STATE: ${presentation}`,
+        'ENDING PRESENTATION STATE: camera tracks right; soft morning sun; quiet garden ambience',
+        'SPEECH/VISUAL MAP: None — intentionally no spoken line in this clip.',
+        'OUTGOING HANDOFF TYPE: FINAL — NO NEXT HANDOFF',
+        'SECTION 9 — EXACT HANDOFF SPECIFICATION',
+    ].join('\n'));
+
+    assert.deepEqual(parsed.handoffWarnings, []);
+    assert.match(parsed.chunks[1].text, /OPENING CONTINUITY STATE: cast=Bee/);
+    assert.match(parsed.chunks[1].text, /SPEECH\/VISUAL MAP:/);
+});
+
+test('flags a skipped physical/process state even when a Type A label claims direct continuation', () => {
+    const parsed = parsePrompt([
+        'SECTION 8 — COPY-AND-PASTE VIDEO PROMPTS',
+        'COPY CLIP 1 PROMPT',
+        'TRANSITION TYPE: INITIAL CLIP — NO PREVIOUS HANDOFF',
+        'OUTGOING HANDOFF TYPE: TYPE A — DIRECT CONTINUATION',
+        'OPENING CONTINUITY STATE: workpiece=raw panel; stage=unformed',
+        'ENDING CONTINUITY STATE: workpiece=raw panel; stage=unformed',
+        'OPENING PRESENTATION STATE: fixed camera; workshop light',
+        'ENDING PRESENTATION STATE: fixed camera; workshop light',
+        'CLIP DURATION: 4 seconds',
+        'SPEECH/VISUAL MAP: None — intentionally no spoken line in this clip.',
+        'COPY CLIP 2 PROMPT',
+        'TRANSITION TYPE: TYPE A — DIRECT CONTINUATION',
+        'OUTGOING HANDOFF TYPE: FINAL — NO NEXT HANDOFF',
+        'OPENING CONTINUITY STATE: workpiece=finished assembly; stage=complete',
+        'ENDING CONTINUITY STATE: workpiece=finished assembly; stage=complete',
+        'OPENING PRESENTATION STATE: fixed camera; workshop light',
+        'ENDING PRESENTATION STATE: fixed camera; workshop light',
+        'CLIP DURATION: 4 seconds',
+        'SPEECH/VISUAL MAP: None — intentionally no spoken line in this clip.',
+    ].join('\n'));
+
+    assert.ok(parsed.handoffWarnings.some((warning) => /opening continuity state does not exactly match/.test(warning)));
+});
+
+test('allows a justified Type B bridge whose physical change happens inside the next clip', () => {
+    const priorState = 'object=seed tray in Mina’s left hand; stage=seeds planted; environment=greenhouse doorway; motion=stationary';
+    const parsed = parsePrompt([
+        'SECTION 8 — COPY-AND-PASTE VIDEO PROMPTS',
+        'COPY CLIP 1 PROMPT',
+        'TRANSITION TYPE: INITIAL CLIP — NO PREVIOUS HANDOFF',
+        'CLIP DURATION: 4 seconds',
+        'PRIMARY IDEA: Mina begins moving the seeded tray.',
+        'VISUAL REPRESENTATION: LITERAL SCENE',
+        'VISIBLE CAUSE → ACTION → RESULT: Mina lifts the tray from the bench.',
+        `OPENING CONTINUITY STATE: ${priorState}`,
+        `ENDING CONTINUITY STATE: ${priorState}`,
+        'OPENING PRESENTATION STATE: wide shot; stable daylight; soft room tone',
+        'ENDING PRESENTATION STATE: wide shot; stable daylight; soft room tone',
+        'SPEECH/VISUAL MAP: None — intentionally no spoken line in this clip.',
+        'OUTGOING HANDOFF TYPE: TYPE B — NATURAL ACTION TRANSITION',
+        'COPY CLIP 2 PROMPT',
+        'TRANSITION TYPE: TYPE B — NATURAL ACTION TRANSITION',
+        'CLIP DURATION: 6 seconds',
+        'PRIMARY IDEA: Carry the same tray to the greenhouse bench.',
+        'VISUAL REPRESENTATION: LITERAL SCENE',
+        'VISIBLE CAUSE → ACTION → RESULT: Mina takes three visible steps through the doorway and sets the tray on the bench.',
+        `OPENING CONTINUITY STATE: ${priorState}`,
+        'ENDING CONTINUITY STATE: same tray on greenhouse bench; seeds remain planted; stage=ready for watering; motion=stationary',
+        'OPENING PRESENTATION STATE: close follow shot; daylight shifts naturally; footsteps audible',
+        'ENDING PRESENTATION STATE: side view; soft greenhouse light; footsteps stop',
+        'SPEECH/VISUAL MAP: None — intentionally no spoken line in this clip.',
+        'OUTGOING HANDOFF TYPE: FINAL — NO NEXT HANDOFF',
+    ].join('\n'));
+
+    assert.deepEqual(parsed.handoffWarnings, []);
+});
+
+test('flags narration overrun and speech extending past a clip duration', () => {
+    const parsed = parsePrompt([
+        'SECTION 8 — COPY-AND-PASTE VIDEO PROMPTS',
+        'COPY CLIP 1 PROMPT',
+        'TRANSITION TYPE: INITIAL CLIP — NO PREVIOUS HANDOFF',
+        'CLIP DURATION: 4 seconds',
+        'OPENING CONTINUITY STATE: flower=closed; bee=hovering',
+        'ENDING CONTINUITY STATE: flower=open; bee=landed',
+        'OPENING PRESENTATION STATE: macro camera; daylight',
+        'ENDING PRESENTATION STATE: macro camera; daylight',
+        'SPEECH/VISUAL MAP:',
+        '- 3.0–4.5s | VISIBLE ACTION: the flower opens | SPEAKER: Narrator | LINE: “The bee carries pollen to the flower and helps the plant make seeds.”',
+        'OUTGOING HANDOFF TYPE: FINAL — NO NEXT HANDOFF',
+    ].join('\n'));
+
+    assert.ok(parsed.handoffWarnings.some((warning) => /ends after the 4-second clip/.test(warning)));
+    assert.ok(parsed.handoffWarnings.some((warning) => /words in 1.5 seconds/.test(warning)));
+});
+
+test('flags missing extension state fields once a structured timing contract is present', () => {
+    const parsed = parsePrompt([
+        '### COPY EXTENSION VIDEO PROMPT',
+        'CLIP DURATION: 4 seconds',
+        'SPEECH/VISUAL MAP: None — intentionally no spoken line in this clip.',
+    ].join('\n'));
+
+    assert.ok(parsed.handoffWarnings.some((warning) => /missing OPENING CONTINUITY STATE/.test(warning)));
+    assert.ok(parsed.handoffWarnings.some((warning) => /missing ENDING PRESENTATION STATE/.test(warning)));
+});
+
+test('caps extension warning display at eight entries plus an additional-warning count', () => {
+    const speechRows = Array.from({ length: 10 }, () =>
+        '- 0.0–0.9s | VISIBLE ACTION: the bee carries pollen across the garden | SPEAKER: Narrator | LINE: “The tiny bee carries pollen across the garden to another bright flower.”',
+    ).join('\n');
+    const parsed = parsePrompt([
+        '### COPY EXTENSION VIDEO PROMPT',
+        'CLIP DURATION: 1 second',
+        'OPENING CONTINUITY STATE: bee by first flower',
+        'ENDING CONTINUITY STATE: bee near second flower',
+        'OPENING PRESENTATION STATE: macro shot; daylight',
+        'ENDING PRESENTATION STATE: same camera; daylight',
+        'SPEECH/VISUAL MAP:',
+        speechRows,
+    ].join('\n'));
+
+    assert.equal(parsed.handoffWarnings.length, 9);
+    assert.match(parsed.handoffWarnings.at(-1), /additional check warning\(s\)\.$/);
+});
+
+test('checks a structured extension map without changing the copy-ready text', () => {
+    const raw = [
+        '### COPY EXTENSION VIDEO PROMPT',
+        '```text',
+        'CLIP DURATION: 5 seconds',
+        'OPENING CONTINUITY STATE: Mina holds an unlit lantern.',
+        'ENDING CONTINUITY STATE: Mina raises the lit lantern.',
+        'OPENING PRESENTATION STATE: medium shot; blue dusk',
+        'ENDING PRESENTATION STATE: same shot; warm lantern glow',
+        'SPEECH/VISUAL MAP:',
+        '- 0.0–1.0s | VISIBLE ACTION: Mina lifts the lantern | SPEAKER: Mina | LINE: “The light is waking.”',
+        '```',
+    ].join('\n');
+    const parsed = parsePrompt(raw);
+
+    assert.ok(parsed.handoffWarnings.some((warning) => /words in 1.0 seconds/.test(warning)));
+    assert.match(parsed.chunks[0].text, /CLIP DURATION: 5 seconds/);
+    assert.match(parsed.chunks[0].text, /LINE: “The light is waking\.”/);
 });

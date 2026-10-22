@@ -145,7 +145,7 @@ class PromptStudioTest extends TestCase
                 && str_contains($systemInstruction, '7–10 seconds when coordinated beats, multiple subjects, a transformation')
                 && str_contains($brief, 'Aspect ratio: 9:16')
                 && str_contains($brief, 'Speech mode: Voice-over narration by one consistent off-screen narrator')
-                && str_contains($brief, 'Speech-to-visual alignment: For every exact narration or dialogue line, map its timing to the visible action/object/result in this same clip')
+                && str_contains($brief, 'Speech-to-visual alignment: For every exact narration or dialogue line, use a clip-relative time row')
                 && str_contains($brief, 'Spoken language: English')
                 && str_contains($brief, 'Clip duration: AI decides from complexity: about 2–3 seconds for a simple beat, 4–6 for a moderately layered action, and 7–10 when coordinated action, transformations, camera moves, multiple subjects, or speech genuinely need room')
                 && str_contains($brief, 'Number of clips: AI decides; choose the minimum practical total number of connected clips')
@@ -246,7 +246,7 @@ class PromptStudioTest extends TestCase
     {
         Http::fake([
             'https://generativelanguage.googleapis.com/*' => Http::response([
-                'candidates' => [['content' => ['parts' => [['text' => "## PROJECT OVERVIEW\nTwo characters discuss pollination.\n\n### COPY CLIP 1 PROMPT\n```text\nMina speaks in a clear, youthful voice.\n```"]]]]],
+                'candidates' => [['content' => ['parts' => [['text' => "## PROJECT OVERVIEW\nTwo characters discuss pollination."]]]]],
             ], 200),
         ]);
         AiSetting::create([
@@ -288,7 +288,7 @@ class PromptStudioTest extends TestCase
                 && str_contains($systemInstruction, 'Keep each named speaker visibly on screen during the line and map every exact line to the action/result visibly performed in that same clip')
                 && str_contains($systemInstruction, 'Include `SPEECH/VISUAL MAP:` and relevant character voice profiles in every standalone clip prompt')
                 && str_contains($brief, 'Speech mode: On-screen character dialogue; no narrator')
-                && str_contains($brief, 'Speech-to-visual alignment: For every exact narration or dialogue line, map its timing to the visible action/object/result in this same clip')
+                && str_contains($brief, 'Speech-to-visual alignment: For every exact narration or dialogue line, use a clip-relative time row')
                 && str_contains($brief, 'Spoken language: Urdu')
                 && str_contains($brief, 'Narration: Off; no voice-over narrator')
                 && str_contains($brief, 'Character dialogue: On; on-screen speakers in Urdu')
@@ -421,6 +421,56 @@ class PromptStudioTest extends TestCase
                 && $request->hasHeader('Authorization', 'Bearer test-compatible-secret')
                 && data_get($request->data(), 'model') === 'gpt-4.1-mini';
         });
+    }
+
+    public function test_narration_overrun_is_corrected_once_and_the_separate_quality_review_is_saved(): void
+    {
+        $state = 'cast=Bee (CHAR-01) x1; object=pollen grain P-01 on left hind leg; process=transfer in progress; environment=flower bed; motion=hovering';
+        $presentation = 'camera=macro close-up, static; lighting=soft morning sun; audio=quiet garden ambience';
+        $draft = "## PROJECT OVERVIEW\nOne clear pollination beat.\n\n### COPY CLIP 1 PROMPT\n```text\nTRANSITION TYPE: INITIAL CLIP — NO PREVIOUS HANDOFF\nVISIBLE CHARACTER CAST: Bee (CHAR-01) ×1\nCHARACTER IDENTITY LOCK: Canonical Bee (CHAR-01), gold body with exact blue wing markings; same individual throughout this clip.\nCLIP DURATION: 4 seconds\nPRIMARY IDEA: Pollen transfers to the bee.\nVISUAL REPRESENTATION: LITERAL SCENE\nVISIBLE CAUSE → ACTION → RESULT: The bee brushes a pollen-bearing anther and pollen sticks to its hind leg.\nOPENING CONTINUITY STATE: {$state}\nENDING CONTINUITY STATE: {$state}\nOPENING PRESENTATION STATE: {$presentation}\nENDING PRESENTATION STATE: {$presentation}\nSPEECH/VISUAL MAP:\n- 0.0–1.0s | VISIBLE ACTION: pollen visibly transfers to the bee’s hind leg | SPEAKER: Narrator | LINE: “The tiny bee carries bright yellow pollen from this flower to another flower.”\nOUTGOING HANDOFF TYPE: FINAL — NO NEXT HANDOFF\n```";
+        $corrected = str_replace(
+            '- 0.0–1.0s | VISIBLE ACTION: pollen visibly transfers to the bee’s hind leg | SPEAKER: Narrator | LINE: “The tiny bee carries bright yellow pollen from this flower to another flower.”',
+            '- 0.0–1.8s | VISIBLE ACTION: pollen visibly transfers to the bee’s hind leg | SPEAKER: Narrator | LINE: “Bee carries pollen.”',
+            $draft,
+        );
+        Http::fake([
+            'https://generativelanguage.googleapis.com/*' => Http::sequence()
+                ->push(['candidates' => [['content' => ['parts' => [['text' => $draft]]]]]], 200)
+                ->push(['candidates' => [['content' => ['parts' => [['text' => $corrected]]]]]], 200),
+        ]);
+        AiSetting::create([
+            'provider' => 'gemini',
+            'model' => 'gemini-2.5-flash',
+            'api_key' => 'test-provider-secret',
+        ]);
+        $owner = User::factory()->create();
+        $project = $this->makeProject($owner);
+
+        $response = $this->actingAs($owner)
+            ->postJson(route('studio.generate', $project), $this->storyBrief())
+            ->assertOk()
+            ->assertJsonPath('quality_review.status', 'passed')
+            ->assertJsonPath('quality_review.corrected', true)
+            ->assertJsonPath('quality_review.repair_attempted', true)
+            ->assertJsonPath('content', $corrected)
+            ->assertJsonPath('saved_to_history', true);
+
+        Http::assertSentCount(2);
+        Http::assertSent(function (ClientRequest $request): bool {
+            return str_contains(data_get($request->data(), 'contents.0.parts.0.text', ''), 'AUTOMATIC QUALITY-CONTROL CORRECTION')
+                && str_contains(data_get($request->data(), 'contents.0.parts.0.text', ''), 'Shorten it or allocate more AI-selected time');
+        });
+
+        $run = $owner->promptProjects()->firstOrFail();
+        $this->assertSame($corrected, $run->content);
+        $this->assertTrue($run->quality_review['corrected']);
+        $this->assertSame('passed', $run->quality_review['status']);
+        $this->assertSame([], $run->quality_review['issues']);
+        $this->actingAs($owner)->get(route('history.show', $run))
+            ->assertOk()
+            ->assertSee('AUTOMATED TEXT QA')
+            ->assertSee('TARGETED CORRECTION APPLIED')
+            ->assertSee('Not independently verified');
     }
 
     public function test_generated_prompt_kits_are_saved_under_the_selected_project_and_remain_owner_scoped(): void
@@ -606,7 +656,7 @@ class PromptStudioTest extends TestCase
                 && str_contains($brief, 'Include `VISIBLE CHARACTER CAST:` and `CHARACTER IDENTITY LOCK:` plus complete evidence-based identity details')
                 && str_contains($brief, 'Requested next action: Mina gently lifts the lantern and says a short line to her robot companion.')
                 && str_contains($brief, 'Speech mode: On-screen character dialogue; no narrator')
-                && str_contains($brief, 'Speech-to-visual alignment: For every exact narration or dialogue line, map its timing to the visible action/object/result in this same clip')
+                && str_contains($brief, 'Speech-to-visual alignment: For every exact narration or dialogue line, use a clip-relative time row')
                 && str_contains($brief, 'Extension speech continuity: No narrator. Preserve character voice profiles')
                 && str_contains($brief, 'Keep the visible on-screen speaker present during each line and map dialogue only to an action/result visibly performed in this extension')
                 && str_contains($brief, 'A still frame reveals no voice; do not claim to match unseen audio')

@@ -7,6 +7,7 @@
     const historyNotice = document.querySelector('[data-history-notice]');
     const readyLabel = document.querySelector('[data-ready-label]');
     const output = document.querySelector('[data-output-content]');
+    const qualityReviewPanel = document.querySelector('[data-quality-review]');
     const sendToFlowButton = document.querySelector('[data-send-to-flow]');
     const flowTransferStatus = document.querySelector('[data-flow-transfer-status]');
     const submitButton = form.querySelector('[data-submit-button]');
@@ -274,6 +275,51 @@
         }
     };
 
+    const renderQualityReview = (review) => {
+        if (!qualityReviewPanel) return;
+        qualityReviewPanel.hidden = !review || typeof review !== 'object';
+        if (qualityReviewPanel.hidden) return;
+
+        const status = review.status || 'not_checked';
+        const title = qualityReviewPanel.querySelector('[data-quality-review-title]');
+        title.textContent = status === 'passed'
+            ? 'Automatic text checks passed'
+            : status === 'needs_review'
+                ? 'Review recommended'
+                : 'Automatic checks could not run';
+
+        const corrected = qualityReviewPanel.querySelector('[data-quality-review-corrected]');
+        corrected.hidden = review.corrected !== true;
+
+        const checksList = qualityReviewPanel.querySelector('[data-quality-review-checks]');
+        checksList.replaceChildren();
+        (Array.isArray(review.checks) ? review.checks : []).forEach((check) => {
+            const item = document.createElement('li');
+            item.dataset.checkStatus = check.status || 'not_run';
+            const label = document.createElement('strong');
+            label.textContent = check.label || 'Quality check';
+            const detail = document.createElement('span');
+            detail.textContent = check.detail || '';
+            item.append(label, detail);
+            checksList.append(item);
+        });
+
+        const issuesWrap = qualityReviewPanel.querySelector('[data-quality-review-issues-wrap]');
+        const issuesList = qualityReviewPanel.querySelector('[data-quality-review-issues]');
+        issuesList.replaceChildren();
+        const issues = Array.isArray(review.issues) ? review.issues : [];
+        issuesWrap.hidden = issues.length === 0;
+        issues.forEach((issue) => {
+            const item = document.createElement('li');
+            item.textContent = issue.message || 'A prompt issue needs review.';
+            issuesList.append(item);
+        });
+
+        qualityReviewPanel.querySelector('[data-quality-review-limitations]').textContent = Array.isArray(review.limitations)
+            ? review.limitations.join(' ')
+            : 'Text checks cannot establish factual truth or validate video that has not been rendered.';
+    };
+
     const discardStaleOutput = () => {
         if (resultSection.hidden) return;
         resultSection.hidden = true;
@@ -306,6 +352,7 @@
         event.preventDefault();
         resultSection.hidden = true;
         historyNotice.hidden = true;
+        if (qualityReviewPanel) qualityReviewPanel.hidden = true;
         latestOutput = '';
         if (flowTransferStatus) {
             flowTransferStatus.hidden = true;
@@ -358,6 +405,7 @@
             document.querySelector('#results-heading').textContent = payload.mode === 'extend' ? 'The next shot is in frame.' : 'The video plan is in frame.';
             readyLabel.textContent = payload.mode === 'extend' ? 'EXTENSION PROMPT READY' : 'PROMPT KIT READY';
             renderHistoryNotice(payload);
+            renderQualityReview(payload.quality_review);
             resultSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
         } catch {
             showMessage('We could not reach VeoPrompter. Check your connection and try again.');

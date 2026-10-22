@@ -104,7 +104,7 @@ function renderPrompt(prompt) {
     const warnings = Array.isArray(prompt.handoffWarnings) ? prompt.handoffWarnings : [];
     handoffWarning.hidden = warnings.length === 0;
     handoffWarning.textContent = warnings.length
-        ? `Handoff check: ${warnings.join(' ')}`
+        ? `Prompt check: ${warnings.join(' ')}`
         : '';
 
     const chunks = Array.isArray(prompt.chunks) ? prompt.chunks : [];

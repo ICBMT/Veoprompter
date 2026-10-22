@@ -15,13 +15,79 @@ class PromptGenerationService
 {
     public function generate(AiSetting $settings, array $input, ?UploadedFile $referenceFrame = null): string
     {
+        return $this->generateWithQualityReview($settings, $input, $referenceFrame)['content'];
+    }
+
+    /**
+     * Generate a copy-ready response, run deterministic prompt checks, and make
+     * one targeted corrective provider call when a repairable defect is found.
+     * The review is returned separately and never appended to the copyable text.
+     *
+     * @return array{content: string, quality_review: array<string, mixed>}
+     */
+    public function generateWithQualityReview(AiSetting $settings, array $input, ?UploadedFile $referenceFrame = null): array
+    {
         if (! $settings->isReady()) {
             throw new PromptGenerationException('The prompt studio is not connected to an AI provider yet. Ask an administrator to finish the Control room setup.');
         }
 
         $systemInstructions = $this->systemInstructions($input);
         $brief = $this->buildCreativeBrief($input, $referenceFrame !== null);
+        $content = $this->requestText($settings, $systemInstructions, $brief, $referenceFrame);
+        $auditor = new PromptOutputAuditor;
+        $qualityReview = $auditor->audit($content, $input);
+        $repairableIssues = array_values(array_filter(
+            $qualityReview['issues'],
+            fn (array $issue): bool => ($issue['repairable'] ?? false) === true,
+        ));
 
+        if ($repairableIssues !== []) {
+            $qualityReview['repair_attempted'] = true;
+            $qualityReview['repair_outcome'] = 'not_completed';
+
+            try {
+                $corrected = $this->requestText(
+                    $settings,
+                    $systemInstructions,
+                    $this->buildQualityRepairBrief($brief, $content, $repairableIssues),
+                    $referenceFrame,
+                );
+
+                if ($corrected !== $content) {
+                    $correctedReview = $auditor->audit($corrected, $input);
+                    $improved = $correctedReview['status'] === 'passed'
+                        || ($correctedReview['status'] === 'needs_review'
+                            && count($correctedReview['issues']) < count($qualityReview['issues']));
+
+                    if ($improved) {
+                        $qualityReview = $correctedReview;
+                        $qualityReview['corrected'] = true;
+                        $qualityReview['repair_attempted'] = true;
+                        $qualityReview['repair_outcome'] = $qualityReview['issues'] === [] ? 'corrected' : 'corrected_with_remaining_review';
+                        $content = $corrected;
+                    } else {
+                        $qualityReview['repair_outcome'] = 'no_improvement';
+                    }
+                } else {
+                    $qualityReview['repair_outcome'] = 'no_change';
+                }
+            } catch (\Throwable $exception) {
+                Log::warning('The automatic prompt quality correction could not be completed.', [
+                    'provider' => $settings->provider,
+                    'exception' => $exception::class,
+                ]);
+                $qualityReview['repair_outcome'] = 'failed';
+            }
+        }
+
+        return [
+            'content' => $content,
+            'quality_review' => $qualityReview,
+        ];
+    }
+
+    private function requestText(AiSetting $settings, string $systemInstructions, string $brief, ?UploadedFile $referenceFrame): string
+    {
         try {
             $response = $settings->provider === 'gemini'
                 ? $this->callGemini($settings, $systemInstructions, $brief, $referenceFrame)
@@ -55,6 +121,17 @@ class PromptGenerationService
         return trim($text);
     }
 
+    /** @param array<int, array{code: string, category: string, clip: int|null, message: string, repairable: bool}> $issues */
+    private function buildQualityRepairBrief(string $brief, string $draft, array $issues): string
+    {
+        $issueList = implode("\n", array_map(
+            fn (array $issue): string => '- '.($issue['clip'] === null ? '' : 'Clip '.$issue['clip'].': ').$issue['message'],
+            $issues,
+        ));
+
+        return "AUTOMATIC QUALITY-CONTROL CORRECTION\nThe original response below contains one or more detectable structural/timing issues. Return the complete corrected response, preserving the original output order, selected project settings, clip count, story intent, canonical identities, and all unaffected content. Correct the affected clip and recheck both adjacent handoffs, exact scene/presentation state strings, timing maps, and the final marker. Do not rush speech to fit; shorten a line or, only when duration is AI-selected and remains within 10 seconds, allocate more time. Do not introduce filler or new factual claims. Do not append this audit or a score to the copy-ready response.\n\nORIGINAL USER BRIEF AND SETTINGS\n{$brief}\n\nDETECTABLE ISSUES\n{$issueList}\n\nDRAFT RESPONSE TO CORRECT\n{$draft}\n\nReturn only the complete corrected response.";
+    }
+
     private function systemInstructions(array $input): string
     {
         $specification = file_get_contents(resource_path('prompts/master-spec.txt'));
@@ -74,9 +151,13 @@ The user controls in the request override only the specification's defaults (suc
 
 CHARACTER IDENTITY ENFORCEMENT — THE CANONICAL CHARACTER BIBLE IS THE SINGLE SOURCE OF TRUTH. Before drafting, define a closed, named roster and a per-clip/per-shot cast map. Every visible person, creature, speaker, silent figure, background extra, or character-like representation must resolve to exactly one canonical entry or an explicitly defined and counted extra group. In every standalone clip prompt, write `VISIBLE CHARACTER CAST:` with the exact canonical names/IDs and counts (or `None`), then repeat the complete identity lock for every character who appears; never rely on “same as above,” another clip, or a reference the video model may not receive. For multi-shot clips, give every shot its exact cast/count plus a full repeated identity lock for every character in that shot. No unlisted characters, crowds, duplicates, clones, composites, substitutions, identity swaps, redesigns, or unintended variants. Permit doubles, twins, transformations, or costume changes only when the user explicitly requests or the story clearly requires them, and define each identity and allowed change in advance. If no character serves the selected format, keep the cast absent. For extensions, the supplied frame and explicit description are the evidence authority; preserve only visible/stated identity traits and introduce a new character only when the requested next action explicitly requires one.
 
-SPEECH/VISUAL ACTION LOCK — Map every exact voice-over or dialogue line to a timed action, object, or result visibly shown in that same clip. Do not narrate off-screen, omitted, prior-clip, or future-clip actions. Keep an on-screen dialogue speaker visible and make the line fit what they are visibly doing and attending to. For an invisible educational process, show an accurate, clearly identified cutaway, diagram, or overlay in that clip and align the line to that visualization; otherwise omit the unshown process claim. Include a `SPEECH/VISUAL MAP:` for every clip, explicitly saying speech is off where applicable.
+FACTUAL ACCURACY AND SOURCE HONESTY — Keep scientific, historical, chronological, and device-specific claims correct and internally consistent. Distinguish established facts from simplifications, uncertainties, and disputed interpretations; choose one specific device/model/period/process when variants exist and state meaningful variation instead of silently mixing designs. Use reliable primary sources if a real retrieval tool is explicitly available and actually used; never invent sources, citations, quotations, measurements, or claim research or external verification that did not occur. This generation endpoint performs no external source retrieval, so qualify uncertain precision and make no source-checking claim. When Section 2 applies or material factual claims are included, briefly label each essential claim as established knowledge, simplification, or uncertain/disputed as appropriate, and explicitly state `No external source retrieval was performed for this plan`. Do not present these labels or that note as independent verification. Clearly identify visual metaphors, cutaways, diagrams, and overlays as explanatory representations rather than literal camera views.
 
-MATCHED HANDOFF CONTRACT — Compare each prior ending with the next opening across cast/identity, poses and positions, carried objects, materials/process state, environment, camera and motion, lighting, and audible action. The prior `OUTGOING HANDOFF TYPE:` must exactly match the next `TRANSITION TYPE:`. Type A means the next opening is the exact immediate state; Type B must show the complete visible physical bridge; Type C is an intentional, non-seamless before → credible intermediate change → after progression. Never use a label to hide a skipped stage, impossible change, or unaccounted interval. The last clip must mark `OUTGOING HANDOFF TYPE: FINAL — NO NEXT HANDOFF`.
+VISUAL TEACHING CLARITY — Give every educational clip one primary idea and one legible cause → action → result. Show the actual component or mechanism being discussed. Explicitly label each clip's `VISUAL REPRESENTATION:` as a literal scene, cutaway, diagram, overlay, or illustrative metaphor. Keep internal geometry, layouts, scale, labels, and camera perspective consistent; avoid clutter, simultaneous competing mechanisms, and overloaded clips. Apply the same focus to non-educational beats without forcing a lesson.
+
+TIMED SPEECH AND STRUCTURED PROMPT CONTRACT — In every standalone clip prompt, include the exact one-line fields `CLIP DURATION: N seconds`, `PRIMARY IDEA:`, `VISUAL REPRESENTATION:`, `VISIBLE CAUSE → ACTION → RESULT:`, `OPENING CONTINUITY STATE:`, `ENDING CONTINUITY STATE:`, `OPENING PRESENTATION STATE:`, and `ENDING PRESENTATION STATE:`. Include `SPEECH/VISUAL MAP:` followed by exact per-line timing rows in this form: `- 0.0–1.8s | VISIBLE ACTION: [simultaneous visible action/result] | SPEAKER: [Narrator or exact canonical character name] | LINE: “[exact words]”`. Estimate speaking time conservatively at 2–2.5 words/second, plus pronunciation difficulty, natural pauses, and comprehension time; reserve time for visual setup/action and a settled ending, and shorten lines rather than rush. Do not describe a component before it appears or after its action is over. When speech is intentionally absent, say so explicitly; when audio is off, use `SPEECH/VISUAL MAP: None — spoken audio is off` and include no spoken words. Keep each metadata value on one line.
+
+MATCHED HANDOFF CONTRACT — Compare each prior ending with the next opening across canonical cast/identity, poses and positions, carried objects, materials/process state, environment, camera and motion, lighting, and audible action. The prior `OUTGOING HANDOFF TYPE:` must exactly match the next `TRANSITION TYPE:`. Every incoming clip copies the prior `ENDING CONTINUITY STATE:` value exactly into its `OPENING CONTINUITY STATE:`; the physical change for Type B/C occurs visibly inside that clip, never across the cut. Type A also copies the prior `ENDING PRESENTATION STATE:` exactly; Type B/C visibly motivate any presentation change. Type B must show the complete physically plausible bridge; Type C is an intentional, non-seamless before → credible intermediate change → after progression. Never use a label to hide a skipped stage, impossible change, or unaccounted interval. The last clip must mark `OUTGOING HANDOFF TYPE: FINAL — NO NEXT HANDOFF`.
 
 For an educational explainer, include all applicable sections of the master specification and its canonical character reference image prompt. Honor the saved project character type and description across every clip and reference, while adapting only unspecified details to the topic. For other video types, follow the mode-specific addendum after the master specification: retain its continuity, visual consistency, feasible action, and copy-ready prompt rules, but do not force educational-only sections or a recurring character when the format does not benefit from one. For an extension, use only the supplied frame and description as evidence, make no claims about unseen footage, and provide the single complete extension prompt plus concise continuity notes. Include the mandatory continuation instruction from the master specification verbatim in every Type A clip after Clip 1, every Type B clip that begins directly from the preceding final frame, and every extension prompt; do not include it in a Type C transition clip. Before answering, silently perform the appropriate factual, continuity, and production-feasibility audit and correct any failures.
 POLICY;
@@ -175,6 +256,14 @@ POLICY;
             : ((int) $clipDuration).' seconds';
         $language = $input['language'] ?? 'English';
         $fields += [
+            'Factual accuracy and source use' => in_array($videoType, ['educational', 'documentary'], true)
+                ? 'Use well-established, chronologically correct facts; in Section 2, briefly label each essential claim as established knowledge, simplification, or uncertain/disputed. State that no external source retrieval was performed for this plan; do not claim research, citations, or independent verification. Choose one consistent device/period/process when variants exist and qualify or omit unsupported precision. Never describe an illustrative cutaway/metaphor as a literal view.'
+                : 'Keep real-world claims accurate and qualified. This endpoint does not retrieve external sources: do not claim research or citations; use reliable sources only if actually provided or retrieved elsewhere.',
+            'Visual teaching/story clarity' => 'Give each clip one primary idea and one uncluttered visible cause → action → result; show the actual component/mechanism, label literal scene versus cutaway/diagram/overlay/metaphor, and keep component geometry and representation consistent.',
+            'Structured quality and state fields' => 'Every standalone clip must include exact one-line CLIP DURATION, PRIMARY IDEA, VISUAL REPRESENTATION, VISIBLE CAUSE → ACTION → RESULT, OPENING/ENDING CONTINUITY STATE, OPENING/ENDING PRESENTATION STATE, and SPEECH/VISUAL MAP fields. Copy each previous ending scene state exactly into the next opening; make Type B/C changes visible within the destination clip.',
+            'Narration timing' => ! $spokenAudioEnabled
+                ? 'No speech; use `SPEECH/VISUAL MAP: None — spoken audio is off` in every clip.'
+                : 'Time every exact line within its own clip at a natural 2–2.5 words per second, adding allowance for pronunciation and pauses. Use clip-relative start/end seconds with the exact visible-action and speaker fields; leave visual action and a settled ending, and shorten rather than rush.',
             'Aspect ratio' => $input['aspect_ratio'] ?? '9:16',
             'Logical visual/process continuity' => 'Track identity and changing state for every important character, material, component, object, quantity, location, orientation, condition, and process stage—not only visual appearance. Each clip must begin from the actual state produced by the prior clip, and visibly show the action or operation that causes any change. For manufacturing or other sequential processes, use a factually plausible prerequisite order; carry the same identifiable materials or parts through intermediate operations, and make each result the input to the next. Never reset, duplicate, teleport, skip a necessary operation, or show a finished result before it has been physically produced. A Type C montage or time passage may condense time only when the causal progression and intermediate states remain credible.',
             'Character identity enforcement' => $this->characterIdentityBrief($input, $hasReferenceFrame),
@@ -192,7 +281,7 @@ POLICY;
                 : 'Off; no on-screen spoken dialogue',
             'Speech-to-visual alignment' => ! $spokenAudioEnabled
                 ? 'Speech is off; write `SPEECH/VISUAL MAP: None — spoken audio is off` in every clip and include no spoken words.'
-                : 'For every exact narration or dialogue line, map its timing to the visible action/object/result in this same clip; do not refer to unseen, off-screen, past-clip, or future-clip actions. Keep character speakers on screen during their lines. For any invisible educational mechanism, show a clear, accurate, labeled cutaway/diagram/overlay in that clip and narrate only what it visibly represents.',
+                : 'For every exact narration or dialogue line, use a clip-relative time row `- 0.0–1.8s | VISIBLE ACTION: ... | SPEAKER: ... | LINE: “...”`; map it only to the visible action/object/result in this same clip. Estimate 2–2.5 words per second plus pronunciation and pause allowance; do not rush or overlap lines. Keep character speakers visible during their lines. For an invisible educational mechanism, show a clear, accurate, labeled cutaway/diagram/overlay in that clip and narrate only what it visibly represents. Leave visual setup/action and a settled ending.',
             'Background music' => ($input['music'] ?? true) ? 'Include subtle music that never overpowers speech' : 'No background music',
             'Sound effects' => ($input['sound_effects'] ?? true) ? 'Use only restrained, action-matched sound effects' : 'No sound effects',
         ];
@@ -216,7 +305,7 @@ POLICY;
             return "EXTEND VIDEO BRIEF\nUse the visible final frame as the exact start when an image is attached. Preserve the visible character, objects, lighting, camera, composition, and style. Continue one physically plausible action without a reset. Do not invent details that are not visible or stated.\n\n".$this->formatFields($fields);
         }
 
-        $fields['Transition planning'] = 'Before drafting, compare every prior ending with the next opening across exact cast/identity, poses and positions, objects, materials/process state, environment, camera/motion, lighting, and audible action. Match each prior `OUTGOING HANDOFF TYPE:` exactly to the destination `TRANSITION TYPE:`. Type A is the immediate next moment with an identical state; Type B shows the complete visible physical bridge and resulting state; Type C is explicitly non-seamless and shows a credible before → intermediate progression → after. Never hide travel, elapsed time, a handoff, prerequisite operation, or other state change between clips. Do not use Type C to excuse impossible transformations, skipped stages, or unexplained finished objects; show credible intermediate states or give essential stages their own clips. Keep the same identifiable workpieces and components through operations. Use no filler, count transition clips within the selected total, use `OUTGOING HANDOFF TYPE: FINAL — NO NEXT HANDOFF` on the last clip, and include the verbatim continuation instruction only for Type A and direct-frame Type B.';
+        $fields['Transition planning'] = 'Before drafting, compare every prior ending with the next opening across exact cast/identity, poses and positions, objects, materials/process state, environment, camera/motion, lighting, and audible action. Match each prior `OUTGOING HANDOFF TYPE:` exactly to the destination `TRANSITION TYPE:`. Copy every preceding `ENDING CONTINUITY STATE:` value verbatim into the next `OPENING CONTINUITY STATE:`; Type B/C physical changes happen visibly after that opening. Type A also matches presentation state exactly; Type B/C visibly motivate any camera, lighting, environment, or audible-state changes. Type A is the immediate next moment with an identical state; Type B shows the complete visible physical bridge and resulting state; Type C is explicitly non-seamless and shows a credible before → intermediate progression → after. Never hide travel, elapsed time, a handoff, prerequisite operation, or other state change between clips. Do not use Type C to excuse impossible transformations, skipped stages, or unexplained finished objects; show credible intermediate states or give essential stages their own clips. Keep the same identifiable workpieces and components through operations. Use one primary idea and a legible cause/action/result per clip, no filler, and count transition clips within the selected total. Use `OUTGOING HANDOFF TYPE: FINAL — NO NEXT HANDOFF` on the last clip, and include the verbatim continuation instruction only for Type A and direct-frame Type B.';
 
         if ($isEducational) {
             $fields['Educational topic'] = $input['topic'] ?? '';
