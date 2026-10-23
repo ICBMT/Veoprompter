@@ -1,0 +1,19 @@
+I want to add an **automatic prompt repair feature** to VeoPrompter.
+
+Right now, the application already has a QA checker that detects prompt problems, and it's doing a good job overall. The issues I keep noticing are mainly opening/ending state mismatches and speech-map timing problems. I want the application to fix these problems automatically instead of making me correct them manually.
+
+Please first explore the existing code and understand how prompt generation, QA checks, continuity states, handoff types, and speech timing currently work. Build on the existing system rather than creating a separate, duplicate validation system or unnecessarily changing parts that already work well.
+
+For opening and ending states, I want the application to automatically reconcile mismatches between consecutive clips, including the presentation-state matching required for Type A handoffs. It should preserve the intended scene, character presence, environment, action, and handoff type instead of blindly copying one state over another. If a mismatch cannot be resolved safely without changing the intended story or transition, leave it for review rather than guessing.
+
+For speech timing, I want the application to automatically correct problems such as overlapping speech windows, timestamps outside the clip duration, unrealistic speaking rates, and dialogue that has been given too little time. It should use the actual clip duration and dialogue word count to calculate sensible timings, leave appropriate pauses where possible, and preserve the original dialogue. If the dialogue cannot reasonably fit, it should flag the issue for review instead of silently cutting or rewriting the lines.
+
+Use ordinary code for problems that can be resolved reliably through deterministic rules. Use AI assistance only when a problem requires understanding the meaning of the scene or making a contextual decision. If AI repair is needed, give it the specific issue and the smallest relevant section to fix. Do not ask it to rewrite the entire prompt.
+
+Most importantly, **every automatic repair must be followed by the existing full QA checks again**. The repair process must not be allowed to declare success just because it attempted a fix. Check whether the original issue was resolved and whether the repair introduced any new issues. Limit the number of repair attempts, and if problems remain after the limit, clearly show them to the user for manual review.
+
+I'd also like a simple user experience: after prompt generation, if QA issues are found, offer an **Auto-Fix Issues** action. Once the repair finishes, show which issues were fixed, which remain unresolved, and whether any new issues were introduced. Keep the original generated prompt recoverable so the user can compare or restore it.
+
+Please add appropriate tests for the repair logic, especially continuity between clips, Type A presentation-state matching, speech overlaps, duration boundaries, dialogue pacing, and cases where an automatic repair must be rejected because it would damage the intended scene.
+
+Before implementing, inspect the current architecture and propose the smallest clean integration that fits the project. Then implement it, run the relevant tests, and report exactly what changed and which tests passed or failed. Avoid unrelated refactoring or regressions to existing prompt generation and QA behavior.
