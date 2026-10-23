@@ -41,6 +41,11 @@ class PromptOutputAuditorTest extends TestCase
             'VISIBLE CAUSE → ACTION → RESULT: Mina lifts the same seed tray from the workbench, walks through the open greenhouse doorway, and sets it on the greenhouse bench without disturbing the planted seeds.',
             $bridge,
         );
+        $bridge = str_replace(
+            'ENDING PRESENTATION STATE: camera=medium; lighting=soft daylight; audio=quiet ambience',
+            'ENDING PRESENTATION STATE: camera=slow tracking follow; lighting=soft daylight; audio=quiet ambience',
+            $bridge,
+        );
         $content = $this->clip(1, 'INITIAL CLIP — NO PREVIOUS HANDOFF', 'TYPE B — NATURAL ACTION TRANSITION', $priorState, $priorState)
             ."\n".$bridge;
 
@@ -73,6 +78,20 @@ class PromptOutputAuditorTest extends TestCase
         $review = $this->auditor->audit($content, $this->input(['clip_count' => 2]));
 
         $this->assertContains('presentation_state_mismatch', array_column($review['issues'], 'code'));
+    }
+
+    public function test_type_b_must_open_on_the_prior_presentation_before_a_visible_camera_change(): void
+    {
+        $state = 'cast=None; object=seed tray; stage=seeds planted; environment=greenhouse';
+        $priorPresentation = 'camera=static wide; lighting=soft morning; audio=greenhouse ambience';
+        $changedOpening = 'camera=close-up; lighting=blue night; audio=rain';
+        $content = $this->clip(1, 'INITIAL CLIP — NO PREVIOUS HANDOFF', 'TYPE B — NATURAL ACTION TRANSITION', $state, $state, $priorPresentation, $priorPresentation)
+            ."\n".$this->clip(2, 'TYPE B — NATURAL ACTION TRANSITION', 'FINAL — NO NEXT HANDOFF', $state, $state, $changedOpening, $changedOpening);
+
+        $review = $this->auditor->audit($content, $this->input(['clip_count' => 2]));
+
+        $this->assertContains('presentation_state_mismatch', array_column($review['issues'], 'code'));
+        $this->assertStringContainsString('Type A/Type B openings must match the previous ending presentation state', $this->issue($review, 'presentation_state_mismatch')['message']);
     }
 
     public function test_overlong_narration_is_flagged_by_conservative_word_timing_and_can_be_revised(): void

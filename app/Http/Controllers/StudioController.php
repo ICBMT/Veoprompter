@@ -42,7 +42,12 @@ class StudioController extends Controller
             'learning_objective' => ['nullable', 'string', 'max:500'],
             'creative_direction' => ['nullable', 'string', 'max:1500'],
             'next_action' => ['nullable', 'required_if:mode,extend', 'string', 'max:800'],
-            'visible_start' => ['nullable', 'string', 'max:1500'],
+            'visible_start' => [
+                'nullable',
+                Rule::requiredIf($request->input('mode') === 'extend' && ! $request->hasFile('reference_frame')),
+                'string',
+                'max:1500',
+            ],
             'audience' => ['required', 'string', 'max:160'],
             'visual_style' => ['required', Rule::in(array_keys(ProjectSettings::visualStyleOptions()))],
             'style_detail' => ['nullable', 'required_if:visual_style,custom', 'string', 'max:500'],
@@ -62,6 +67,8 @@ class StudioController extends Controller
             'music' => ['nullable', 'boolean'],
             'sound_effects' => ['nullable', 'boolean'],
             'reference_frame' => ['nullable', 'prohibited_unless:mode,extend', 'image', 'mimes:jpg,jpeg,png,webp', 'max:8192'],
+        ], [
+            'visible_start.required' => 'For Extend Video, attach a final-frame image or describe the visible starting state.',
         ]);
 
         $settings = AiSetting::query()->find(1);

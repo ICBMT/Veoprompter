@@ -92,11 +92,12 @@
                     </div>
 
                     <div class="mode-fields" data-extend-fields hidden>
-                        <div class="extend-intro"><span class="extend-icon">↗</span><div><strong>Pick up exactly where the shot left off.</strong><p>Describe the final frame—or add a still image. The AI will only use details it can see or you provide.</p></div></div>
+                        <div class="extend-intro"><span class="extend-icon">↗</span><div><strong>Pick up exactly where the shot left off.</strong><p>Attach a final-frame image or describe what is visible in the last frame; one is required to establish the starting state. The AI only uses the evidence you provide.</p></div></div>
                         <label class="field-label" for="next_action">What happens next? <span class="required-star">*</span></label>
                         <textarea class="text-input textarea-large" id="next_action" name="next_action" rows="3" maxlength="800" required disabled placeholder="The explorer gently reaches toward the glowing seed. Keep the camera still."></textarea>
-                        <label class="field-label field-label--spaced" for="visible_start">What is visible in the last frame? <span class="optional">OPTIONAL</span></label>
+                        <label class="field-label field-label--spaced" for="visible_start">What is visible in the last frame? <span class="optional">OPTIONAL IF IMAGE ATTACHED</span></label>
                         <textarea class="text-input textarea-small" id="visible_start" name="visible_start" rows="2" maxlength="1500" disabled placeholder="A small blue robot stands on the left, facing a glowing seed on a stone table."></textarea>
+                        <span class="field-hint">If you leave this blank, attach a final-frame image to provide the starting state.</span>
                         <div class="field-label field-label--spaced">Final-frame reference <span class="optional">OPTIONAL · UP TO 8 MB</span></div>
                         <label class="upload-zone" for="reference_frame" data-upload-zone><input id="reference_frame" name="reference_frame" type="file" accept="image/png,image/jpeg,image/webp" disabled><span class="upload-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 16V4m0 0L7.5 8.5M12 4l4.5 4.5"/><path d="M5 14.5v4A1.5 1.5 0 0 0 6.5 20h11a1.5 1.5 0 0 0 1.5-1.5v-4"/></svg></span><span class="upload-copy"><strong data-upload-label>Drop a frame here or <i>browse files</i></strong><small>PNG, JPG or WEBP. Used for this request only.</small></span><span class="upload-clear" data-upload-clear hidden role="button" tabindex="0" aria-label="Remove selected image">×</span></label>
                     </div>

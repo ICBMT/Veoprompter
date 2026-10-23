@@ -273,11 +273,11 @@ function handoffWarnings(chunks) {
                 warnings.push(`Clip ${next.clipNumber} opening continuity state does not exactly match Clip ${previous.clipNumber} ending state; review object/process identity and any missing causal step.`);
             }
 
-            if (previous.outgoingTransitionType === 'A') {
+            if (['A', 'B'].includes(previous.outgoingTransitionType)) {
                 const priorPresentation = metadataValue(previous.text, 'ENDING PRESENTATION STATE')?.replace(/\s+/g, ' ').trim();
                 const nextPresentation = metadataValue(next.text, 'OPENING PRESENTATION STATE')?.replace(/\s+/g, ' ').trim();
                 if (priorPresentation && nextPresentation && priorPresentation !== nextPresentation) {
-                    warnings.push(`Type A handoff camera/lighting/audio state differs between Clip ${previous.clipNumber} and Clip ${next.clipNumber}.`);
+                    warnings.push(`Clip ${next.clipNumber} opening presentation state does not exactly match Clip ${previous.clipNumber} ending state; Type B presentation changes must happen after the matched opening inside the destination clip.`);
                 }
             }
         });

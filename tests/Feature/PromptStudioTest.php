@@ -33,7 +33,9 @@ class PromptStudioTest extends TestCase
             ->assertSee('What should we make next?')
             ->assertSee('Edit project settings')
             ->assertSee('data-send-to-flow', false)
-            ->assertSee('Send to Flow');
+            ->assertSee('Send to Flow')
+            ->assertSee('one is required to establish the starting state')
+            ->assertSee('OPTIONAL IF IMAGE ATTACHED');
     }
 
     public function test_project_creation_uses_a_guided_wizard_while_editing_keeps_the_full_settings_form(): void
@@ -130,11 +132,19 @@ class PromptStudioTest extends TestCase
                 && $request->hasHeader('x-goog-api-key', 'test-provider-secret')
                 && str_contains($systemInstruction, 'AI VIDEO STORYTELLER — MASTER SPECIFICATION')
                 && str_contains($systemInstruction, 'MANDATORY CONTINUATION INSTRUCTION')
+                && str_contains($systemInstruction, 'only when the actual previous rendered final frame will be supplied to the target video model as an image input')
+                && str_contains($systemInstruction, 'CONTINUATION SCOPE:')
+                && str_contains($systemInstruction, 'the quote\'s clothing, gesture, step, and light-shift examples are illustrative only')
+                && str_contains($systemInstruction, 'If no prior image will be supplied—or frame use is unconfirmed—omit this quote from the copyable prompt')
                 && str_contains($systemInstruction, 'TRANSITION CLIP SYSTEM')
                 && str_contains($systemInstruction, 'Type A direct continuation, Type B natural action transition, or Type C narrative/temporal transition')
                 && str_contains($systemInstruction, 'CHARACTER IDENTITY ENFORCEMENT — THE CANONICAL CHARACTER BIBLE IS THE SINGLE SOURCE OF TRUTH')
                 && str_contains($systemInstruction, 'SPEECH/VISUAL ACTION LOCK — Map every exact voice-over or dialogue line to a timed action')
                 && str_contains($systemInstruction, 'MATCHED HANDOFF CONTRACT — Compare each prior ending with the next opening')
+                && str_contains($systemInstruction, 'Do not choose Type A merely because openings match: Type A continues an already-in-progress action with no separate bridge to depict; Type B also opens on the exact prior state, then begins a new visible physical action and shows the complete physical bridge after that opening.')
+                && str_contains($systemInstruction, 'destination clip must begin from the exact prior ending in both continuity and presentation')
+                && str_contains($systemInstruction, 'copy the prior `ENDING PRESENTATION STATE:` verbatim into `OPENING PRESENTATION STATE:`')
+                && str_contains($systemInstruction, 'Do not cut directly to the changed destination state or presentation.')
                 && str_contains($systemInstruction, 'For multi-shot clips, give every shot its exact cast/count plus a full repeated identity lock')
                 && str_contains($systemInstruction, 'do not include it in a Type C transition clip')
                 && str_contains($systemInstruction, 'SPOKEN AUDIO MODE — VOICE-OVER: Use one consistent off-screen narrator')
@@ -156,6 +166,13 @@ class PromptStudioTest extends TestCase
                 && str_contains($brief, 'Saved character type: robot.')
                 && str_contains($brief, 'Saved character idea: A tiny golden bee with a blue satchel.')
                 && str_contains($brief, 'Transition planning: Before drafting, compare every prior ending with the next opening across exact cast/identity, poses and positions, objects, materials/process state, environment, camera/motion, lighting, and audible action. Match each prior `OUTGOING HANDOFF TYPE:` exactly to the destination `TRANSITION TYPE:`.')
+                && str_contains($brief, 'Do not choose Type A merely because openings match: Type A continues an already-in-progress action with no separate bridge to depict; Type B also opens on the exact prior state, then begins a new visible physical action and shows the complete physical bridge after that opening.')
+                && str_contains($brief, 'Copy every preceding `ENDING CONTINUITY STATE:` value verbatim into the next clip\'s `OPENING CONTINUITY STATE:`; for Type A and Type B, also copy the prior `ENDING PRESENTATION STATE:` verbatim into the opening.')
+                && str_contains($brief, 'its complete visible physical bridge happens only after the matching opening, never as a cut directly to a changed state or presentation')
+                && str_contains($brief, 'Continuity input note: For a multi-clip sequence, include the concise Section 1 CONTINUITY INPUT NOTE outside all copyable prompts.')
+                && str_contains($brief, 'advise the user to provide each actual previous rendered final frame to anchor the next clip opening')
+                && str_contains($brief, 'Unless the user explicitly confirms that an actual prior frame will be attached when generating the video, treat frame input as unconfirmed: omit the verbatim continuation quote from new-sequence Type A/B prompts and use text-only opening-state wording.')
+                && str_contains($brief, 'No prior rendered frame was supplied to this new-sequence request')
                 && str_contains($brief, 'Background music: Include subtle music that never overpowers speech')
                 && str_contains($brief, 'Sound effects: Use only restrained, action-matched sound effects')
                 && str_contains($brief, 'Why do bees visit flowers?')
@@ -544,11 +561,28 @@ class PromptStudioTest extends TestCase
         $this->actingAs($otherUser)->postJson(route('studio.generate', $project), $this->storyBrief())->assertNotFound();
     }
 
+    public function test_extension_requires_a_frame_image_or_written_starting_state_before_generation(): void
+    {
+        $owner = User::factory()->create();
+        $project = $this->makeProject($owner);
+
+        $this->actingAs($owner)
+            ->postJson(route('studio.generate', $project), [
+                'mode' => 'extend',
+                'next_action' => 'The character moves toward the flower.',
+            ])
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors(['visible_start'])
+            ->assertJsonPath('errors.visible_start.0', 'For Extend Video, attach a final-frame image or describe the visible starting state.');
+
+        Http::assertNothingSent();
+    }
+
     public function test_extension_uses_the_projects_separate_saved_extension_duration(): void
     {
         Http::fake([
             'https://generativelanguage.googleapis.com/*' => Http::response([
-                'candidates' => [['content' => ['parts' => [['text' => '## EXTENSION PROMPT'."\\n".'Continue from the visible frame.']]]]],
+                'candidates' => [['content' => ['parts' => [['text' => '## EXTENSION PROMPT'."\\n".'Continue from the written starting state; no reference image was supplied.']]]]],
             ], 200),
         ]);
         AiSetting::create([
@@ -571,17 +605,22 @@ class PromptStudioTest extends TestCase
             ->assertJsonPath('mode', 'extend')
             ->assertJsonPath('saved_to_history', true);
 
-        Http::assertSent(fn (ClientRequest $request): bool => str_contains(
-            data_get($request->data(), 'contents.0.parts.0.text', ''),
-            'Clip duration: 6 seconds',
-        ));
+        Http::assertSent(function (ClientRequest $request): bool {
+            $systemInstructions = data_get($request->data(), 'systemInstruction.parts.0.text', '');
+            $brief = data_get($request->data(), 'contents.0.parts.0.text', '');
+
+            return str_contains($brief, 'Clip duration: 6 seconds')
+                && str_contains($brief, 'Supplied final-frame image: No. Use only the written starting-state description and requested action. Do not pretend to have seen a video or image.')
+                && str_contains($systemInstructions, 'For Extend Video, include it only when an actual reference image is attached; otherwise use text-only starting-state wording.')
+                && str_contains($systemInstructions, 'If neither a frame nor a written starting-state description is available, ask the user to provide one instead of drafting an invented continuation.');
+        });
     }
 
     public function test_ai_selects_a_bounded_extension_duration_when_global_duration_questions_are_off(): void
     {
         Http::fake([
             'https://generativelanguage.googleapis.com/*' => Http::response([
-                'candidates' => [['content' => ['parts' => [['text' => '## EXTENSION PROMPT'."\n".'Continue from the visible frame.']]]]],
+                'candidates' => [['content' => ['parts' => [['text' => '## EXTENSION PROMPT'."\n".'Continue from the written starting state; no reference image was supplied.']]]]],
             ], 200),
         ]);
         AiSetting::create([

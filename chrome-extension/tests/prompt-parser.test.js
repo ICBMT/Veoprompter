@@ -412,13 +412,40 @@ test('allows a justified Type B bridge whose physical change happens inside the 
         'VISIBLE CAUSE → ACTION → RESULT: Mina takes three visible steps through the doorway and sets the tray on the bench.',
         `OPENING CONTINUITY STATE: ${priorState}`,
         'ENDING CONTINUITY STATE: same tray on greenhouse bench; seeds remain planted; stage=ready for watering; motion=stationary',
-        'OPENING PRESENTATION STATE: close follow shot; daylight shifts naturally; footsteps audible',
+        'OPENING PRESENTATION STATE: wide shot; stable daylight; soft room tone',
         'ENDING PRESENTATION STATE: side view; soft greenhouse light; footsteps stop',
         'SPEECH/VISUAL MAP: None — intentionally no spoken line in this clip.',
         'OUTGOING HANDOFF TYPE: FINAL — NO NEXT HANDOFF',
     ].join('\n'));
 
     assert.deepEqual(parsed.handoffWarnings, []);
+});
+
+test('flags a Type B opening presentation jump instead of accepting a hidden cut', () => {
+    const state = 'object=seed tray; stage=seeds planted; environment=greenhouse; motion=stationary';
+    const parsed = parsePrompt([
+        'SECTION 8 — COPY-AND-PASTE VIDEO PROMPTS',
+        'COPY CLIP 1 PROMPT',
+        'TRANSITION TYPE: INITIAL CLIP — NO PREVIOUS HANDOFF',
+        'CLIP DURATION: 4 seconds',
+        `OPENING CONTINUITY STATE: ${state}`,
+        `ENDING CONTINUITY STATE: ${state}`,
+        'OPENING PRESENTATION STATE: wide shot; daylight; quiet ambience',
+        'ENDING PRESENTATION STATE: wide shot; daylight; quiet ambience',
+        'SPEECH/VISUAL MAP: None — intentionally no spoken line in this clip.',
+        'OUTGOING HANDOFF TYPE: TYPE B — NATURAL ACTION TRANSITION',
+        'COPY CLIP 2 PROMPT',
+        'TRANSITION TYPE: TYPE B — NATURAL ACTION TRANSITION',
+        'CLIP DURATION: 5 seconds',
+        `OPENING CONTINUITY STATE: ${state}`,
+        `ENDING CONTINUITY STATE: ${state}`,
+        'OPENING PRESENTATION STATE: close-up; blue night; rain',
+        'ENDING PRESENTATION STATE: close-up; blue night; rain',
+        'SPEECH/VISUAL MAP: None — intentionally no spoken line in this clip.',
+        'OUTGOING HANDOFF TYPE: FINAL — NO NEXT HANDOFF',
+    ].join('\n'));
+
+    assert.ok(parsed.handoffWarnings.some((warning) => /opening presentation state does not exactly match/.test(warning)));
 });
 
 test('flags narration overrun and speech extending past a clip duration', () => {

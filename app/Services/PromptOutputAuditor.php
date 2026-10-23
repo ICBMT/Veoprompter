@@ -140,7 +140,7 @@ class PromptOutputAuditor
                         );
                     }
 
-                    if ($outgoing === 'A') {
+                    if (in_array($outgoing, ['A', 'B'], true)) {
                         $endingPresentation = $this->normalizeState($details[$index]['ending_presentation']);
                         $openingPresentation = $this->normalizeState($next['opening_presentation']);
                         if ($endingPresentation !== '' && $openingPresentation !== '' && $endingPresentation !== $openingPresentation) {
@@ -149,7 +149,7 @@ class PromptOutputAuditor
                                 'presentation_state_mismatch',
                                 'continuity',
                                 $nextClipNumber,
-                                'Type A requires an identical camera, lighting, and audible presentation state at the cut; Clip '.$nextClipNumber.' does not match Clip '.$clipNumber.'.',
+                                'Type A/Type B openings must match the previous ending presentation state; Type B camera, lighting, or audible changes belong after that matched opening. Clip '.$nextClipNumber.' does not match Clip '.$clipNumber.'.',
                             );
                         }
                     }
