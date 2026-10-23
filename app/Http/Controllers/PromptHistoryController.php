@@ -3,6 +3,8 @@
 namespace App\Http\Controllers;
 
 use App\Models\PromptProject;
+use App\Services\PromptOutputAuditor;
+use App\Services\PromptRepairService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Str;
@@ -30,15 +32,23 @@ class PromptHistoryController extends Controller
         ]);
     }
 
-    public function show(Request $request, PromptProject $project): View
+    public function show(Request $request, PromptProject $project, PromptOutputAuditor $auditor): View
     {
         abort_unless((int) $project->user_id === (int) $request->user()->id, 404);
 
         $project->load('studioProject');
+        $qualityReview = is_array($project->quality_review)
+            ? $project->quality_review
+            : $auditor->audit((string) $project->content, is_array($project->brief) ? $project->brief : []);
 
         return view('history.show', [
             'project' => $project,
             'summary' => $this->summary($project),
+            'qualityReview' => $qualityReview,
+            'manualRepairAttempts' => PromptRepairService::manualAttempts($project->repair_history ?? []),
+            'maxRepairAttempts' => PromptRepairService::MAX_MANUAL_ATTEMPTS,
+            'hasQaIssues' => ! empty($qualityReview['issues']),
+            'canRestoreOriginal' => is_string($project->original_content) && $project->content !== $project->original_content,
         ]);
     }
 

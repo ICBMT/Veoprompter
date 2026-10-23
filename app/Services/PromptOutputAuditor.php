@@ -24,9 +24,7 @@ class PromptOutputAuditor
     public function audit(string $content, array $input): array
     {
         $isExtension = ($input['mode'] ?? 'story') === 'extend';
-        $clips = $isExtension
-            ? $this->extractExtensionPrompt($content)
-            : $this->extractStoryClips($content);
+        $clips = $this->extractClips($content, $input);
 
         if ($clips === []) {
             $issues = [[
@@ -168,7 +166,20 @@ class PromptOutputAuditor
         return $this->buildReview($issues, $input, true, $isExtension);
     }
 
-    /** @return array<int, array{number: int, text: string}> */
+    /**
+     * Expose the auditor's existing block parser to the repair service so edits
+     * and the final QA pass share the same definition of copy-ready clips.
+     *
+     * @return array<int, array{number: int, text: string, start_line: int, end_line: int}>
+     */
+    public function extractClips(string $content, array $input): array
+    {
+        return ($input['mode'] ?? 'story') === 'extend'
+            ? $this->extractExtensionPrompt($content)
+            : $this->extractStoryClips($content);
+    }
+
+    /** @return array<int, array{number: int, text: string, start_line: int, end_line: int}> */
     private function extractStoryClips(string $content): array
     {
         $lines = preg_split('/\R/u', str_replace("\r", '', $content)) ?: [];
@@ -203,13 +214,18 @@ class PromptOutputAuditor
                 $body[] = $heading['inline'];
             }
             $body = [...$body, ...array_slice($lines, $heading['line'] + 1, $end - $heading['line'] - 1)];
-            $blocks[] = ['number' => $heading['number'], 'text' => implode("\n", $body)];
+            $blocks[] = [
+                'number' => $heading['number'],
+                'text' => implode("\n", $body),
+                'start_line' => $heading['line'] + ($heading['inline'] !== '' ? 0 : 1),
+                'end_line' => $end,
+            ];
         }
 
         return $blocks;
     }
 
-    /** @return array<int, array{number: int, text: string}> */
+    /** @return array<int, array{number: int, text: string, start_line: int, end_line: int}> */
     private function extractExtensionPrompt(string $content): array
     {
         $lines = preg_split('/\R/u', str_replace("\r", '', $content)) ?: [];
@@ -234,7 +250,12 @@ class PromptOutputAuditor
             }
             $body = [...$body, ...array_slice($lines, $index + 1, $end - $index - 1)];
 
-            return [['number' => 1, 'text' => implode("\n", $body)]];
+            return [[
+                'number' => 1,
+                'text' => implode("\n", $body),
+                'start_line' => $index + (trim($match[1] ?? '') !== '' ? 0 : 1),
+                'end_line' => $end,
+            ]];
         }
 
         return [];
@@ -386,8 +407,7 @@ class PromptOutputAuditor
                 $previousEnd = max($previousEnd ?? 0, $row['end']);
 
                 $wordCount = $this->wordCount($row['line']);
-                $sentencePauses = $this->sentencePauseCount($row['line']);
-                $minimumSeconds = ($wordCount / 2.2) + max(0.12, min(0.45, $sentencePauses * 0.12));
+                $minimumSeconds = $this->minimumSpeechSeconds($row['line']);
                 $availableSeconds = max(0, $row['end'] - $row['start']);
                 if ($wordCount > 0 && $availableSeconds + 0.05 < $minimumSeconds) {
                     $this->addIssue(
@@ -459,7 +479,7 @@ class PromptOutputAuditor
         $rows = [];
         foreach (preg_split('/\R/u', $text) ?: [] as $line) {
             $line = str_replace(['**', '__', '`'], '', $line);
-            if (preg_match('/^\s*(?:[-*+•–]\s*)?(\d+(?:\.\d+)?)\s*(?:s)?\s*(?:–|—|-|to)\s*(\d+(?:\.\d+)?)\s*s\s*\|\s*VISIBLE ACTION:\s*(.*?)\s*\|\s*SPEAKER:\s*(.*?)\s*\|\s*LINE:\s*(.+?)\s*$/iu', $line, $match) !== 1) {
+            if (preg_match('/^\s*(?:[-*+•–]\s+)?(-?\d+(?:\.\d+)?)\s*(?:s)?\s*(?:–|—|-|to)\s*(-?\d+(?:\.\d+)?)\s*s\s*\|\s*VISIBLE ACTION:\s*(.*?)\s*\|\s*SPEAKER:\s*(.*?)\s*\|\s*LINE:\s*(.+?)\s*$/iu', $line, $match) !== 1) {
                 continue;
             }
 
@@ -475,7 +495,7 @@ class PromptOutputAuditor
         return $rows;
     }
 
-    private function durationSeconds(string $text): ?float
+    public function durationSeconds(string $text): ?float
     {
         $value = $this->fieldValue($text, 'CLIP DURATION');
         if ($value === null || preg_match('/^\s*(\d+(?:\.\d+)?)\s*(?:seconds?|secs?|s)\s*$/i', $value, $match) !== 1) {
@@ -523,7 +543,7 @@ class PromptOutputAuditor
         return null;
     }
 
-    private function fieldValue(string $text, string $field): ?string
+    public function fieldValue(string $text, string $field): ?string
     {
         foreach (preg_split('/\R/u', $text) ?: [] as $line) {
             $line = str_replace(['**', '__', '`'], '', $line);
@@ -562,6 +582,14 @@ class PromptOutputAuditor
         preg_match_all('/[.!?…](?:\s|$)/u', trim($line), $matches);
 
         return count($matches[0] ?? []);
+    }
+
+    public function minimumSpeechSeconds(string $line): float
+    {
+        $wordCount = $this->wordCount($line);
+        $sentencePauses = $this->sentencePauseCount($line);
+
+        return ($wordCount / 2.2) + max(0.12, min(0.45, $sentencePauses * 0.12));
     }
 
     private function normalizeState(?string $state): string

@@ -18,7 +18,9 @@
         <div class="detail-actions">
             <button class="button-secondary" type="button" data-copy-target="#saved-prompt-output"><span aria-hidden="true">▢</span> Copy all</button>
             <button class="button-secondary" type="button" data-download-target="#saved-prompt-output" data-download-name="{{ \Illuminate\Support\Str::slug($project->title) }}.txt"><span aria-hidden="true">↓</span> Save .txt</button>
-            <button class="button-secondary button-flow" type="button" data-send-to-flow data-prompt-target="#saved-prompt-output" data-prompt-title="{{ $project->title }} · saved prompt" data-prompt-mode="{{ $project->mode }}" aria-describedby="saved-flow-transfer-status"><span aria-hidden="true">↗</span><span data-flow-button-label>Send to Flow</span></button>
+            @if($hasQaIssues)<button class="button-secondary button-auto-fix" type="button" data-prompt-repair data-repair-url="{{ route('history.repair', $project, false) }}" @if($manualRepairAttempts >= $maxRepairAttempts) disabled @endif>{{ $manualRepairAttempts >= $maxRepairAttempts ? 'Repair limit reached' : 'Auto-Fix Issues' }}</button>@endif
+            @if($canRestoreOriginal)<button class="button-secondary button-restore-original" type="button" data-prompt-restore data-restore-url="{{ route('history.restore', $project, false) }}">Restore original</button>@endif
+            <button class="button-secondary button-flow" type="button" data-send-to-flow data-prompt-target="#saved-prompt-output" data-prompt-title="{{ $project->title }} · saved prompt" data-prompt-mode="{{ $project->mode }}" data-prompt-run-id="{{ $project->id }}" aria-describedby="saved-flow-transfer-status"><span aria-hidden="true">↗</span><span data-flow-button-label>Send to Flow</span></button>
             <form action="{{ route('history.destroy', $project, false) }}" method="post" data-confirm="Remove this prompt kit from your library? This cannot be undone.">@csrf @method('DELETE')<button class="history-delete detail-delete" type="submit" aria-label="Delete this prompt kit" title="Delete this prompt kit"><svg viewBox="0 0 18 18" aria-hidden="true"><path d="M3.5 5h11M7 5V3.5h4V5m2.5 0-.6 9.5H5.1L4.5 5m2.8 2v5m3.4-5v5"/></svg></button></form>
         </div>
     </section>
@@ -51,20 +53,28 @@
         </div>
     </section>
 
-    @if(is_array($project->quality_review))
-        @php($qualityReview = $project->quality_review)
-        <section class="saved-quality-review" data-quality-review-status="{{ $qualityReview['status'] ?? 'not_checked' }}" aria-label="Automated prompt quality review">
-            <div class="quality-review-heading"><div><span class="section-index">AUTOMATED TEXT QA · NOT A FACT CHECK</span><strong>{{ match($qualityReview['status'] ?? 'not_checked') { 'passed' => 'Structured checks passed', 'needs_review' => 'Review recommended', default => 'Some checks could not run' } }}</strong></div>@if(!empty($qualityReview['corrected']))<span class="quality-review-corrected">TARGETED CORRECTION APPLIED</span>@endif</div>
-            @if(!empty($qualityReview['checks']))
-                <ul class="quality-review-checks">@foreach($qualityReview['checks'] as $check)<li data-check-status="{{ $check['status'] ?? 'not_run' }}"><strong>{{ $check['label'] ?? 'Quality check' }}</strong><span>{{ $check['detail'] ?? '' }}</span></li>@endforeach</ul>
-            @endif
-            @if(!empty($qualityReview['issues']))<div class="quality-review-issues"><strong>Items to review</strong><ul>@foreach($qualityReview['issues'] as $issue)<li>{{ $issue['message'] ?? 'A prompt issue needs review.' }}</li>@endforeach</ul></div>@endif
+    @if(is_array($qualityReview))
+        <section class="saved-quality-review" data-quality-review data-quality-review-status="{{ $qualityReview['status'] ?? 'not_checked' }}" aria-label="Automated prompt quality review">
+            <div class="quality-review-heading"><div><span class="section-index">AUTOMATED TEXT QA · NOT A FACT CHECK</span><strong data-quality-review-title>{{ match($qualityReview['status'] ?? 'not_checked') { 'passed' => 'Structured checks passed', 'needs_review' => 'Review recommended', default => 'Some checks could not run' } }}</strong></div><span class="quality-review-corrected" data-quality-review-corrected @if(empty($qualityReview['corrected'])) hidden @endif>TARGETED CORRECTION APPLIED</span></div>
+            <ul class="quality-review-checks" data-quality-review-checks>@foreach($qualityReview['checks'] ?? [] as $check)<li data-check-status="{{ $check['status'] ?? 'not_run' }}"><strong>{{ $check['label'] ?? 'Quality check' }}</strong><span>{{ $check['detail'] ?? '' }}</span></li>@endforeach</ul>
+            <div class="quality-review-issues" data-quality-review-issues-wrap @if(empty($qualityReview['issues'])) hidden @endif><strong>Items to review</strong><ul data-quality-review-issues>@foreach($qualityReview['issues'] ?? [] as $issue)<li>{{ $issue['message'] ?? 'A prompt issue needs review.' }}</li>@endforeach</ul></div>
+            <p class="quality-review-note" data-quality-review-limitations>{{ implode(' ', $qualityReview['limitations'] ?? []) }}</p>
+            <div class="repair-attempt-count" data-repair-attempt-count>Automatic repair attempts: {{ $manualRepairAttempts }}/{{ $maxRepairAttempts }}</div>
         </section>
+        <section class="repair-report" data-repair-report hidden role="status" aria-live="polite"></section>
     @endif
 
     <section class="saved-output-card">
         <div class="saved-output-heading"><div><span class="section-index">YOUR COPY-READY PROMPTS</span><p>Send the saved kit to the extension, then copy each part into a text field when ready.</p></div><span class="result-status"><i></i> SAVED</span></div>
-        <pre class="history-output" id="saved-prompt-output">{{ $project->content }}</pre>
+        <pre class="history-output" id="saved-prompt-output" data-repair-output>{{ $project->content }}</pre>
     </section>
+
+    @if(is_string($project->original_content))
+        <details class="saved-original-prompt" data-original-prompt>
+            <summary>Compare with the original generated prompt</summary>
+            <p>This baseline is preserved separately from repairs and remains available for restoration.</p>
+            <pre class="history-output saved-original-output" data-original-prompt-content>{{ $project->original_content }}</pre>
+        </details>
+    @endif
 </div>
 @endsection

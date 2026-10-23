@@ -16,6 +16,8 @@ class PromptProject extends Model
         'mode',
         'brief',
         'content',
+        'original_content',
+        'repair_history',
         'quality_review',
         'provider',
         'model',
@@ -27,6 +29,7 @@ class PromptProject extends Model
         return [
             'brief' => 'array',
             'quality_review' => 'array',
+            'repair_history' => 'array',
             'reference_frame_attached' => 'boolean',
         ];
     }

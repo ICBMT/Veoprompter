@@ -6,7 +6,7 @@ This is a Chrome Manifest V3 extension kept separate from the Laravel applicatio
 
 1. Visit `chrome://extensions`, turn on **Developer mode**, and select **Load unpacked**. Choose this `chrome-extension/` directory. If it is already installed unpacked, click **Reload** to apply the update.
 2. Open VeoPrompter in a tab. Open the extension popup and select **Connect this site**. Approve the origin-specific access request; the current page is connected immediately.
-3. Generate a prompt and select **Send to Flow** beside Copy all and Save .txt, or open a saved prompt in the prompt library and select its **Send to Flow** button. The extension parses and stores the prompt locally.
+3. Generate a prompt and select **Send to Flow** beside Copy all and Save .txt, or open a saved prompt in the prompt library and select its **Send to Flow** button. The extension parses and stores the prompt locally. When the app supplies a saved-run ID, the popup also offers a link back to that authenticated history page for QA review or Auto-Fix; the link carries only the numeric run ID and never uploads prompt text.
 4. To paste a part on any site, open the destination tab, open the extension popup, review the cast-lock badge and incoming-handoff guidance for the next part when available, and click **Copy**. The extension copies the full prompt unchanged and arms a one-time listener on that tab. Click a text input, textarea, or editable text field to insert the part at the cursor. Review the copied identity lock in Google Flow, then click Flow’s **Send** button yourself. Repeat for each clip; Sections 9–10 are included with the final clip.
 5. If automatic insertion is unavailable or you prefer, use the copied text and your browser’s normal **Paste** command. You can also prepare the sequence with Flow closed; the extension does not require Flow to be open.
 
@@ -17,6 +17,7 @@ The extension never submits a prompt, clicks Flow’s Send button, or starts vid
 ## Local storage and permissions
 
 - Prompt text and progress remain on-device in Chrome extension local storage. The extension does not upload them to VeoPrompter, Flow, or another service.
+- The optional QA/repair link uses only the saved-run ID returned by the authenticated app and opens that app’s history page; repairs happen only after the user chooses them in VeoPrompter, never by sending extension prompt text back to the server.
 - The extension only receives app-page messages from a VeoPrompter origin that the user explicitly connected.
 - No persistent destination-site permission is requested. For one-time insertion, the extension uses Chrome’s temporary `activeTab` access after the user opens the popup on that tab and clicks Copy. The app-site connection is separate and scoped to the origin the user approves.
 - Clipboard write access is used when you click Copy; normal clipboard paste remains available as a fallback.

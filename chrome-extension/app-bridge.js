@@ -29,6 +29,7 @@
                 prompt,
                 title: typeof message.title === 'string' ? message.title.slice(0, 140) : 'VeoPrompter prompt',
                 mode: message.mode === 'extend' ? 'extend' : 'story',
+                savedRunId: Number.isSafeInteger(message.savedRunId) && message.savedRunId > 0 ? message.savedRunId : null,
             }, (response) => {
                 if (chrome.runtime.lastError) {
                     respond({ ok: false, message: 'The extension could not store this prompt. Reopen the extension and try again.' });

@@ -142,6 +142,13 @@
                 <ul class="quality-review-checks" data-quality-review-checks></ul>
                 <div class="quality-review-issues" data-quality-review-issues-wrap hidden><strong>Items to review</strong><ul data-quality-review-issues></ul></div>
                 <p class="quality-review-note" data-quality-review-limitations></p>
+                <div class="prompt-repair-controls" data-prompt-repair-controls>
+                    <button class="button-secondary button-auto-fix" type="button" data-prompt-repair hidden>Auto-Fix Issues</button>
+                    <button class="button-secondary button-restore-original" type="button" data-prompt-restore hidden>Restore original</button>
+                    <a class="history-open" data-prompt-history-link hidden>Compare or restore the original ↗</a>
+                    <span class="repair-attempt-count" data-repair-attempt-count></span>
+                </div>
+                <section class="repair-report" data-repair-report hidden role="status" aria-live="polite"></section>
             </section>
             <div class="output-content" data-output-content></div>
             <div class="voice-config-source" data-voice-config hidden data-language="{{ $settings['language'] }}" data-narrator-voice="{{ $settings['narrator_voice'] }}" data-narrator-accent="{{ $settings['narrator_accent'] }}" data-narrator-tone="{{ $settings['narrator_tone'] }}" data-speech-mode="{{ $speechMode }}"></div>

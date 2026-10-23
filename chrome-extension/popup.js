@@ -1,4 +1,5 @@
 import { armPasteOnNextField } from './field-paste.js';
+import { savedRunReviewLink } from './repair-link.js';
 
 const STORAGE_KEYS = ['connectedAppOrigins', 'activePrompt'];
 const APP_BRIDGE_ID = 'veoprompter-app-bridge';
@@ -15,6 +16,8 @@ const progressTrack = document.querySelector('.progress-track');
 const characterCast = document.querySelector('[data-character-cast]');
 const characterCastValue = document.querySelector('[data-character-cast-value]');
 const handoffWarning = document.querySelector('[data-handoff-warning]');
+const repairLinkWrap = document.querySelector('[data-repair-link-wrap]');
+const repairLink = document.querySelector('[data-repair-link]');
 const handoffCue = document.querySelector('[data-handoff-cue]');
 const handoffKind = document.querySelector('[data-handoff-kind]');
 const handoffGuidance = document.querySelector('[data-handoff-guidance]');
@@ -106,6 +109,15 @@ function renderPrompt(prompt) {
     handoffWarning.textContent = warnings.length
         ? `Prompt check: ${warnings.join(' ')}`
         : '';
+
+    const savedRunUrl = savedRunReviewLink(
+        prompt.sourceOrigin,
+        prompt.repairRunId,
+        popupState.connectedAppOrigins,
+    );
+    repairLinkWrap.hidden = !savedRunUrl;
+    if (savedRunUrl) repairLink.href = savedRunUrl;
+    else repairLink.removeAttribute('href');
 
     const chunks = Array.isArray(prompt.chunks) ? prompt.chunks : [];
     const total = chunks.length;

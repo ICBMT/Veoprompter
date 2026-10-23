@@ -7,6 +7,7 @@ use App\Http\Controllers\AuthController;
 use App\Http\Controllers\PasswordResetController;
 use App\Http\Controllers\PresenceController;
 use App\Http\Controllers\PromptHistoryController;
+use App\Http\Controllers\PromptRepairController;
 use App\Http\Controllers\StudioController;
 use App\Http\Controllers\StudioProjectController;
 use App\Http\Controllers\VoiceSampleController;
@@ -44,6 +45,12 @@ Route::middleware('user.auth')->group(function (): void {
 
     Route::get('/history', [PromptHistoryController::class, 'index'])->name('history.index');
     Route::get('/history/{project}', [PromptHistoryController::class, 'show'])->name('history.show');
+    Route::post('/history/{project}/repair', [PromptRepairController::class, 'repair'])
+        ->middleware('throttle:3,1')
+        ->name('history.repair');
+    Route::post('/history/{project}/restore', [PromptRepairController::class, 'restore'])
+        ->middleware('throttle:5,1')
+        ->name('history.restore');
     Route::delete('/history/{project}', [PromptHistoryController::class, 'destroy'])->name('history.destroy');
 
     Route::get('/account', [AccountController::class, 'edit'])->name('account.edit');

@@ -123,6 +123,10 @@ class PromptStudioTest extends TestCase
             ->assertJsonPath('saved_to_history', true)
             ->assertDontSee('test-provider-secret');
 
+        $savedRun = $owner->promptProjects()->latest('id')->firstOrFail();
+        $this->assertSame("## PROJECT OVERVIEW\nA short story.\n\n### COPY CLIP 1 PROMPT\n```text\nA stable opening shot.\n```", $savedRun->original_content);
+        $this->assertSame([], $savedRun->repair_history);
+
         Http::assertSent(function (ClientRequest $request): bool {
             $body = $request->data();
             $systemInstruction = data_get($body, 'systemInstruction.parts.0.text', '');

@@ -35,8 +35,10 @@ async function receivePrompt(message, sender) {
     }
 
     const { [ACTIVE_PROMPT_KEY]: previousPrompt = null } = await chrome.storage.local.get(ACTIVE_PROMPT_KEY);
+    const savedRunId = Number(message.savedRunId);
     const prompt = {
         id: crypto.randomUUID(),
+        repairRunId: Number.isSafeInteger(savedRunId) && savedRunId > 0 ? savedRunId : null,
         title: typeof message.title === 'string' && message.title.trim()
             ? message.title.trim().slice(0, 140)
             : 'VeoPrompter prompt',

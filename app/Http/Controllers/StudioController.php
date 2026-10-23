@@ -6,6 +6,7 @@ use App\Models\AiSetting;
 use App\Models\StudioProject;
 use App\Services\PromptGenerationException;
 use App\Services\PromptGenerationService;
+use App\Services\PromptRepairService;
 use App\Support\ProjectSettings;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -111,6 +112,8 @@ class StudioController extends Controller
                 'mode' => $validated['mode'],
                 'brief' => $brief,
                 'content' => $content,
+                'original_content' => $content,
+                'repair_history' => [],
                 'quality_review' => $qualityReview,
                 'provider' => $settings->provider,
                 'model' => $settings->model,
@@ -126,6 +129,10 @@ class StudioController extends Controller
         return response()->json([
             'content' => $content,
             'quality_review' => $qualityReview,
+            'has_supported_issues' => PromptRepairService::hasSupportedIssues($qualityReview),
+            'can_repair' => ($qualityReview['issues'] ?? []) !== [],
+            'manual_repair_attempts' => 0,
+            'max_repair_attempts' => PromptRepairService::MAX_MANUAL_ATTEMPTS,
             'mode' => $validated['mode'],
             'saved_to_history' => $run !== null,
             'history_error' => $historyError,
@@ -133,6 +140,8 @@ class StudioController extends Controller
                 'id' => $run->id,
                 'title' => $run->title,
                 'url' => route('history.show', $run, false),
+                'repair_url' => route('history.repair', $run, false),
+                'restore_url' => route('history.restore', $run, false),
             ] : null,
         ]);
     }

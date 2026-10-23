@@ -8,6 +8,9 @@
     const readyLabel = document.querySelector('[data-ready-label]');
     const output = document.querySelector('[data-output-content]');
     const qualityReviewPanel = document.querySelector('[data-quality-review]');
+    const repairButton = document.querySelector('[data-prompt-repair]');
+    const restoreButton = document.querySelector('[data-prompt-restore]');
+    const historyLink = document.querySelector('[data-prompt-history-link]');
     const sendToFlowButton = document.querySelector('[data-send-to-flow]');
     const flowTransferStatus = document.querySelector('[data-flow-transfer-status]');
     const submitButton = form.querySelector('[data-submit-button]');
@@ -22,6 +25,14 @@
     const learningObjectiveFields = form.querySelector('[data-learning-objective-fields]');
     let activeMode = 'story';
     let latestOutput = '';
+    let latestRepairUrl = '';
+    let latestRestoreUrl = '';
+    let latestHistoryUrl = '';
+    let latestRunId = null;
+    let latestCanRestoreOriginal = false;
+    let latestManualRepairAttempts = 0;
+    let maxManualRepairAttempts = 2;
+    let repairAllowedByServer = true;
 
     const updateLearningObjectiveFields = () => {
         if (!learningObjectiveFields) return;
@@ -315,6 +326,29 @@
             issuesList.append(item);
         });
 
+        if (repairButton) {
+            repairButton.hidden = !latestRepairUrl || issues.length === 0;
+            repairButton.dataset.repairUrl = latestRepairUrl;
+            repairButton.disabled = !repairAllowedByServer || latestManualRepairAttempts >= maxManualRepairAttempts;
+            repairButton.textContent = repairButton.disabled
+                ? (latestManualRepairAttempts >= maxManualRepairAttempts ? 'Repair limit reached' : 'No safe automatic fixes')
+                : 'Auto-Fix Issues';
+        }
+        if (restoreButton) {
+            restoreButton.hidden = !latestRestoreUrl || !latestCanRestoreOriginal;
+            restoreButton.dataset.restoreUrl = latestRestoreUrl;
+        }
+        if (historyLink) {
+            historyLink.hidden = !latestHistoryUrl;
+            historyLink.href = latestHistoryUrl;
+        }
+        const attemptCount = qualityReviewPanel.querySelector('[data-repair-attempt-count]');
+        if (attemptCount) {
+            attemptCount.textContent = latestRepairUrl
+                ? `Repair attempts: ${latestManualRepairAttempts}/${maxManualRepairAttempts}`
+                : '';
+        }
+
         qualityReviewPanel.querySelector('[data-quality-review-limitations]').textContent = Array.isArray(review.limitations)
             ? review.limitations.join(' ')
             : 'Text checks cannot establish factual truth or validate video that has not been rendered.';
@@ -354,6 +388,17 @@
         historyNotice.hidden = true;
         if (qualityReviewPanel) qualityReviewPanel.hidden = true;
         latestOutput = '';
+        latestRepairUrl = '';
+        latestRestoreUrl = '';
+        latestHistoryUrl = '';
+        latestRunId = null;
+        latestCanRestoreOriginal = false;
+        latestManualRepairAttempts = 0;
+        maxManualRepairAttempts = 2;
+        repairAllowedByServer = true;
+        repairButton?.removeAttribute('data-repair-url');
+        restoreButton?.removeAttribute('data-restore-url');
+        if (sendToFlowButton) sendToFlowButton.removeAttribute('data-prompt-run-id');
         if (flowTransferStatus) {
             flowTransferStatus.hidden = true;
             flowTransferStatus.textContent = '';
@@ -405,6 +450,17 @@
             document.querySelector('#results-heading').textContent = payload.mode === 'extend' ? 'The next shot is in frame.' : 'The video plan is in frame.';
             readyLabel.textContent = payload.mode === 'extend' ? 'EXTENSION PROMPT READY' : 'PROMPT KIT READY';
             renderHistoryNotice(payload);
+            latestRunId = payload.run?.id ?? null;
+            latestCanRestoreOriginal = payload.can_restore_original === true;
+            latestRepairUrl = payload.run?.repair_url || '';
+            latestRestoreUrl = payload.run?.restore_url || '';
+            latestHistoryUrl = payload.run?.url || '';
+            latestManualRepairAttempts = Number(payload.manual_repair_attempts) || 0;
+            maxManualRepairAttempts = Number(payload.max_repair_attempts) || 2;
+            repairAllowedByServer = payload.can_repair !== false;
+            if (sendToFlowButton && latestRunId !== null) {
+                sendToFlowButton.dataset.promptRunId = String(latestRunId);
+            }
             renderQualityReview(payload.quality_review);
             resultSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
         } catch {
@@ -416,6 +472,24 @@
             submitButton.removeAttribute('aria-busy');
             submitButton.removeAttribute('aria-label');
             submitLabel.textContent = activeMode === 'extend' ? 'Build extension prompt' : 'Build my prompt kit';
+        }
+    });
+
+    document.addEventListener('veoprompter:prompt-repaired', (event) => {
+        const payload = event.detail || {};
+        if (typeof payload.content !== 'string' || !resultSection || resultSection.hidden) return;
+
+        latestOutput = payload.content;
+        renderOutput(latestOutput);
+        latestManualRepairAttempts = Number(payload.manual_attempts) || latestManualRepairAttempts;
+        maxManualRepairAttempts = Number(payload.max_attempts) || maxManualRepairAttempts;
+        repairAllowedByServer = payload.can_repair !== false;
+        latestCanRestoreOriginal = payload.can_restore_original === true;
+        latestRepairUrl = payload.repair_url || latestRepairUrl;
+        latestRestoreUrl = payload.restore_url || latestRestoreUrl;
+        renderQualityReview(payload.quality_review);
+        if (sendToFlowButton && latestRunId !== null) {
+            sendToFlowButton.dataset.promptRunId = String(latestRunId);
         }
     });
 

@@ -72,12 +72,14 @@
         const title = typeof metadata.title === 'string' && metadata.title.trim()
             ? metadata.title.trim()
             : 'VeoPrompter prompt';
+        const savedRunId = Number(metadata.savedRunId);
         window.postMessage({
             type: 'VEOPROMPTER_FLOW_EXTENSION_STORE',
             requestId,
             prompt: content,
             title,
             mode: metadata.mode === 'extend' ? 'extend' : 'story',
+            savedRunId: Number.isSafeInteger(savedRunId) && savedRunId > 0 ? savedRunId : null,
         }, window.location.origin);
     };
 
@@ -100,6 +102,7 @@
         transferPrompt(button, prompt, {
             title: button.dataset.promptTitle || 'Saved VeoPrompter prompt',
             mode: button.dataset.promptMode || 'story',
+            savedRunId: button.dataset.promptRunId || null,
         });
     });
 })();
