@@ -1,0 +1,147 @@
+Fix the Auto-Fix/QA system generically so the same rules work for every project and every prompt format.
+
+Please inspect the existing Auto-Fix and final QA implementation first. Preserve the repairs that are already working. Make only focused changes.
+
+1. Treat final timing as one synchronized system
+
+After Auto-Fix changes any clip duration, the final duration must be synchronized everywhere that duration is represented, including:
+
+Project overview total runtime
+
+Project overview per-clip durations
+
+Clip plan / shot list durations
+
+Copy-ready CLIP DURATION
+
+Any other structured duration metadata used by QA or the UI
+
+The final total runtime must equal the sum of the final clip durations.
+
+Do not update only the copy-ready clips while leaving overview/clip-plan values stale.
+
+QA must detect any mismatch between these representations.
+
+If a repair changes durations, either:
+
+synchronize every representation consistently, or
+
+leave the duration unresolved rather than producing an internally contradictory prompt.
+
+2. Respect the project's actual duration constraints
+
+Auto-Fix must never silently create durations that contradict a project's own declared rules.
+
+For example, if the prompt says clips must be 3–7 seconds, Auto-Fix must not create an 8–10 second clip without also making a valid, intentional change to the governing constraint.
+
+More generally:
+
+Identify the authoritative duration range for the project.
+
+Keep repaired durations inside that range.
+
+If dialogue cannot fit inside the allowed range without changing dialogue, do not silently violate the range.
+
+Preserve dialogue unless an existing product rule explicitly permits rewriting it.
+
+If no safe solution exists, report the issue as unresolved.
+
+The QA engine should also detect when final clip durations violate the project's declared duration constraints.
+
+3. Validate the FINAL repaired prompt
+
+After every repair attempt, run the full QA against the actual final prompt.
+
+Do not consider an issue "fixed" merely because the repair operation executed successfully.
+
+An issue is only Fixed if the post-repair QA no longer detects that issue.
+
+If QA still detects it, it must remain under Unresolved / Needs Review.
+
+The report must never classify an issue as both fixed and still present in the final QA.
+
+4. Keep QA claims evidence-based
+
+Final audit language must match the evidence.
+
+For example:
+
+If a Type B handoff is compatible but not literally identical, say it is compatible.
+
+Do not claim "exact state match" or "exact state copy" unless the relevant structured and written states actually match according to the auditor's exact-match rules.
+
+Do not claim every spoken line respects pacing unless the final QA confirms it.
+
+Do not claim synchronized timing unless all timing representations actually agree.
+
+In general, the final audit should derive its claims from the final QA results rather than making broader claims.
+
+5. Make the repair report truthful
+
+The Auto-Fix report should clearly separate:
+
+Fixed — issue was detected before repair and is no longer detected after repair.
+
+Unresolved — issue remains after the repair attempt.
+
+New Issues — issues introduced by the repair.
+
+Informational / Review — things that are not failures but may deserve human attention.
+
+Do not place unresolved issues in the Fixed section just because Auto-Fix attempted to address them.
+
+Also remove contradictory UI wording such as a "No safe automatic fixes" heading when safe repairs were actually applied. The status should describe what actually happened.
+
+6. Preserve existing safety rules
+
+Keep the existing architecture and safety behavior:
+
+Maximum 2 repair attempts.
+
+Full QA after each repair.
+
+Deterministic repairs for clear/safe issues.
+
+Bounded AI only for genuinely ambiguous/contextual decisions.
+
+Do not rewrite dialogue unless explicitly allowed by an existing rule.
+
+Do not make unrelated prompt improvements or refactors.
+
+Preserve the original prompt/history.
+
+Never silently invent missing state.
+
+Leave unsafe or ambiguous issues unresolved for manual review.
+
+7. Add generic regression tests
+
+Add tests that prove these rules work across arbitrary prompts, not just the current water-bottle example.
+
+At minimum test:
+
+Final clip duration differs from overview duration → detected.
+
+Overview total differs from sum of final clip durations → detected.
+
+Clip plan duration differs from copy-ready duration → detected.
+
+Auto-Fix changes a duration → every duration representation becomes synchronized.
+
+Repaired duration violates the project's declared duration range → detected/prevented.
+
+Dialogue cannot fit inside the allowed duration → no silent constraint violation.
+
+An issue still present after repair is reported as unresolved, not fixed.
+
+A truly fixed issue is removed from unresolved QA.
+
+Type B compatible handoffs are not falsely reported as exact matches.
+
+Final audit wording is generated from actual QA evidence.
+
+A repair introduces a new inconsistency → reported as a new issue.
+
+A successful repair produces a completely internally consistent saved prompt.
+
+Please inspect the existing implementation and tests before changing anything. Do not rebuild Auto-Fix from scratch. The goal is to make the current system generally reliable across all generated projects, not to make the current test prompt pass.
