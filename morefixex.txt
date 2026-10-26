@@ -1,0 +1,176 @@
+# Mission: Achieve 10/10 Auto-Fix Reliability
+
+## Objective
+
+Upgrade the Auto-Fix and QA architecture so the application can reliably detect, repair, and verify inconsistencies in newly generated video prompt projects.
+
+Do not patch only the glass-bottle manufacturing example. Fix the underlying causes and prove the improvements using repeatable regression tests.
+
+## 1. Investigate the Existing Failures First
+
+Use the actual source code, QA output, repair logic, parsing rules, and regression tests to determine why the latest six-clip test failed.
+
+The observed failures were:
+
+- Auto-Fix exhausted both attempts without making a useful safe repair.
+- Twelve speech-timing warnings remained unresolved.
+- Required ending pauses were missing.
+- The overview explicitly stated a total runtime of 38 seconds, and the clip durations summed to 38 seconds, yet QA reported the overview runtime as unparseable.
+- The Clip 5-to-Clip 6 handoff remained inconsistent.
+- The final report still made continuity claims that contradicted unresolved QA findings.
+
+Trace each failure to its actual root cause before changing the implementation.
+
+## 2. Establish a Single Source of Truth
+
+Create or strengthen a canonical project representation for:
+
+- Clip count and clip order.
+- Duration of each clip.
+- Total runtime.
+- Global minimum and maximum duration constraints.
+- Dialogue text and estimated spoken duration.
+- Required speech start and end times.
+- Required ending pauses.
+- Clip opening and ending states.
+- Handoff type and continuity requirements.
+- Character, object, location, and prop identity.
+- Project-level constraints and saved settings.
+
+The overview, clip plan, copy-ready prompts, QA checks, and final report must be derived from or validated against this representation.
+
+Do not allow independent text sections to silently disagree.
+
+## 3. Fix Runtime Parsing Properly
+
+Investigate why a clearly written 38-second runtime was rejected.
+
+Support the actual runtime formats the application intends to accept. Distinguish a genuinely missing or ambiguous value from a valid value that the parser fails to recognize.
+
+Normalize valid values into a canonical numeric representation before checking totals.
+
+Verify that:
+
+- Every clip duration is parsed.
+- The total equals the sum of clip durations.
+- All global duration limits are respected.
+- Overview, clip plan, and copy-ready prompts agree.
+- Invalid or contradictory values fail with specific diagnostic messages.
+
+Do not mark a runtime unresolved merely because one text parser cannot read an otherwise valid representation.
+
+## 4. Make Speech Timing Physically Feasible
+
+Estimate dialogue duration using configurable, documented speech-rate assumptions and any required pauses.
+
+Validate that dialogue fits inside the available clip duration after accounting for:
+
+- Opening visual beats.
+- Dialogue start and end times.
+- Required breathing or reaction pauses.
+- The required ending pause.
+- Closing action and handoff requirements.
+
+Do not silently delete dialogue, change its meaning, or invent extra clip time.
+
+When dialogue does not fit, generate a safe repair plan. Prefer meaning-preserving compression, redistribution of content across clips where permitted, or a clearly reported unresolved issue when no safe repair exists.
+
+Never claim that a clip's speech timing is valid until the timing calculation passes.
+
+## 5. Repair Continuity Using Explicit Handoff Contracts
+
+For each adjacent clip pair, define the required ending state of the previous clip and the required opening state of the next clip.
+
+Validate the relevant character, object, prop, location, motion, and temporal state.
+
+For Type A, enforce direct continuation.
+
+For Type B, enforce a clear, physically plausible transition action that connects both states.
+
+For Type C, permit a narrative or temporal transition, but describe the before-state, transition, and after-state honestly. Do not falsely claim seamless continuity.
+
+Repair Clip 5-to-Clip 6 in the test case through the general handoff logic, not a hardcoded exception.
+
+## 6. Redesign the Repair Loop
+
+Each repair attempt must:
+
+1. Read structured QA findings and their evidence.
+2. Prioritize issues by severity and dependency.
+3. Generate the smallest safe set of changes.
+4. Apply changes to the canonical project representation.
+5. Regenerate all dependent output sections.
+6. Rerun the relevant validators.
+7. Compare the new findings against the previous findings.
+8. Keep only changes that improve correctness without introducing regressions.
+
+Do not waste an attempt repeating the same rejected repair.
+
+Use a bounded repair budget, but make each attempt meaningful. If an issue is blocked by missing information or conflicting constraints, identify the precise blocker instead of retrying blindly.
+
+## 7. Enforce Truthful QA Reports
+
+The final report must be generated from actual final validator results.
+
+Separate findings into:
+
+- Fixed and verified.
+- Still unresolved.
+- Newly introduced regressions.
+- Repair attempts rejected and why.
+- Informational notes.
+
+Every fixed issue must have evidence that its corresponding validator now passes.
+
+Never claim all handoffs match when even one required handoff fails. Never claim all timing is synchronized while timing warnings remain.
+
+Distinguish “the repair was attempted” from “the repair was verified.”
+
+## 8. Add Regression Tests
+
+Create automated regression tests for:
+
+- The exact six-clip, 38-second glass-bottle failure.
+- Valid runtime parsing across supported formats.
+- Incorrect runtime totals.
+- Speech that fits and speech that cannot fit.
+- Required ending pauses.
+- Type A, B, and C handoffs.
+- A final handoff mismatch.
+- Multiple dependent sections updated from one canonical value.
+- Repair attempts that make no progress.
+- Repairs that introduce regressions.
+- Contradictory QA claims.
+- Successful repair followed by a clean final QA run.
+
+Test both successful repairs and correctly reported irreparable cases.
+
+Use the project's available native test environment where possible. If native Laravel/PHPUnit tests cannot run, clearly label alternative checks as limited smoke tests rather than treating them as equivalent.
+
+## 9. Acceptance Criteria for 10/10
+
+Do not declare completion until:
+
+- The original runtime parsing failure is fixed.
+- The test case's speech timing and ending pauses are either repaired and verified or accurately reported as impossible under the constraints.
+- The final handoff is repaired or explicitly unresolved with evidence.
+- Every displayed total agrees with the canonical duration data.
+- No unresolved critical issue is reported as fixed.
+- The final QA report agrees with the validators.
+- Regression tests demonstrate the improvements.
+- Existing features continue to work.
+- The implementation, tests, limitations, and results are documented.
+
+## Deliverables
+
+Provide:
+
+1. Root cause for each original failure.
+2. Files and functions changed.
+3. Tests added and the exact commands executed.
+4. Before-and-after QA results.
+5. A table of each original issue and whether it was fixed, unresolved, or blocked.
+6. Any tests that could not run and why.
+7. Remaining risks.
+
+Do not report 10/10 just because the code changed or the tests pass superficially. The target is demonstrated reliability, not a better-looking report.
