@@ -1,0 +1,50 @@
+The Auto-Fix implementation is working well overall. Do NOT rebuild or redesign the repair system.
+
+I reviewed a repaired prompt and found that the actual repairs were useful:
+- speech timing was safely extended without rewriting dialogue
+- Clip 2 continuity metadata was reconciled
+- presentation-state metadata was reconciled
+- original dialogue/action/transition prose was preserved
+
+I want one focused follow-up improvement:
+
+1. Strengthen the FINAL QA validation after Auto-Fix.
+   - Validate that the clip durations listed in the project overview match the actual `CLIP DURATION` values in every copy-ready clip prompt.
+   - Validate that the total runtime equals the sum of all final clip durations.
+   - Validate consistency between structured `OPENING/ENDING CONTINUITY STATE` and the corresponding `EXACT OPENING FRAME` / `EXACT ENDING STATE` prose.
+   - Validate that each handoff's structured state and written opening state are compatible.
+   - Validate that the final continuity audit does not claim "exact state copies" when the saved prompt only has compatible/broadly matching states.
+
+2. If Auto-Fix changes a clip duration:
+   - update every relevant duration reference consistently, including overview durations and total runtime.
+   - Do not merely change the individual `CLIP DURATION`.
+
+3. If Auto-Fix reconciles continuity metadata:
+   - make sure the resulting structured state and the corresponding written opening/ending instructions do not contradict each other.
+   - Do not rewrite dialogue or visible-action text unless the existing repair rules explicitly allow it.
+   - Preserve the original prompt/history as currently implemented.
+
+4. Keep the current repair behavior:
+   - maximum 2 repair attempts
+   - full QA after every repair
+   - deterministic repair for safe cases
+   - bounded targeted AI only for ambiguous cases
+   - unresolved/unsafe issues remain unresolved rather than being guessed
+   - no unrelated refactors
+
+5. Add regression tests specifically for:
+   - duration change causing overview/clip/total mismatch
+   - structured continuity state conflicting with exact opening/ending prose
+   - compatible Type B transitions not being incorrectly labeled as exact copies
+   - successful repair still producing a fully internally consistent saved prompt
+
+Before changing anything, inspect the existing Auto-Fix and QA implementation and identify exactly where these validations belong. Then implement only the focused changes above.
+
+After implementation, run the relevant tests and report:
+- files changed
+- tests added/updated
+- tests passed
+- any tests unavailable and why
+- a concise example showing that a repaired prompt now has consistent durations and handoff states.
+
+Do not modify unrelated prompt-generation behavior.
