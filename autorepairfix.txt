@@ -1,4 +1,3 @@
-Fix the Auto-Fix/QA system generically so the same rules work for every project and every prompt format.
 
 Please inspect the existing Auto-Fix and final QA implementation first. Preserve the repairs that are already working. Make only focused changes.
 
