@@ -66,7 +66,7 @@ class PromptOutputAuditorTest extends TestCase
 
         $this->assertSame('needs_review', $review['status']);
         $this->assertContains('continuity_state_mismatch', array_column($review['issues'], 'code'));
-        $this->assertStringContainsString('does not exactly match', $this->issue($review, 'continuity_state_mismatch')['message']);
+        $this->assertStringContainsString('does not satisfy the preceding handoff contract', $this->issue($review, 'continuity_state_mismatch')['message']);
     }
 
     public function test_type_a_also_requires_matching_camera_lighting_and_audio_presentation(): void
@@ -100,7 +100,7 @@ class PromptOutputAuditorTest extends TestCase
         $presentation = 'camera=macro; lighting=daylight; audio=soft music';
         $clip = $this->clip(1, 'INITIAL CLIP — NO PREVIOUS HANDOFF', 'FINAL — NO NEXT HANDOFF', $state, $state, $presentation, $presentation);
         $clip = str_replace(
-            '- 0.0–2.0s | VISIBLE ACTION: pollen transfers to a bee | SPEAKER: Narrator | LINE: “The bee carries pollen.”',
+            '- 0.2–2.2s | VISIBLE ACTION: pollen transfers to a bee | SPEAKER: Narrator | LINE: “The bee carries pollen.”',
             '- 0.0–1.0s | VISIBLE ACTION: pollen transfers to a bee | SPEAKER: Narrator | LINE: “The tiny bee carries bright yellow pollen from this flower to another flower.”',
             $clip,
         );
@@ -221,6 +221,158 @@ class PromptOutputAuditorTest extends TestCase
         $this->assertContains('overview_clip_duration_missing', array_column($review['issues'], 'code'));
     }
 
+    public function test_type_b_compatible_state_requires_an_explicit_action_bridge(): void
+    {
+        $prior = 'object=seed tray on greenhouse bench; stage=seeds planted; environment=greenhouse; motion=stationary';
+        $next = 'object=seed tray on greenhouse bench; stage=seeds planted and ready for watering; environment=greenhouse; motion=stationary';
+        $content = $this->clip(1, 'INITIAL CLIP — NO PREVIOUS HANDOFF', 'TYPE B — NATURAL ACTION TRANSITION', $prior, $prior)
+            ."\n".$this->clip(2, 'TYPE B — NATURAL ACTION TRANSITION', 'FINAL — NO NEXT HANDOFF', $next, $next);
+
+        $review = $this->auditor->audit($content, $this->input(['clip_count' => 2]));
+        $codes = array_column($review['issues'], 'code');
+
+        $this->assertContains('type_b_transition_action_unverified', $codes);
+        $this->assertContains('continuity_state_mismatch', $codes);
+    }
+
+    public function test_type_b_requires_a_visible_bridge_even_when_structured_states_are_equal(): void
+    {
+        $state = 'cast=None; object=seed tray; stage=seeds planted; location=greenhouse bench; motion=stationary';
+        $content = $this->clip(1, 'INITIAL CLIP — NO PREVIOUS HANDOFF', 'TYPE B — NATURAL ACTION TRANSITION', $state, $state)
+            ."\n".$this->clip(2, 'TYPE B — NATURAL ACTION TRANSITION', 'FINAL — NO NEXT HANDOFF', $state, $state);
+
+        $review = $this->auditor->audit($content, $this->input(['clip_count' => 2]));
+
+        $this->assertContains('type_b_transition_action_unverified', array_column($review['issues'], 'code'));
+        $this->assertSame('unverified', $review['handoffs'][0]['overall_relation']);
+    }
+
+    public function test_type_c_transition_must_document_before_transition_and_after_states(): void
+    {
+        $before = 'cast=None; object=glass bottle G-01; material=clear glass; stage=hot shaped bottle; location=furnace exit; motion=on conveyor';
+        $after = 'cast=None; object=glass bottle G-01; material=clear glass; stage=cooled finished bottle; location=inspection table; motion=stationary';
+        $first = $this->clip(1, 'INITIAL CLIP — NO PREVIOUS HANDOFF', 'TYPE C — NARRATIVE / TEMPORAL TRANSITION', $before, $before);
+        $second = $this->clip(2, 'TYPE C — NARRATIVE / TEMPORAL TRANSITION', 'FINAL — NO NEXT HANDOFF', $before, $after);
+        $second = str_replace(
+            'VISIBLE CAUSE → ACTION → RESULT: A clear cause produces one visible action and result.',
+            'VISIBLE CAUSE → ACTION → RESULT: Before state: the hot glass bottle is at the furnace exit. A time-lapse shows it cooling as it travels through the annealing lehr. After state: the cooled bottle rests on the inspection table.',
+            $second,
+        );
+        $review = $this->auditor->audit($first."\n".$second, $this->input(['clip_count' => 2]));
+
+        $this->assertSame([], $review['issues']);
+        $this->assertSame('transition_documented', $review['handoffs'][0]['overall_relation']);
+        $this->assertFalse($review['handoffs'][0]['exact_copy']);
+    }
+
+    public function test_type_c_must_open_on_the_prior_ending_before_showing_its_transition(): void
+    {
+        $before = 'cast=None; object=red door; state=closed; location=hallway; motion=stationary';
+        $after = 'cast=None; object=red door; state=open; location=hallway; motion=stationary';
+        $first = $this->clip(1, 'INITIAL CLIP — NO PREVIOUS HANDOFF', 'TYPE C — NARRATIVE / TEMPORAL TRANSITION', $before, $before);
+        $second = $this->clip(2, 'TYPE C — NARRATIVE / TEMPORAL TRANSITION', 'FINAL — NO NEXT HANDOFF', $after, $after);
+        $second = str_replace(
+            'VISIBLE CAUSE → ACTION → RESULT: A clear cause produces one visible action and result.',
+            'VISIBLE CAUSE → ACTION → RESULT: Before state: the red door is closed in the hallway. A time-lapse shows the red door opening. After state: the red door is open in the hallway.',
+            $second,
+        );
+        $review = $this->auditor->audit($first."\n".$second, $this->input(['clip_count' => 2]));
+        $codes = array_column($review['issues'], 'code');
+
+        $this->assertContains('type_c_transition_undocumented', $codes);
+        $this->assertContains('continuity_state_mismatch', $codes);
+        $this->assertSame('mismatch', $review['handoffs'][0]['overall_relation']);
+    }
+
+    public function test_speech_timing_checks_lead_in_inter_line_pause_and_required_ending_pause(): void
+    {
+        $state = 'cast=None; object=turning gear; stage=rotating; environment=workshop';
+        $rows = [
+            '- 0.0–1.5s | VISIBLE ACTION: the gear begins to turn | SPEAKER: Narrator | LINE: “One two three.”',
+            '- 1.6–3.8s | VISIBLE ACTION: the gear slows | SPEAKER: Narrator | LINE: “It turns slowly.”',
+        ];
+        $clip = $this->clip(1, 'INITIAL CLIP — NO PREVIOUS HANDOFF', 'FINAL — NO NEXT HANDOFF', $state, $state);
+        $clip = str_replace(
+            '- 0.2–2.2s | VISIBLE ACTION: pollen transfers to a bee | SPEAKER: Narrator | LINE: “The bee carries pollen.”',
+            implode("\n", $rows),
+            $clip,
+        );
+
+        $review = $this->auditor->audit($clip, $this->input());
+        $codes = array_column($review['issues'], 'code');
+
+        $this->assertContains('speech_opening_visual_beat_missing', $codes);
+        $this->assertContains('speech_inter_line_pause_missing', $codes);
+        $this->assertContains('speech_leaves_no_visual_tail', $codes);
+    }
+
+    public function test_total_runtime_parser_normalizes_supported_seconds_and_clock_formats(): void
+    {
+        $formats = [
+            'Approximate total runtime: 38 seconds' => 38.0,
+            'Estimated overall running time: 0:38' => 38.0,
+            'Total video duration: 00:00:38' => 38.0,
+            'Project run time = 2:03' => 123.0,
+        ];
+
+        foreach ($formats as $label => $expectedSeconds) {
+            $content = "## PROJECT OVERVIEW\n".$label."\n\n"
+                .$this->clip(1, 'INITIAL CLIP — NO PREVIOUS HANDOFF', 'FINAL — NO NEXT HANDOFF', 'cast=None; object=glass bottle G-01; stage=annealed; environment=glassworks', 'cast=None; object=glass bottle G-01; stage=annealed; environment=glassworks');
+            $references = $this->auditor->overviewRuntimeReferences($content);
+
+            $this->assertCount(1, $references, $label);
+            $this->assertSame($expectedSeconds, $references[0]['seconds'], $label);
+        }
+    }
+
+    public function test_project_wide_runtime_constraints_are_separate_from_descriptive_total_runtime(): void
+    {
+        $content = "## PROJECT OVERVIEW\n- Approximate total runtime: 38 seconds\n- Total runtime must not exceed 40 seconds.\n\n"
+            .$this->clip(1, 'INITIAL CLIP — NO PREVIOUS HANDOFF', 'FINAL — NO NEXT HANDOFF', 'cast=None; object=glass bottle G-01; stage=annealed; environment=glassworks', 'cast=None; object=glass bottle G-01; stage=annealed; environment=glassworks');
+        $limits = $this->auditor->projectRuntimeLimits($content, $this->input([
+            'project_runtime_min_seconds' => 35,
+        ]));
+
+        $this->assertSame(40, $limits['maximum']);
+        $this->assertSame(35, $limits['minimum']);
+        $this->assertFalse($limits['conflict']);
+
+        $runningTimeLimits = $this->auditor->projectRuntimeLimits('Overall running time must not exceed 32 seconds.', []);
+        $this->assertSame(32, $runningTimeLimits['maximum']);
+
+        $savedRangeLimits = $this->auditor->projectRuntimeLimits('', ['project_runtime_range' => '27–41 seconds']);
+        $this->assertSame(27, $savedRangeLimits['minimum']);
+        $this->assertSame(41, $savedRangeLimits['maximum']);
+        $this->assertFalse($savedRangeLimits['conflict']);
+
+        $labelRangeLimits = $this->auditor->projectRuntimeLimits('Total project runtime: 28–42 seconds.', []);
+        $this->assertSame(28, $labelRangeLimits['minimum']);
+        $this->assertSame(42, $labelRangeLimits['maximum']);
+
+        $leadingMinimum = $this->auditor->projectRuntimeLimits('Minimum project runtime: 31 seconds.', []);
+        $this->assertSame(31, $leadingMinimum['minimum']);
+        $interposedMaximum = $this->auditor->projectRuntimeLimits('Project maximum runtime is 46 seconds.', []);
+        $this->assertSame(46, $interposedMaximum['maximum']);
+    }
+
+    public function test_individual_overview_clip_durations_are_not_mistaken_for_a_shared_duration_range(): void
+    {
+        $content = "## PROJECT OVERVIEW\n- Clip 1 — 5 seconds\n- Clip 2 — 6 seconds\n- Clip 3 — 7 seconds\n- Approximate total runtime: 18 seconds";
+
+        $limits = $this->auditor->durationLimits($content, $this->input());
+
+        $this->assertFalse($limits['conflict']);
+        $this->assertNull($limits['declared_minimum']);
+        $this->assertNull($limits['declared_maximum']);
+        $this->assertSame(1, $limits['minimum']);
+        $this->assertSame(10, $limits['maximum']);
+
+        $singleLineLimits = $this->auditor->durationLimits('Clip 1 — 5 seconds and Clip 2 — 6 seconds', $this->input());
+        $this->assertFalse($singleLineLimits['conflict']);
+        $this->assertNull($singleLineLimits['declared_minimum']);
+        $this->assertNull($singleLineLimits['declared_maximum']);
+    }
+
     public function test_compound_minute_and_second_durations_are_left_unparseable_for_human_review(): void
     {
         $state = 'cast=None; object=wooden bowl; stage=carved; environment=workshop';
@@ -245,7 +397,7 @@ class PromptOutputAuditorTest extends TestCase
         $state = 'cast=None; object=spinning wheel; stage=rotating; environment=workshop';
         $clip = $this->clip(1, 'INITIAL CLIP — NO PREVIOUS HANDOFF', 'FINAL — NO NEXT HANDOFF', $state, $state);
         $clip = str_replace(
-            '- 0.0–2.0s | VISIBLE ACTION: pollen transfers to a bee | SPEAKER: Narrator | LINE: “The bee carries pollen.”',
+            '- 0.2–2.2s | VISIBLE ACTION: pollen transfers to a bee | SPEAKER: Narrator | LINE: “The bee carries pollen.”',
             '- 0.0–1.0s | VISIBLE ACTION: the wheel spins | SPEAKER: Narrator | LINE: “One two three four five six seven eight nine ten eleven.”',
             $clip,
         );
@@ -262,10 +414,10 @@ class PromptOutputAuditorTest extends TestCase
     public function test_final_audit_timing_and_pacing_claims_are_allowed_when_all_text_checks_pass(): void
     {
         $state = 'cast=None; object=spinning wheel; stage=rotating; environment=workshop';
-        $speech = '- 0.0–3.2s | VISIBLE ACTION: the wheel spins steadily | SPEAKER: Narrator | LINE: “The wheel turns smoothly.”';
+        $speech = '- 0.2–3.2s | VISIBLE ACTION: the wheel spins steadily | SPEAKER: Narrator | LINE: “The wheel turns smoothly.”';
         $clip = $this->clip(1, 'INITIAL CLIP — NO PREVIOUS HANDOFF', 'FINAL — NO NEXT HANDOFF', $state, $state);
         $clip = str_replace(
-            '- 0.0–2.0s | VISIBLE ACTION: pollen transfers to a bee | SPEAKER: Narrator | LINE: “The bee carries pollen.”',
+            '- 0.2–2.2s | VISIBLE ACTION: pollen transfers to a bee | SPEAKER: Narrator | LINE: “The bee carries pollen.”',
             $speech,
             $clip,
         );
@@ -295,23 +447,30 @@ class PromptOutputAuditorTest extends TestCase
         )));
     }
 
-    public function test_compatible_type_b_state_is_reported_as_compatible_not_an_exact_copy(): void
+    public function test_type_b_with_exact_opening_and_visible_bridge_is_compatible_not_an_exact_prose_copy(): void
     {
         $prior = 'object=seed tray on greenhouse bench; stage=seeds planted; environment=greenhouse; motion=stationary';
         $next = 'environment=greenhouse; object=seed tray resting on the greenhouse bench; stage=seeds planted and ready for watering; motion=still';
         $first = $this->clip(1, 'INITIAL CLIP — NO PREVIOUS HANDOFF', 'TYPE B — NATURAL ACTION TRANSITION', $prior, $prior)
             ."\nEXACT ENDING STATE: The seed tray rests on the greenhouse bench, the seeds are planted, and the scene is still.";
-        $second = $this->clip(2, 'TYPE B — NATURAL ACTION TRANSITION', 'FINAL — NO NEXT HANDOFF', $next, $next)
+        $second = $this->clip(2, 'TYPE B — NATURAL ACTION TRANSITION', 'FINAL — NO NEXT HANDOFF', $prior, $next)
             ."\nEXACT OPENING FRAME: The seed tray rests on the greenhouse bench with planted seeds; the frame is still."
+            ."\nEXACT ENDING STATE: The planted seeds in the tray are ready for watering on the greenhouse bench."
             ."\n\n### FINAL CONTINUITY AUDIT\n- The Type B handoff is an exact state copy of the prior clip.";
+        $second = str_replace(
+            'VISIBLE CAUSE → ACTION → RESULT: A clear cause produces one visible action and result.',
+            'VISIBLE CAUSE → ACTION → RESULT: A hand lifts the seed tray from the bench and sets it down, leaving the planted seeds ready for watering.',
+            $second,
+        );
 
         $review = $this->auditor->audit($first."\n".$second, $this->input(['clip_count' => 2]));
 
-        $this->assertSame('compatible', $review['handoffs'][0]['continuity_relation']);
+        $this->assertSame('exact', $review['handoffs'][0]['continuity_relation']);
         $this->assertSame('compatible', $review['handoffs'][0]['overall_relation']);
         $this->assertFalse($review['handoffs'][0]['exact_copy']);
         $this->assertContains('continuity_audit_overclaim', array_column($review['issues'], 'code'));
         $this->assertNotContains('continuity_state_mismatch', array_column($review['issues'], 'code'));
+        $this->assertNotContains('type_b_transition_action_unverified', array_column($review['issues'], 'code'));
     }
 
     public function test_type_b_with_exact_structured_states_but_compatible_prose_is_not_a_verbatim_copy(): void
@@ -322,6 +481,11 @@ class PromptOutputAuditorTest extends TestCase
         $second = $this->clip(2, 'TYPE B — NATURAL ACTION TRANSITION', 'FINAL — NO NEXT HANDOFF', $state, $state)
             ."\nEXACT OPENING FRAME: The planted seeds remain in the seed tray on the greenhouse bench, motionless."
             ."\n\n### FINAL CONTINUITY AUDIT\n- The Type B handoff is an exact state copy of the prior clip.";
+        $second = str_replace(
+            'VISIBLE CAUSE → ACTION → RESULT: A clear cause produces one visible action and result.',
+            'VISIBLE CAUSE → ACTION → RESULT: A hand turns the seed tray slightly on the greenhouse bench, keeping the planted seeds in place.',
+            $second,
+        );
 
         $review = $this->auditor->audit($first."\n".$second, $this->input(['clip_count' => 2]));
 
@@ -367,7 +531,7 @@ class PromptOutputAuditorTest extends TestCase
             'OPENING PRESENTATION STATE: '.$openingPresentation,
             'ENDING PRESENTATION STATE: '.$endingPresentation,
             'SPEECH/VISUAL MAP:',
-            '- 0.0–2.0s | VISIBLE ACTION: pollen transfers to a bee | SPEAKER: Narrator | LINE: “The bee carries pollen.”',
+            '- 0.2–2.2s | VISIBLE ACTION: pollen transfers to a bee | SPEAKER: Narrator | LINE: “The bee carries pollen.”',
             'OUTGOING HANDOFF TYPE: '.$outgoing,
         ]);
     }

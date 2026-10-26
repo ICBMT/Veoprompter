@@ -444,14 +444,14 @@ class PromptStudioTest extends TestCase
         });
     }
 
-    public function test_narration_overrun_is_corrected_once_and_the_separate_quality_review_is_saved(): void
+    public function test_opening_visual_beat_and_narration_overrun_are_corrected_once_and_reaudited(): void
     {
         $state = 'cast=Bee (CHAR-01) x1; object=pollen grain P-01 on left hind leg; process=transfer in progress; environment=flower bed; motion=hovering';
         $presentation = 'camera=macro close-up, static; lighting=soft morning sun; audio=quiet garden ambience';
         $draft = "## PROJECT OVERVIEW\nOne clear pollination beat.\nClip 1: 4 seconds\nApproximate total runtime: 4 seconds\n\n### COPY CLIP 1 PROMPT\n```text\nTRANSITION TYPE: INITIAL CLIP — NO PREVIOUS HANDOFF\nVISIBLE CHARACTER CAST: Bee (CHAR-01) ×1\nCHARACTER IDENTITY LOCK: Canonical Bee (CHAR-01), gold body with exact blue wing markings; same individual throughout this clip.\nCLIP DURATION: 4 seconds\nPRIMARY IDEA: Pollen transfers to the bee.\nVISUAL REPRESENTATION: LITERAL SCENE\nVISIBLE CAUSE → ACTION → RESULT: The bee brushes a pollen-bearing anther and pollen sticks to its hind leg.\nOPENING CONTINUITY STATE: {$state}\nENDING CONTINUITY STATE: {$state}\nOPENING PRESENTATION STATE: {$presentation}\nENDING PRESENTATION STATE: {$presentation}\nSPEECH/VISUAL MAP:\n- 0.0–1.0s | VISIBLE ACTION: pollen visibly transfers to the bee’s hind leg | SPEAKER: Narrator | LINE: “The tiny bee carries bright yellow pollen from this flower to another flower.”\nOUTGOING HANDOFF TYPE: FINAL — NO NEXT HANDOFF\n```";
         $corrected = str_replace(
             '- 0.0–1.0s | VISIBLE ACTION: pollen visibly transfers to the bee’s hind leg | SPEAKER: Narrator | LINE: “The tiny bee carries bright yellow pollen from this flower to another flower.”',
-            '- 0.0–1.8s | VISIBLE ACTION: pollen visibly transfers to the bee’s hind leg | SPEAKER: Narrator | LINE: “Bee carries pollen.”',
+            '- 0.2–1.8s | VISIBLE ACTION: pollen visibly transfers to the bee’s hind leg | SPEAKER: Narrator | LINE: “Bee carries pollen.”',
             $draft,
         );
         Http::fake([
@@ -476,10 +476,15 @@ class PromptStudioTest extends TestCase
             ->assertJsonPath('content', $corrected)
             ->assertJsonPath('saved_to_history', true);
 
+        $this->assertSame([], $response->json('quality_review.issues'));
         Http::assertSentCount(2);
         Http::assertSent(function (ClientRequest $request): bool {
-            return str_contains(data_get($request->data(), 'contents.0.parts.0.text', ''), 'AUTOMATIC QUALITY-CONTROL CORRECTION')
-                && str_contains(data_get($request->data(), 'contents.0.parts.0.text', ''), 'Shorten it or allocate more AI-selected time');
+            $correctionBrief = data_get($request->data(), 'contents.0.parts.0.text', '');
+
+            return str_contains($correctionBrief, 'AUTOMATIC QUALITY-CONTROL CORRECTION')
+                && str_contains($correctionBrief, 'Shorten it or allocate more AI-selected time')
+                && str_contains($correctionBrief, 'Clip 1 starts speech at 0 seconds; reserve at least 0.2 seconds for the opening visual beat.')
+                && str_contains($correctionBrief, 'For an opening-beat issue, start the first speech row no earlier than the stated minimum');
         });
 
         $run = $owner->promptProjects()->firstOrFail();

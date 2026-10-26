@@ -52,17 +52,17 @@
             rejected_new_issues: 'A candidate was rejected because it added QA findings',
         };
         addText(reportPanel, 'h3', `Auto-Fix report · ${labels[report.outcome] || 'Repair check complete'}`);
-        renderIssueGroup(reportPanel, 'Fixed', report.fixed);
-        renderIssueGroup(reportPanel, 'Unresolved / Needs Review', report.unresolved);
-        renderIssueGroup(reportPanel, 'New Issues in the saved prompt', report.new_issues);
+        renderIssueGroup(reportPanel, 'Fixed and verified', report.fixed);
+        renderIssueGroup(reportPanel, 'Unresolved', report.unresolved);
+        renderIssueGroup(reportPanel, 'New regressions in the saved prompt', report.new_issues);
         if (Array.isArray(report.rejected_candidate_issues) && report.rejected_candidate_issues.length) {
-            renderIssueGroup(reportPanel, 'New findings in a rejected candidate (not saved)', report.rejected_candidate_issues);
+            renderIssueGroup(reportPanel, 'Rejected attempts (candidate not saved)', report.rejected_candidate_issues);
         }
         const informational = Array.isArray(report.informational)
             ? report.informational
             : (Array.isArray(report.notes) ? report.notes : []);
         if (informational.length) {
-            addText(reportPanel, 'h4', 'Informational / Review');
+            addText(reportPanel, 'h4', 'Informational');
             const notes = document.createElement('ul');
             informational.forEach((note) => addText(notes, 'li', String(note)));
             reportPanel.append(notes);

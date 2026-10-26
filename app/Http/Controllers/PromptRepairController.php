@@ -74,13 +74,27 @@ class PromptRepairController extends Controller
             ]);
         }
 
-        $reservation = DB::transaction(function () use ($request, $project): ?array {
+        $repairSignature = PromptRepairService::repairSignature($auditedContent, $brief, $currentReview);
+        $reservation = DB::transaction(function () use ($request, $project, $auditedContent, $brief, $currentReview, $repairSignature): array {
             $locked = PromptProject::query()->whereKey($project->getKey())->lockForUpdate()->firstOrFail();
             abort_unless((int) $locked->user_id === (int) $request->user()->id, 404);
 
+            $lockedBrief = is_array($locked->brief) ? $locked->brief : [];
+            if ($locked->content !== $auditedContent || $lockedBrief !== $brief) {
+                return ['stale' => true];
+            }
+
             $history = is_array($locked->repair_history) ? $locked->repair_history : [];
             if (PromptRepairService::manualAttempts($history) >= PromptRepairService::MAX_MANUAL_ATTEMPTS) {
-                return null;
+                return ['limit_reached' => true];
+            }
+            if (PromptRepairService::hasNonRetryableNoProgress($history, $repairSignature)) {
+                return [
+                    'blocked' => true,
+                    'content' => (string) $locked->content,
+                    'brief' => $lockedBrief,
+                    'history' => $history,
+                ];
             }
 
             $attemptId = (string) Str::uuid();
@@ -89,6 +103,7 @@ class PromptRepairController extends Controller
                 'action' => 'repair',
                 'status' => 'in_progress',
                 'started_at' => now()->toIso8601String(),
+                'repair_signature' => $repairSignature,
             ];
             $locked->repair_history = $history;
             $locked->save();
@@ -96,11 +111,60 @@ class PromptRepairController extends Controller
             return [
                 'attempt_id' => $attemptId,
                 'content' => (string) $locked->content,
-                'brief' => is_array($locked->brief) ? $locked->brief : [],
+                'brief' => $lockedBrief,
+                'repair_signature' => $repairSignature,
             ];
         });
 
-        if ($reservation === null) {
+        if (($reservation['stale'] ?? false) === true) {
+            return response()->json([
+                'message' => 'The saved prompt or project brief changed while QA was running. Reload it before trying again.',
+            ], 409);
+        }
+        if (($reservation['blocked'] ?? false) === true) {
+            $history = $reservation['history'];
+            $previousReport = [];
+            foreach (array_reverse($history) as $entry) {
+                if (is_array($entry) && ($entry['action'] ?? null) === 'repair'
+                    && ($entry['repair_signature'] ?? null) === $repairSignature
+                    && is_array($entry['report'] ?? null)) {
+                    $previousReport = $entry['report'];
+                    break;
+                }
+            }
+            $manualAttempts = PromptRepairService::manualAttempts($history);
+            $original = (string) ($project->original_content ?? $project->content);
+            $informational = ['The same saved prompt and QA findings were already tried without verified progress. No attempt was consumed; change the relevant prompt/constraints or resolve the reported blocker before trying again.'];
+            if (is_array($previousReport['informational'] ?? null)) {
+                $informational = [...$previousReport['informational'], ...$informational];
+            }
+
+            return response()->json([
+                'content' => $reservation['content'],
+                'original_content' => $project->original_content,
+                'quality_review' => $currentReview,
+                'repair_report' => [
+                    'outcome' => 'no_safe_changes',
+                    'attempted' => false,
+                    'retryable' => false,
+                    'applied' => false,
+                    'fixed' => [],
+                    'unresolved' => $currentReview['issues'] ?? [],
+                    'new_issues' => [],
+                    'rejected_candidate_issues' => $previousReport['rejected_candidate_issues'] ?? [],
+                    'informational' => array_values(array_unique($informational)),
+                    'notes' => array_values(array_unique($informational)),
+                ],
+                'manual_attempts' => $manualAttempts,
+                'max_attempts' => PromptRepairService::MAX_MANUAL_ATTEMPTS,
+                'has_supported_issues' => true,
+                'can_repair' => false,
+                'can_restore_original' => $reservation['content'] !== $original,
+                'repair_url' => route('history.repair', $project, false),
+                'restore_url' => route('history.restore', $project, false),
+            ]);
+        }
+        if (($reservation['limit_reached'] ?? false) === true) {
             return response()->json([
                 'message' => 'The two automatic repair attempts for this saved prompt have been used. Review the remaining findings manually or restore the original prompt.',
                 'manual_attempts' => PromptRepairService::MAX_MANUAL_ATTEMPTS,
@@ -129,7 +193,8 @@ class PromptRepairController extends Controller
             abort_unless((int) $locked->user_id === (int) $request->user()->id, 404);
 
             $history = is_array($locked->repair_history) ? $locked->repair_history : [];
-            if ($locked->content !== $reservation['content']) {
+            if ($locked->content !== $reservation['content']
+                || (is_array($locked->brief) ? $locked->brief : []) !== $reservation['brief']) {
                 foreach ($history as $index => $entry) {
                     if (is_array($entry) && ($entry['id'] ?? null) === $reservation['attempt_id']) {
                         $history[$index] = [...$entry, 'status' => 'stale', 'completed_at' => now()->toIso8601String()];
@@ -185,6 +250,10 @@ class PromptRepairController extends Controller
         $history = is_array($fresh->repair_history) ? $fresh->repair_history : [];
         $manualAttempts = PromptRepairService::manualAttempts($history);
         $original = (string) ($fresh->original_content ?? $fresh->content);
+        $freshReview = is_array($fresh->quality_review) ? $fresh->quality_review : [];
+        $freshBrief = is_array($fresh->brief) ? $fresh->brief : [];
+        $freshSignature = PromptRepairService::repairSignature((string) $fresh->content, $freshBrief, $freshReview);
+        $sameNoProgressRepairBlocked = PromptRepairService::hasNonRetryableNoProgress($history, $freshSignature);
 
         return response()->json([
             'content' => $fresh->content,
@@ -193,9 +262,10 @@ class PromptRepairController extends Controller
             'repair_report' => $result['repair_report'],
             'manual_attempts' => $manualAttempts,
             'max_attempts' => PromptRepairService::MAX_MANUAL_ATTEMPTS,
-            'has_supported_issues' => PromptRepairService::hasSupportedIssues($fresh->quality_review ?? []),
+            'has_supported_issues' => PromptRepairService::hasSupportedIssues($freshReview),
             'can_repair' => $manualAttempts < PromptRepairService::MAX_MANUAL_ATTEMPTS
-                && PromptRepairService::hasSupportedIssues($fresh->quality_review ?? []),
+                && PromptRepairService::hasSupportedIssues($freshReview)
+                && ! $sameNoProgressRepairBlocked,
             'can_restore_original' => $fresh->content !== $original,
             'repair_url' => route('history.repair', $fresh, false),
             'restore_url' => route('history.restore', $fresh, false),

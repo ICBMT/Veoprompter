@@ -17,7 +17,7 @@ VeoPrompter is a Laravel 13 prompt studio for creating detailed, continuity-firs
 - Keeps provider configuration in an administrator-only Control room. Regular users cannot add or change AI providers.
 - Stores prompt-generation and dedicated Google TTS credentials encrypted with Laravel's `APP_KEY`; no provider key is returned to the browser.
 
-Generated prompts improve the odds of consistency but cannot guarantee that a video model will reproduce every detail exactly. Use reference images and final-frame continuation in Flow where available.
+Generated prompts improve the odds of consistency but cannot guarantee that a video model will reproduce every detail exactly. Use reference images and final-frame continuation in Flow where available. See [`docs/auto-fix-reliability.md`](docs/auto-fix-reliability.md) for the canonical QA/Auto-Fix contract, synthetic regression results, validation commands, and remaining limitations.
 
 ## Chrome extension for Google Flow
 

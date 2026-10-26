@@ -45,7 +45,8 @@ class PromptOutputAuditor
     public function audit(string $content, array $input): array
     {
         $isExtension = ($input['mode'] ?? 'story') === 'extend';
-        $clips = $this->extractClips($content, $input);
+        $plan = $this->canonicalProjectPlan($content, $input);
+        $clips = $plan->clips;
 
         if ($clips === []) {
             $issues = [[
@@ -65,7 +66,7 @@ class PromptOutputAuditor
         $details = [];
         $handoffs = [];
         $spokenAudioEnabled = $this->spokenAudioEnabled($input);
-        $durationLimits = $this->durationLimits($content, $input);
+        $durationLimits = $plan->durationLimits;
         if ($durationLimits['conflict']) {
             $this->addIssue(
                 $issues,
@@ -162,16 +163,67 @@ class PromptOutputAuditor
                     $endingState = $details[$index]['ending_state'];
                     $openingState = $next['opening_state'];
                     $stateRelation = $this->compareStates($endingState, $openingState);
-                    if ($this->normalizeState($endingState) !== ''
+                    $transitionAction = (string) ($clips[$index + 1]['visible_cause_action_result'] ?? '');
+                    $nextEndingState = $details[$index + 1]['ending_state'];
+                    $typeBPreviousBridgeDocumented = $stateRelation === 'exact';
+                    $typeBInternalBridgeDocumented = $this->transitionActionConnectsStates($openingState, $nextEndingState, $transitionAction, false);
+                    $typeBBridgeDocumented = $outgoing === 'B'
+                        && $typeBPreviousBridgeDocumented
+                        && $typeBInternalBridgeDocumented;
+                    $typeCExternalTransitionDocumented = $stateRelation === 'exact';
+                    $typeCInternalTransitionDocumented = $this->transitionActionConnectsStates($openingState, $nextEndingState, $transitionAction, true);
+                    $typeCTransitionDocumented = $outgoing === 'C'
+                        && $typeCExternalTransitionDocumented
+                        && $typeCInternalTransitionDocumented;
+
+                    if ($outgoing === 'B' && ! $typeBBridgeDocumented) {
+                        $this->addIssue(
+                            $issues,
+                            'type_b_transition_action_unverified',
+                            'continuity',
+                            $nextClipNumber,
+                            'Clip '.$nextClipNumber.' Type B must open on the exact prior ending state and show a visible action bridge from its opening to its ending state; the available cause/action/result evidence does not establish both. Text QA cannot certify physical realism.',
+                            false,
+                        );
+                        if ($stateRelation !== 'exact') {
+                            $this->addIssue(
+                                $issues,
+                                'continuity_state_mismatch',
+                                'continuity',
+                                $nextClipNumber,
+                                'Clip '.$nextClipNumber.' Type B opening state is not a verified continuation of Clip '.$clipNumber.'; no safe state bridge can be assumed.',
+                            );
+                        }
+                    } elseif ($outgoing === 'C' && ! $typeCTransitionDocumented) {
+                        $this->addIssue(
+                            $issues,
+                            'type_c_transition_undocumented',
+                            'continuity',
+                            $nextClipNumber,
+                            'Clip '.$nextClipNumber.' uses Type C, but its opening does not match the prior ending and/or its visible cause/action/result does not explicitly establish the before-state, temporal/narrative transition, and after-state.',
+                            false,
+                        );
+                        if ($stateRelation !== 'exact') {
+                            $this->addIssue(
+                                $issues,
+                                'continuity_state_mismatch',
+                                'continuity',
+                                $nextClipNumber,
+                                'Clip '.$nextClipNumber.' Type C changes the adjacent opening state without a documented narrative/temporal transition; this handoff remains unverified.',
+                            );
+                        }
+                    } elseif ($this->normalizeState($endingState) !== ''
                         && $this->normalizeState($openingState) !== ''
                         && $stateRelation !== 'exact'
+                        && ! $typeBBridgeDocumented
+                        && ! $typeCTransitionDocumented
                         && ! ($outgoing === 'B' && $stateRelation === 'compatible')) {
                         $this->addIssue(
                             $issues,
                             'continuity_state_mismatch',
                             'continuity',
                             $nextClipNumber,
-                            'Clip '.$nextClipNumber.' opening scene state does not exactly match Clip '.$clipNumber.' ending state. Review identity, objects/materials, process stage, environment, position, condition, and motion; show any change inside a Type B/C clip.',
+                            'Clip '.$nextClipNumber.' opening scene state does not satisfy the preceding handoff contract. Review identity, objects/materials, process stage, environment, position, condition, and motion; show any permitted Type B/C change inside the clip.',
                         );
                     }
 
@@ -220,18 +272,28 @@ class PromptOutputAuditor
                         );
                     }
 
-                    $overallRelation = $stateRelation;
-                    if ($stateRelation === 'mismatch' || $writtenOpeningRelation === 'mismatch' || $writtenHandoffRelation === 'mismatch') {
-                        $overallRelation = 'mismatch';
-                    } elseif ($stateRelation === 'compatible'
-                        || $writtenOpeningRelation === 'compatible'
-                        || $writtenHandoffRelation === 'compatible') {
-                        $overallRelation = 'compatible';
-                    } elseif ($stateRelation === 'exact'
-                        && (($next['exact_opening_frame'] !== null && $writtenOpeningRelation === 'unverified')
-                            || ($details[$index]['exact_ending_state'] !== null
-                                && $next['exact_opening_frame'] !== null
-                                && $writtenHandoffRelation === 'unverified'))) {
+                    $overallRelation = $typeCTransitionDocumented
+                        ? (in_array('mismatch', [$writtenOpeningRelation, $writtenHandoffRelation], true) ? 'mismatch' : 'transition_documented')
+                        : ($outgoing === 'B' && ! $typeBBridgeDocumented ? 'unverified' : $stateRelation);
+                    if (! $typeCTransitionDocumented) {
+                        if ($stateRelation === 'mismatch' || $writtenOpeningRelation === 'mismatch' || $writtenHandoffRelation === 'mismatch') {
+                            $overallRelation = 'mismatch';
+                        } elseif ($stateRelation === 'compatible'
+                            || $writtenOpeningRelation === 'compatible'
+                            || $writtenHandoffRelation === 'compatible') {
+                            $overallRelation = 'compatible';
+                        } elseif ($stateRelation === 'exact'
+                            && (($next['exact_opening_frame'] !== null && $writtenOpeningRelation === 'unverified')
+                                || ($details[$index]['exact_ending_state'] !== null
+                                    && $next['exact_opening_frame'] !== null
+                                    && $writtenHandoffRelation === 'unverified'))) {
+                            $overallRelation = 'unverified';
+                        }
+                    }
+                    if ($outgoing === 'B' && ! $typeBBridgeDocumented && $overallRelation !== 'mismatch') {
+                        $overallRelation = 'unverified';
+                    }
+                    if ($outgoing === 'C' && ! $typeCTransitionDocumented && $overallRelation !== 'mismatch') {
                         $overallRelation = 'unverified';
                     }
 
@@ -270,9 +332,10 @@ class PromptOutputAuditor
                 }
             }
 
-            $this->auditProjectOverview($content, $clips, $details, $issues);
-            $this->auditClipPlanDurations($content, $clips, $details, $issues);
-            $this->auditFinalContinuityClaims($content, $handoffs, $clips, $input, $issues);
+            $this->auditProjectOverview($content, $clips, $details, $issues, $plan);
+            $this->auditClipPlanDurations($content, $clips, $details, $issues, $plan);
+            $this->auditProjectRuntimeConstraints($plan, $issues);
+            $this->auditFinalContinuityClaims($content, $handoffs, $clips, $input, $issues, $plan);
         }
 
         return $this->buildReview($issues, $input, true, $isExtension, $handoffs);
@@ -289,6 +352,57 @@ class PromptOutputAuditor
         return ($input['mode'] ?? 'story') === 'extend'
             ? $this->extractExtensionPrompt($content)
             : $this->extractStoryClips($content);
+    }
+
+    /**
+     * Parse the single canonical post-generation plan shared by QA and Auto-Fix.
+     * Structured copy-ready clip blocks are authoritative; overview and clip-plan
+     * values are captured as dependent references for validation/synchronization.
+     */
+    public function canonicalProjectPlan(string $content, array $input): PromptProjectPlan
+    {
+        $clips = $this->extractClips($content, $input);
+        foreach ($clips as &$clip) {
+            $text = (string) ($clip['text'] ?? '');
+            $clip['duration_seconds'] = $this->durationSeconds($text);
+            $clip['incoming_type'] = ($input['mode'] ?? 'story') === 'extend' ? null : $this->incomingType($text);
+            $clip['outgoing_type'] = ($input['mode'] ?? 'story') === 'extend' ? null : $this->outgoingType($text);
+            $clip['visible_character_cast'] = $this->fieldValue($text, 'VISIBLE CHARACTER CAST');
+            $clip['character_identity_lock'] = $this->fieldValue($text, 'CHARACTER IDENTITY LOCK');
+            $clip['opening_continuity_state'] = $this->fieldValue($text, 'OPENING CONTINUITY STATE');
+            $clip['ending_continuity_state'] = $this->fieldValue($text, 'ENDING CONTINUITY STATE');
+            $clip['opening_presentation_state'] = $this->fieldValue($text, 'OPENING PRESENTATION STATE');
+            $clip['ending_presentation_state'] = $this->fieldValue($text, 'ENDING PRESENTATION STATE');
+            $clip['exact_opening_frame'] = $this->fieldValue($text, 'EXACT OPENING FRAME');
+            $clip['exact_ending_state'] = $this->fieldValue($text, 'EXACT ENDING STATE');
+            $clip['primary_idea'] = $this->fieldValue($text, 'PRIMARY IDEA');
+            $clip['visual_representation'] = $this->fieldValue($text, 'VISUAL REPRESENTATION');
+            $clip['visible_cause_action_result'] = $this->fieldValue($text, 'VISIBLE CAUSE → ACTION → RESULT');
+            $clip['speech_timing_policy'] = $this->speechTimingPolicy($text);
+            $clip['speech_rows'] = $this->speechRows($text);
+            foreach ($clip['speech_rows'] as &$speechRow) {
+                $speechRow['minimum_seconds'] = $this->minimumSpeechSeconds($speechRow['line']);
+            }
+            unset($speechRow);
+            $clip['minimum_speech_duration_seconds'] = array_sum(array_column($clip['speech_rows'], 'minimum_seconds'));
+            $clip['minimum_duration_with_visual_beats_seconds'] = $clip['speech_rows'] === []
+                ? 0.0
+                : $clip['minimum_speech_duration_seconds']
+                    + ($clip['speech_timing_policy']['opening_visual_beat_seconds'] ?? 0)
+                    + ($clip['speech_timing_policy']['ending_pause_seconds'] ?? 0)
+                    + (max(0, count($clip['speech_rows']) - 1) * ($clip['speech_timing_policy']['inter_line_pause_seconds'] ?? 0));
+        }
+        unset($clip);
+
+        return new PromptProjectPlan(
+            clips: $clips,
+            durationLimits: $this->durationLimits($content, $input),
+            projectRuntimeLimits: $this->projectRuntimeLimits($content, $input),
+            overviewDurations: $this->overviewDurationReferences($content),
+            overviewRuntimes: $this->overviewRuntimeReferences($content),
+            clipPlanDurations: $this->clipPlanDurationReferences($content),
+            savedSettings: $input,
+        );
     }
 
     /** @return array<int, array{number: int, text: string, start_line: int, end_line: int}> */
@@ -378,7 +492,9 @@ class PromptOutputAuditor
     {
         $text = $clip['text'];
         $number = $clip['number'];
-        $duration = $this->durationSeconds($text);
+        $duration = is_numeric($clip['duration_seconds'] ?? null)
+            ? (float) $clip['duration_seconds']
+            : $this->durationSeconds($text);
 
         if ($duration === null) {
             $this->addIssue(
@@ -448,9 +564,23 @@ class PromptOutputAuditor
             'ENDING PRESENTATION STATE' => 'continuity',
             'SPEECH/VISUAL MAP' => 'narration',
         ];
+        $canonicalFields = [
+            'VISIBLE CHARACTER CAST' => 'visible_character_cast',
+            'CHARACTER IDENTITY LOCK' => 'character_identity_lock',
+            'PRIMARY IDEA' => 'primary_idea',
+            'VISUAL REPRESENTATION' => 'visual_representation',
+            'VISIBLE CAUSE → ACTION → RESULT' => 'visible_cause_action_result',
+            'OPENING CONTINUITY STATE' => 'opening_continuity_state',
+            'ENDING CONTINUITY STATE' => 'ending_continuity_state',
+            'OPENING PRESENTATION STATE' => 'opening_presentation_state',
+            'ENDING PRESENTATION STATE' => 'ending_presentation_state',
+        ];
         $values = [];
         foreach ($requiredFields as $field => $category) {
-            $values[$field] = $this->fieldValue($text, $field);
+            $planKey = $canonicalFields[$field] ?? null;
+            $values[$field] = $planKey !== null && array_key_exists($planKey, $clip)
+                ? $clip[$planKey]
+                : $this->fieldValue($text, $field);
             $missingValue = in_array($field, ['SPEECH/VISUAL MAP', 'CHARACTER IDENTITY LOCK'], true)
                 ? $values[$field] === null
                 : ($values[$field] === null || trim($values[$field]) === '');
@@ -465,8 +595,12 @@ class PromptOutputAuditor
             }
         }
 
-        $exactOpeningFrame = $this->fieldValue($text, 'EXACT OPENING FRAME');
-        $exactEndingState = $this->fieldValue($text, 'EXACT ENDING STATE');
+        $exactOpeningFrame = array_key_exists('exact_opening_frame', $clip)
+            ? $clip['exact_opening_frame']
+            : $this->fieldValue($text, 'EXACT OPENING FRAME');
+        $exactEndingState = array_key_exists('exact_ending_state', $clip)
+            ? $clip['exact_ending_state']
+            : $this->fieldValue($text, 'EXACT ENDING STATE');
         $openingProseRelation = $this->stateProseRelation($values['OPENING CONTINUITY STATE'], $exactOpeningFrame);
         $endingProseRelation = $this->stateProseRelation($values['ENDING CONTINUITY STATE'], $exactEndingState);
         if ($openingProseRelation === 'mismatch') {
@@ -519,11 +653,38 @@ class PromptOutputAuditor
             );
         }
 
-        $incomingType = $isExtension ? null : $this->incomingType($text);
-        $outgoingType = $isExtension ? null : $this->outgoingType($text);
+        $incomingType = $isExtension ? null : ($clip['incoming_type'] ?? $this->incomingType($text));
+        $outgoingType = $isExtension ? null : ($clip['outgoing_type'] ?? $this->outgoingType($text));
         $mapMarker = $values['SPEECH/VISUAL MAP'] ?? null;
-        $speechRows = $this->speechRows($text);
+        $speechRows = is_array($clip['speech_rows'] ?? null) ? $clip['speech_rows'] : $this->speechRows($text);
+        preg_match_all('/\\bLINE\\s*:/iu', $text, $rawSpeechLines);
+        if (count($rawSpeechLines[0] ?? []) !== count($speechRows)) {
+            $this->addIssue(
+                $issues,
+                'speech_map_unparseable',
+                'narration',
+                $number,
+                'Clip '.$number.' has '.count($rawSpeechLines[0] ?? []).' LINE marker(s) but only '.count($speechRows).' machine-readable timed speech row(s); timing remains unverified until every line is parsed.',
+                false,
+            );
+        }
         if ($speechRows !== []) {
+            $speechTimingPolicy = is_array($clip['speech_timing_policy'] ?? null)
+                ? $clip['speech_timing_policy']
+                : $this->speechTimingPolicy($text);
+            $openingBeat = $speechTimingPolicy['opening_visual_beat_seconds'];
+            $requiredInterLinePause = $speechTimingPolicy['inter_line_pause_seconds'];
+            $requiredEndingPause = $speechTimingPolicy['ending_pause_seconds'];
+            $timingTolerance = $speechTimingPolicy['timing_tolerance_seconds'];
+            if ($speechRows[0]['start'] + $timingTolerance < $openingBeat) {
+                $this->addIssue(
+                    $issues,
+                    'speech_opening_visual_beat_missing',
+                    'narration',
+                    $number,
+                    'Clip '.$number.' starts speech at '.$this->formatSeconds($speechRows[0]['start']).' seconds; reserve at least '.$this->formatSeconds($openingBeat).' seconds for the opening visual beat.',
+                );
+            }
             if (! $spokenAudioEnabled) {
                 $this->addIssue(
                     $issues,
@@ -573,11 +734,21 @@ class PromptOutputAuditor
                         $number,
                         'Clip '.$number.' has overlapping timed speech rows; leave room for natural pauses rather than layering or rushing lines.',
                     );
+                } elseif ($previousEnd !== null && $row['start'] - $previousEnd + $timingTolerance < $requiredInterLinePause) {
+                    $this->addIssue(
+                        $issues,
+                        'speech_inter_line_pause_missing',
+                        'narration',
+                        $number,
+                        'Clip '.$number.' speech row '.($rowIndex + 1).' has less than the required '.$this->formatSeconds($requiredInterLinePause).'-second breathing/reaction pause after the preceding spoken row.',
+                    );
                 }
                 $previousEnd = max($previousEnd ?? 0, $row['end']);
 
                 $wordCount = $this->wordCount($row['line']);
-                $minimumSeconds = $this->minimumSpeechSeconds($row['line']);
+                $minimumSeconds = is_numeric($row['minimum_seconds'] ?? null)
+                    ? (float) $row['minimum_seconds']
+                    : $this->minimumSpeechSeconds($row['line']);
                 $availableSeconds = max(0, $row['end'] - $row['start']);
                 if ($wordCount > 0 && $availableSeconds + 0.05 < $minimumSeconds) {
                     $this->addIssue(
@@ -591,13 +762,13 @@ class PromptOutputAuditor
             }
 
             $lastSpeechEnd = $speechRows[array_key_last($speechRows)]['end'];
-            if ($duration !== null && $duration - $lastSpeechEnd < 0.25) {
+            if ($duration !== null && $duration - $lastSpeechEnd + $timingTolerance < $requiredEndingPause) {
                 $this->addIssue(
                     $issues,
                     'speech_leaves_no_visual_tail',
                     'narration',
                     $number,
-                    'Clip '.$number.' leaves no settled visual beat after the final spoken line; reserve a brief pause at the ending when the action allows.',
+                    'Clip '.$number.' leaves '.$this->formatSeconds($duration - $lastSpeechEnd).' seconds after the final spoken line; reserve at least '.$this->formatSeconds($requiredEndingPause).' seconds for the settled visual/closing handoff beat.',
                 );
             }
         } elseif ($mapMarker !== null) {
@@ -647,17 +818,18 @@ class PromptOutputAuditor
         ];
     }
 
-    /** @return array<int, array{start: float, end: float, action: string, speaker: string, line: string}> */
+    /** @return array<int, array{line_index: int, start: float, end: float, action: string, speaker: string, line: string}> */
     private function speechRows(string $text): array
     {
         $rows = [];
-        foreach (preg_split('/\R/u', $text) ?: [] as $line) {
+        foreach (preg_split('/\R/u', $text) ?: [] as $lineIndex => $line) {
             $line = str_replace(['**', '__', '`'], '', $line);
             if (preg_match('/^\s*(?:[-*+•–]\s+)?(-?\d+(?:\.\d+)?)\s*(?:s)?\s*(?:–|—|-|to)\s*(-?\d+(?:\.\d+)?)\s*s\s*\|\s*VISIBLE ACTION:\s*(.*?)\s*\|\s*SPEAKER:\s*(.*?)\s*\|\s*LINE:\s*(.+?)\s*$/iu', $line, $match) !== 1) {
                 continue;
             }
 
             $rows[] = [
+                'line_index' => $lineIndex,
                 'start' => (float) $match[1],
                 'end' => (float) $match[2],
                 'action' => trim($match[3]),
@@ -677,6 +849,23 @@ class PromptOutputAuditor
         }
 
         return (float) $match[1];
+    }
+
+    private function isPerClipDurationStatement(string $line): bool
+    {
+        $listPrefix = '(?:\\d+[.)]\\s*)?(?:[-*+>•]\\s*)?';
+        if (preg_match('/^\\s*'.$listPrefix.'(?:clip|shot)\\s*#?\\s*\\d+\\s*[—–:-]\\s*\\d+(?:\\.\\d+)?\\s*(?:seconds?|secs?|s|minutes?|mins?|m)\\s*$/iu', $line) === 1
+            || preg_match('/^\\s*'.$listPrefix.'(?:clip|shot)\\s*#?\\s*\\d+\\s*(?:(?:—|–|:|-)\\s*)?(?:(?:exact|planned|target|approximate|approx)\\s+)?duration\\s*(?::|=|is)?\\s*\\d+(?:\\.\\d+)?\\s*(?:seconds?|secs?|s|minutes?|mins?|m)\\s*$/iu', $line) === 1) {
+            return true;
+        }
+
+        if (preg_match('/\\b(?:range|between|within|minimum|maximum|at\\s+least|no\\s+more\\s+than|up\\s+to|under|over|must|should|shall)\\b/iu', $line) === 1) {
+            return false;
+        }
+
+        preg_match_all('/\\b(?:clip|shot)\\s*#?\\s*\\d+\\b[^\\d\\r\\n]{0,40}?\\b\\d+(?:\\.\\d+)?\\s*(?:seconds?|secs?|s|minutes?|mins?|m)\\b/iu', $line, $pointDurations);
+
+        return count($pointDurations[0] ?? []) >= 2;
     }
 
     /**
@@ -733,7 +922,9 @@ class PromptOutputAuditor
         foreach ($texts as $text) {
             foreach (preg_split('/(?:\\R+|(?<=[.!?;])\\s+|,\\s+)/u', $text) ?: [] as $line) {
                 $lower = strtolower($line);
-                if (($isAiSelected && preg_match('/\\bmanual\\b/u', $lower) === 1)
+                // Do not let the broad global-range matcher read `Clip 1 — 5 seconds` as `1–5`.
+                if ($this->isPerClipDurationStatement($line)
+                    || ($isAiSelected && preg_match('/\\bmanual\\b/u', $lower) === 1)
                     || preg_match('/\\b(?:not\\s+required|not\\s+necessary|not\\s+mandatory|not\\s+constrained|not\\s+limited\\s+to|not\\s+restricted\\s+to|no\\s+(?:fixed|strict|specific)\\s+(?:clip\\s+)?duration\\s+(?:range|limit|constraint)|not\\s+(?:a\\s+)?(?:hard\\s+)?(?:duration\\s+)?(?:range|limit|constraint)|should\\s+not\\s+(?:be|stay|remain)|do\\s+not\\s+(?:need\\s+to|have\\s+to)\\s+(?:be|stay|remain))\\b/u', $lower) === 1) {
                     continue;
                 }
@@ -797,6 +988,92 @@ class PromptOutputAuditor
             'declared_label' => $declaredLabel,
             'conflict' => $conflict,
             'conflict_message' => $conflictMessage,
+        ];
+    }
+
+    /**
+     * Parse explicit project-wide duration bounds, keeping descriptive runtime totals
+     * separate from hard limits. These constraints only apply when stated as bounds.
+     *
+     * @return array{minimum: int|null, maximum: int|null, conflict: bool, declared_label: string}
+     */
+    public function projectRuntimeLimits(string $content, array $input): array
+    {
+        $minimums = [];
+        $maximums = [];
+        foreach (['project_runtime_min_seconds', 'total_runtime_min_seconds'] as $key) {
+            if (isset($input[$key]) && is_numeric($input[$key])) {
+                $minimums[] = max(0, (int) $input[$key]);
+            }
+        }
+        foreach (['project_runtime_max_seconds', 'total_runtime_max_seconds'] as $key) {
+            if (isset($input[$key]) && is_numeric($input[$key])) {
+                $maximums[] = max(0, (int) $input[$key]);
+            }
+        }
+
+        foreach (['project_runtime_range', 'total_runtime_range'] as $key) {
+            $rangeText = $input[$key] ?? null;
+            if (is_string($rangeText)
+                && preg_match('/^\\s*(\\d{1,4})\\s*(?:-|–|—|to)\\s*(\\d{1,4})\\s*(?:seconds?|secs?|s)?\\s*$/iu', $rangeText, $range) === 1) {
+                $minimums[] = (int) $range[1];
+                $maximums[] = (int) $range[2];
+            }
+        }
+
+        $texts = [$content];
+        foreach (['project_runtime_range', 'total_runtime_range', 'runtime_constraints', 'total_runtime_constraints', 'duration_constraints', 'project_description', 'creative_direction'] as $key) {
+            if (isset($input[$key]) && is_string($input[$key]) && trim($input[$key]) !== '') {
+                $texts[] = $input[$key];
+            }
+        }
+
+        foreach ($texts as $text) {
+            foreach (preg_split('/(?:\R+|(?<=[.!?;])\s+|,\s+)/u', $text) ?: [] as $line) {
+                $runtimeLabel = '(?:running\\s+time|run[ -]?time|runtime|duration|length)';
+                $runtimeScope = '(?:total|overall|project(?:[- ]wide)?|video)';
+                $hasRuntimeLabel = preg_match('/\\b'.$runtimeScope.'\\s+(?:(?:minimum|maximum|min|max)\\s+)?'.$runtimeLabel.'\\b/iu', $line) === 1
+                    || preg_match('/\\b(?:minimum|maximum|min|max)\\s+(?:of\\s+)?'.$runtimeScope.'\\s+'.$runtimeLabel.'\\b/iu', $line) === 1;
+                if (! $hasRuntimeLabel || preg_match('/\\bper\\s+clip\\b/iu', $line) === 1) {
+                    continue;
+                }
+
+                if (preg_match('/\\b(?:minimum|min)\\s+(?:of\\s+)?'.$runtimeScope.'\\s+'.$runtimeLabel.'\\b[^0-9]{0,20}(\\d{1,4})\\s*(?:seconds?|secs?|s)\\b/iu', $line, $leadingMinimum) === 1
+                    || preg_match('/\\b'.$runtimeScope.'\\s+(?:minimum|min)\\s+'.$runtimeLabel.'\\b[^0-9]{0,20}(\\d{1,4})\\s*(?:seconds?|secs?|s)\\b/iu', $line, $leadingMinimum) === 1) {
+                    $minimums[] = (int) $leadingMinimum[1];
+                }
+                if (preg_match('/\\b(?:maximum|max)\\s+(?:of\\s+)?'.$runtimeScope.'\\s+'.$runtimeLabel.'\\b[^0-9]{0,20}(\\d{1,4})\\s*(?:seconds?|secs?|s)\\b/iu', $line, $leadingMaximum) === 1
+                    || preg_match('/\\b'.$runtimeScope.'\\s+(?:maximum|max)\\s+'.$runtimeLabel.'\\b[^0-9]{0,20}(\\d{1,4})\\s*(?:seconds?|secs?|s)\\b/iu', $line, $leadingMaximum) === 1) {
+                    $maximums[] = (int) $leadingMaximum[1];
+                }
+
+                if (preg_match('/(?:(?:\\b(?:between|within|range(?:\\s+of)?|must\\s+be|should\\s+be)\\s*)?)(\\d{1,4})\\s*(?:-|–|—|to|and)\\s*(\\d{1,4})\\s*(?:seconds?|secs?|s)\\b/iu', $line, $range) === 1) {
+                    $minimums[] = (int) $range[1];
+                    $maximums[] = (int) $range[2];
+                    continue;
+                }
+
+                if (preg_match('/\b(?:must\s+not\s+exceed|may\s+not\s+exceed|cannot\s+exceed|no\s+more\s+than|at\s+most|maximum(?:\s+of)?|max(?:\s+of)?|under|below|up\s+to)\s*(\d{1,4})\s*(?:seconds?|secs?|s)\b/iu', $line, $maximum) === 1) {
+                    $maximums[] = (int) $maximum[1];
+                }
+                if (preg_match('/\b(?:at\s+least|minimum(?:\s+of)?|min(?:\s+of)?|no\s+less\s+than|over|above)\s*(\d{1,4})\s*(?:seconds?|secs?|s)\b/iu', $line, $minimum) === 1) {
+                    $minimums[] = (int) $minimum[1];
+                }
+            }
+        }
+
+        $minimum = $minimums === [] ? null : max($minimums);
+        $maximum = $maximums === [] ? null : min($maximums);
+
+        return [
+            'minimum' => $minimum,
+            'maximum' => $maximum,
+            'conflict' => $minimum !== null && $maximum !== null && $minimum > $maximum,
+            'declared_label' => $minimum !== null && $maximum !== null
+                ? $minimum.'–'.$maximum.' seconds'
+                : ($minimum !== null
+                    ? 'at least '.$minimum.' seconds'
+                    : ($maximum !== null ? 'no more than '.$maximum.' seconds' : 'no project-wide runtime limit declared')),
         ];
     }
 
@@ -900,37 +1177,63 @@ class PromptOutputAuditor
             return [];
         }
 
+        $label = '(?:(?:(?:approx(?:imate(?:ly)?)?|estimated|about|roughly|projected|planned)\\.?\\s+)?(?:total|overall|project|video)\\s+(?:(?:approx(?:imate(?:ly)?)?|estimated)\\s+)?(?:running\\s+time|run[ -]?time|runtime|duration|length))';
+        $clockPattern = '/'.$label.'\\b[^0-9\\r\\n]{0,40}(\\d{1,3}:\\d{2}(?::\\d{2})?)(?![\\d:])/iu';
+        $unitPattern = '/'.$label.'\\b[^0-9\\r\\n]{0,40}(\\d+(?:\\.\\d+)?)\\s*(seconds?|secs?|s|minutes?|mins?|m)\\b/iu';
         $references = [];
+
         for ($lineIndex = $range['start']; $lineIndex <= $range['end']; $lineIndex++) {
             $line = $lines[$lineIndex] ?? '';
             if ($this->containsCompoundDuration($line)) {
                 continue;
             }
-            preg_match_all(
-                '/\\b(?:approx(?:imate(?:ly)?)?\\.?\\s+|estimated\\s+|about\\s+)?total\\s+(?:runtime|run\\s*time|duration)\\b[^\\d\\r\\n]{0,36}?(\\d+(?:\\.\\d+)?)\\s*(seconds?|secs?|s|minutes?|mins?|m)\\b/iu',
-                $line,
-                $matches,
-                PREG_SET_ORDER | PREG_OFFSET_CAPTURE,
-            );
 
-            foreach ($matches as $match) {
-                $value = $match[1][0];
-                $offset = $match[1][1];
-                $afterValue = substr($line, $offset + strlen($value), 12);
-                if (preg_match('/^\\s*[–—-]\\s*\\d/u', $afterValue) === 1) {
-                    continue;
+            foreach ([['pattern' => $clockPattern, 'kind' => 'clock'], ['pattern' => $unitPattern, 'kind' => 'unit']] as $specification) {
+                preg_match_all(
+                    $specification['pattern'],
+                    $line,
+                    $matches,
+                    PREG_SET_ORDER | PREG_OFFSET_CAPTURE,
+                );
+
+                foreach ($matches as $match) {
+                    $value = $match[1][0];
+                    $offset = $match[1][1];
+                    $afterValue = substr($line, $offset + strlen($value), 12);
+                    if ($specification['kind'] === 'unit' && preg_match('/^\\s*[–—-]\\s*\\d/u', $afterValue) === 1) {
+                        continue;
+                    }
+
+                    if ($specification['kind'] === 'clock') {
+                        $parts = array_map('intval', explode(':', $value));
+                        if (count($parts) === 3) {
+                            if ($parts[1] > 59 || $parts[2] > 59) {
+                                continue;
+                            }
+                            $seconds = ($parts[0] * 3600) + ($parts[1] * 60) + $parts[2];
+                            $unit = 'clock_hhmmss';
+                        } else {
+                            if ($parts[1] > 59) {
+                                continue;
+                            }
+                            $seconds = ($parts[0] * 60) + $parts[1];
+                            $unit = 'clock_mmss';
+                        }
+                    } else {
+                        $unit = strtolower($match[2][0]);
+                        $numeric = (float) $value;
+                        $seconds = str_starts_with($unit, 'm') ? $numeric * 60 : $numeric;
+                    }
+
+                    $references[] = [
+                        'seconds' => (float) $seconds,
+                        'value' => $value,
+                        'unit' => $unit,
+                        'line_index' => $lineIndex,
+                        'offset' => $offset,
+                        'length' => strlen($value),
+                    ];
                 }
-
-                $unit = strtolower($match[2][0]);
-                $numeric = (float) $value;
-                $references[] = [
-                    'seconds' => str_starts_with($unit, 'm') ? $numeric * 60 : $numeric,
-                    'value' => $value,
-                    'unit' => $unit,
-                    'line_index' => $lineIndex,
-                    'offset' => $offset,
-                    'length' => strlen($value),
-                ];
             }
         }
 
@@ -1070,6 +1373,15 @@ class PromptOutputAuditor
     /** @return array<int, int> Line indexes in the final continuity-audit section that claim exact copies. */
     public function continuityAuditClaimLineIndexes(string $content): array
     {
+        return array_values(array_unique([
+            ...$this->continuityClaimIndexesByKind($content, 'exact'),
+            ...$this->continuityClaimIndexesByKind($content, 'agreement'),
+        ]));
+    }
+
+    /** @return array<int, int> */
+    private function continuityClaimIndexesByKind(string $content, string $kind): array
+    {
         $lines = preg_split('/\R/u', str_replace("\r", '', $content)) ?: [];
         $range = $this->finalContinuityAuditLineRange($lines);
         if ($range === null) {
@@ -1078,7 +1390,11 @@ class PromptOutputAuditor
 
         $indexes = [];
         for ($lineIndex = $range['start']; $lineIndex <= $range['end']; $lineIndex++) {
-            if ($this->lineClaimsExactStateCopy($lines[$lineIndex] ?? '')) {
+            $line = $lines[$lineIndex] ?? '';
+            $matches = $kind === 'exact'
+                ? $this->lineClaimsExactStateCopy($line)
+                : $this->lineClaimsHandoffAgreement($line);
+            if ($matches) {
                 $indexes[] = $lineIndex;
             }
         }
@@ -1168,15 +1484,15 @@ class PromptOutputAuditor
     }
 
     /** @param array<int, array{number: int}> $clips @param array<int, array<string, mixed>> $details @param array<int, array<string, mixed>> $issues */
-    private function auditProjectOverview(string $content, array $clips, array $details, array &$issues): void
+    private function auditProjectOverview(string $content, array $clips, array $details, array &$issues, ?PromptProjectPlan $plan = null): void
     {
         $sourceLines = preg_split('/\\R/u', str_replace("\\r", '', $content)) ?: [];
         if ($this->projectOverviewLineRange($sourceLines) === null) {
             return;
         }
 
-        $references = $this->overviewDurationReferences($content);
-        $runtimeReferences = $this->overviewRuntimeReferences($content);
+        $references = $plan?->overviewDurations ?? $this->overviewDurationReferences($content);
+        $runtimeReferences = $plan?->overviewRuntimes ?? $this->overviewRuntimeReferences($content);
         if ($references === []) {
             $this->addIssue(
                 $issues,
@@ -1271,14 +1587,14 @@ class PromptOutputAuditor
     }
 
     /** @param array<int, array<string, mixed>> $issues */
-    private function auditClipPlanDurations(string $content, array $clips, array $details, array &$issues): void
+    private function auditClipPlanDurations(string $content, array $clips, array $details, array &$issues, ?PromptProjectPlan $plan = null): void
     {
         $lines = preg_split('/\\R/u', str_replace("\\r", '', $content)) ?: [];
         if ($this->clipPlanLineRange($lines) === null) {
             return;
         }
 
-        $references = $this->clipPlanDurationReferences($content);
+        $references = $plan?->clipPlanDurations ?? $this->clipPlanDurationReferences($content);
         $referencesByClip = [];
         foreach ($references as $reference) {
             $referencesByClip[$reference['clip']][] = $reference;
@@ -1333,29 +1649,79 @@ class PromptOutputAuditor
         }
     }
 
+    /** @param array<int, array<string, mixed>> $issues */
+    private function auditProjectRuntimeConstraints(PromptProjectPlan $plan, array &$issues): void
+    {
+        $limits = $plan->projectRuntimeLimits;
+        if (($limits['conflict'] ?? false) === true) {
+            $this->addIssue(
+                $issues,
+                'project_runtime_constraint_conflict',
+                'duration',
+                null,
+                'Saved project-wide runtime constraints conflict: minimum '.$limits['minimum'].' seconds exceeds maximum '.$limits['maximum'].' seconds. No automatic duration change is safe.',
+                false,
+            );
+
+            return;
+        }
+
+        $runtime = $plan->totalRuntimeSeconds();
+        if ($runtime === null) {
+            return;
+        }
+        if (($limits['minimum'] !== null && $runtime < $limits['minimum'])
+            || ($limits['maximum'] !== null && $runtime > $limits['maximum'])) {
+            $this->addIssue(
+                $issues,
+                'project_runtime_constraint_violation',
+                'duration',
+                null,
+                'Canonical clip durations total '.$this->formatSeconds($runtime).' seconds, outside the saved project-wide runtime constraint '.$limits['declared_label'].'.',
+                false,
+            );
+        }
+    }
+
     /** @param array<int, array<string, mixed>> $handoffs @param array<int, array<string, mixed>> $clips @param array<int, array<string, mixed>> $issues */
-    private function auditFinalContinuityClaims(string $content, array $handoffs, array $clips, array $input, array &$issues): void
+    private function auditFinalContinuityClaims(string $content, array $handoffs, array $clips, array $input, array &$issues, ?PromptProjectPlan $plan = null): void
     {
         $hasNonExactHandoff = $handoffs === [];
+        $hasContradictoryHandoff = $handoffs === [];
         foreach ($handoffs as $handoff) {
-            if (($handoff['overall_relation'] ?? null) !== 'exact') {
-                $hasNonExactHandoff = true;
+            $relation = $handoff['overall_relation'] ?? 'unverified';
+            $hasNonExactHandoff = $hasNonExactHandoff || $relation !== 'exact';
+            $hasContradictoryHandoff = $hasContradictoryHandoff || in_array($relation, ['mismatch', 'unverified'], true);
+        }
+        $handoffValidatorFailed = false;
+        foreach ($issues as $issue) {
+            if (in_array($issue['code'] ?? '', [
+                'continuity_state_mismatch', 'presentation_state_mismatch', 'handoff_type_mismatch',
+                'handoff_opening_prose_mismatch', 'handoff_prose_state_mismatch',
+                'type_b_transition_action_unverified', 'type_c_transition_undocumented',
+            ], true)) {
+                $handoffValidatorFailed = true;
                 break;
             }
         }
+        $hasExactClaims = $this->continuityClaimIndexesByKind($content, 'exact') !== [];
+        $hasAgreementClaims = $this->continuityClaimIndexesByKind($content, 'agreement') !== [];
+        $hasUnverifiablePhysicalClaim = $this->finalAuditHasUnverifiablePhysicalHandoffClaim($content);
 
-        if ($hasNonExactHandoff && $this->continuityAuditClaimLineIndexes($content) !== []) {
+        if (($hasNonExactHandoff && $hasExactClaims)
+            || (($hasContradictoryHandoff || $handoffValidatorFailed) && $hasAgreementClaims)
+            || $hasUnverifiablePhysicalClaim) {
             $this->addIssue(
                 $issues,
                 'continuity_audit_overclaim',
                 'continuity',
                 null,
-                'The final continuity audit claims exact state copies even though at least one handoff is not verified as an exact structured and written match.',
+                'The final continuity audit claims an exact copy or universal handoff agreement that conflicts with at least one mismatched, unverified, or validator-failing handoff.',
             );
         }
 
         if ($this->timingAuditClaimLineIndexes($content) !== []
-            && ! $this->hasEvidenceForSynchronizedTiming($content, $clips, $issues)) {
+            && ! $this->hasEvidenceForSynchronizedTiming($content, $clips, $issues, $plan)) {
             $this->addIssue(
                 $issues,
                 'timing_audit_overclaim',
@@ -1377,8 +1743,30 @@ class PromptOutputAuditor
         }
     }
 
+    private function finalAuditHasUnverifiablePhysicalHandoffClaim(string $content): bool
+    {
+        $lines = preg_split('/\\R/u', str_replace("\\r", '', $content)) ?: [];
+        $range = $this->finalContinuityAuditLineRange($lines);
+        if ($range === null) {
+            return false;
+        }
+
+        for ($index = $range['start']; $index <= $range['end']; $index++) {
+            $line = trim(str_replace(['**', '__', '`'], '', $lines[$index] ?? ''));
+            if (preg_match('/\\b(?:not|never|cannot|can\\x27t|does\\s+not|do\\s+not|without|unverified|not\\s+rendered)\\b/iu', $line) === 1) {
+                continue;
+            }
+            if (preg_match('/\\b(?:hand[ -]?offs?|transitions?|clip[ -]to[ -]clip|continuity)\\b[^.!?;]{0,100}\\b(?:physically\\s+plausible|physically\\s+feasible|physics\\s+verified|seamless(?:ly)?|visually\\s+seamless|rendered\\s+and\\s+verified)\\b/iu', $line) === 1
+                || preg_match('/\\b(?:physically\\s+plausible|physically\\s+feasible|physics\\s+verified|seamless(?:ly)?|visually\\s+seamless|rendered\\s+and\\s+verified)\\b[^.!?;]{0,100}\\b(?:hand[ -]?offs?|transitions?|clip[ -]to[ -]clip|continuity)\\b/iu', $line) === 1) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
     /** @param array<int, array<string, mixed>> $clips @param array<int, array<string, mixed>> $issues */
-    private function hasEvidenceForSynchronizedTiming(string $content, array $clips, array $issues): bool
+    private function hasEvidenceForSynchronizedTiming(string $content, array $clips, array $issues, ?PromptProjectPlan $plan = null): bool
     {
         if (! $this->hasProjectOverviewSection($content)
             || ! $this->hasClipPlanSection($content)
@@ -1394,16 +1782,18 @@ class PromptOutputAuditor
         $durations = [];
         foreach ($clips as $index => $clip) {
             $number = (int) ($clip['number'] ?? 0);
-            $duration = $this->durationSeconds((string) ($clip['text'] ?? ''));
+            $duration = is_numeric($clip['duration_seconds'] ?? null)
+                ? (float) $clip['duration_seconds']
+                : $this->durationSeconds((string) ($clip['text'] ?? ''));
             if ($number !== $index + 1 || array_key_exists($number, $durations) || $duration === null || $duration <= 0) {
                 return false;
             }
             $durations[$number] = $duration;
         }
 
-        $overviewReferences = $this->overviewDurationReferences($content);
-        $runtimeReferences = $this->overviewRuntimeReferences($content);
-        $clipPlanReferences = $this->clipPlanDurationReferences($content);
+        $overviewReferences = $plan?->overviewDurations ?? $this->overviewDurationReferences($content);
+        $runtimeReferences = $plan?->overviewRuntimes ?? $this->overviewRuntimeReferences($content);
+        $clipPlanReferences = $plan?->clipPlanDurations ?? $this->clipPlanDurationReferences($content);
         if ($overviewReferences === [] || $runtimeReferences === [] || $clipPlanReferences === []) {
             return false;
         }
@@ -1446,8 +1836,9 @@ class PromptOutputAuditor
 
         $parsedRows = 0;
         foreach ($clips as $clip) {
-            $rows = $this->speechRows($clip['text']);
-            preg_match_all('/\\bLINE\\s*:/iu', $clip['text'], $rawLines);
+            $clipText = (string) ($clip['text'] ?? '');
+            $rows = is_array($clip['speech_rows'] ?? null) ? $clip['speech_rows'] : $this->speechRows($clipText);
+            preg_match_all('/\\bLINE\\s*:/iu', $clipText, $rawLines);
             if (count($rows) !== count($rawLines[0] ?? [])) {
                 return false;
             }
@@ -1629,6 +2020,21 @@ class PromptOutputAuditor
             || preg_match('/\\bunivers(?:al|ally)\\b[^.!?;]{0,80}\\b(?:speech|dialogue|narration|lines?|pacing|pace|timing)\\b/iu', $line) === 1;
     }
 
+    private function lineClaimsHandoffAgreement(string $line): bool
+    {
+        $line = trim(str_replace(['**', '__', '`'], '', $line));
+        if (preg_match('/\b(?:not|never|no longer|unresolved|unverified|mismatch(?:ed)?)\b[^.!?;]{0,90}\b(?:match(?:es|ed)?|consistent|compatible|verified|confirmed|pass(?:es|ed)?|correct|seamless|continuous|aligned|plausible|feasible)\b/iu', $line) === 1
+            || preg_match('/\b(?:not|never|no)\s+univers(?:al|ally)\b/iu', $line) === 1) {
+            return false;
+        }
+
+        $handoff = '(?:hand[ -]?offs?|transitions?|clip[ -]to[ -]clip|continuity)';
+        $positive = '(?:match(?:es|ed)?|consistent|compatible|verified|confirmed|pass(?:es|ed)?|correct|seamless|continuous|aligned|physically\s+plausible|feasible)';
+
+        return preg_match('/\b(?:all|every|each|both|the\s+entire|all\s+\d+)\b[^.!?;]{0,90}\b'.$handoff.'\b[^.!?;]{0,90}\b'.$positive.'\b/iu', $line) === 1
+            || preg_match('/\b'.$handoff.'\b[^.!?;]{0,60}\b(?:is|are|was|were|has\s+been|have\s+been)\b[^.!?;]{0,40}\b'.$positive.'\b/iu', $line) === 1;
+    }
+
     private function lineClaimsExactStateCopy(string $line): bool
     {
         $line = trim(str_replace(['**', '__', '`'], '', $line));
@@ -1636,6 +2042,37 @@ class PromptOutputAuditor
         $line = preg_replace('/\\bno\\s+(?:(?:an?|the)\\s+)?(?:exact|verbatim)\\s+(?:(?:state|opening|ending)\\s+)?(?:cop(?:y|ies)|match(?:es)?)\\b/iu', '', $line) ?? $line;
 
         return preg_match('/\\b(?:exact|verbatim)\\s+(?:(?:state|opening|ending)\\s+)?cop(?:y|ies)\\b|\\b(?:exact|verbatim)\\s+(?:(?:state|opening|ending)\\s+)?match(?:es)?\\b|\\b(?:cop(?:y|ies|ied)|match(?:es|ed)?)\\s+exactly\\b|\\bexactly\\s+(?:cop(?:y|ies|ied)|match(?:es|ed)?)\\b/iu', $line) === 1;
+    }
+
+    private function transitionActionConnectsStates(?string $beforeState, ?string $afterState, string $action, bool $requireTemporalSequence): bool
+    {
+        if ($this->normalizeState($beforeState) === '' || $this->normalizeState($afterState) === '' || trim($action) === '') {
+            return false;
+        }
+        if (preg_match('/\\b(?:a\\s+clear\\s+cause|one\\s+visible\\s+action|result\\s+is\\s+clear)\\b/iu', $action) === 1
+            || preg_match('/\\b(?:time[ -]?lapse|move|carry|lift|set|place|walk|travel|transfer|roll|push|pull|slide|open|close|turn|flow|melt|heat|cool|form|shape|compress|assemble|transform|jump|cut|dissolve|fade|advance|accelerate|change|shift|rotate|continue|arrive|leave|pass|bridge|transition)(?:s|ed|ing)?\\b/iu', $action) !== 1) {
+            return false;
+        }
+
+        $beforeTokens = $this->stateTokens((string) $beforeState);
+        $afterTokens = $this->stateTokens((string) $afterState);
+        $actionTokens = $this->stateTokens($action);
+        if (array_intersect($actionTokens, [...$beforeTokens, ...$afterTokens]) === []) {
+            return false;
+        }
+        if (! $requireTemporalSequence) {
+            return true;
+        }
+
+        $beforeEvidence = array_diff($beforeTokens, $afterTokens) ?: $beforeTokens;
+        $afterEvidence = array_diff($afterTokens, $beforeTokens) ?: $afterTokens;
+        $mentionsBefore = array_intersect($actionTokens, $beforeEvidence) !== [];
+        $mentionsAfter = array_intersect($actionTokens, $afterEvidence) !== [];
+        $hasBeforeMarker = preg_match('/\\b(?:before(?:\\s+state)?|initially|at\\s+the\\s+start|starts?\\s+(?:as|with)|from)\\b/iu', $action) === 1;
+        $hasTransitionMarker = preg_match('/\\b(?:time[ -]?lapse|transition|dissolve|cut(?:s)?\\s+to|fade(?:s)?|jump\\s+forward|over\\s+time|as\\s+time\\s+passes|advances?)\\b/iu', $action) === 1;
+        $hasAfterMarker = preg_match('/\\b(?:after(?:\\s+state)?|later|afterwards|eventually|ends?\\s+(?:as|with)|becomes?|resulting\\s+in|final(?:ly)?)\\b/iu', $action) === 1;
+
+        return $mentionsBefore && $mentionsAfter && $hasBeforeMarker && $hasTransitionMarker && $hasAfterMarker;
     }
 
     private function compareStates(?string $left, ?string $right): string
@@ -1845,8 +2282,40 @@ class PromptOutputAuditor
     {
         $wordCount = $this->wordCount($line);
         $sentencePauses = $this->sentencePauseCount($line);
+        $wordsPerSecond = max(0.1, $this->speechPolicy('words_per_second', 2.2));
+        $pauseMinimum = max(0.0, $this->speechPolicy('sentence_pause_min_seconds', 0.12));
+        $pausePerSentence = max(0.0, $this->speechPolicy('sentence_pause_per_sentence_seconds', 0.12));
+        $pauseMaximum = max($pauseMinimum, $this->speechPolicy('sentence_pause_max_seconds', 0.45));
+        $sentencePause = max($pauseMinimum, min($pauseMaximum, $sentencePauses * $pausePerSentence));
 
-        return ($wordCount / 2.2) + max(0.12, min(0.45, $sentencePauses * 0.12));
+        return ($wordCount / $wordsPerSecond) + $sentencePause;
+    }
+
+    public function speechTimingPolicy(string $clipText = ''): array
+    {
+        $outgoingType = $this->outgoingType($clipText);
+        $endingPause = $this->speechPolicy('ending_pause_seconds', 0.3);
+        if (in_array($outgoingType, ['A', 'B', 'C'], true)) {
+            $endingPause = max($endingPause, $this->speechPolicy('handoff_closing_pause_seconds', 0.3));
+        }
+
+        return [
+            'opening_visual_beat_seconds' => $this->speechPolicy('opening_visual_beat_seconds', 0.2),
+            'inter_line_pause_seconds' => $this->speechPolicy('inter_line_pause_seconds', 0.2),
+            'ending_pause_seconds' => $endingPause,
+            'timing_tolerance_seconds' => $this->speechPolicy('timing_tolerance_seconds', 0.05),
+        ];
+    }
+
+    private function speechPolicy(string $key, float $default): float
+    {
+        if (! function_exists('config')) {
+            return $default;
+        }
+
+        $value = config('prompt_qa.speech.'.$key, $default);
+
+        return is_numeric($value) ? max(0.0, (float) $value) : $default;
     }
 
     private function normalizeState(?string $state): string

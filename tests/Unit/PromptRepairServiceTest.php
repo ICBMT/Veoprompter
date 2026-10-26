@@ -19,6 +19,94 @@ class PromptRepairServiceTest extends TestCase
         $this->auditor = new PromptOutputAuditor;
     }
 
+    public function test_reconstructed_six_clip_38_second_glass_bottle_case_repairs_speech_handoffs_and_all_runtime_views(): void
+    {
+        [$content, $input] = $this->reconstructedSixClipGlassBottleFixture();
+        $before = $this->auditor->audit($content, $input);
+        $beforePlan = $this->auditor->canonicalProjectPlan($content, $input);
+        $beforeCodes = array_column($before['issues'], 'code');
+
+        $this->assertSame(38.0, $beforePlan->totalRuntimeSeconds());
+        $this->assertSame(6, $beforePlan->clipCount());
+        $this->assertSame([1, 2, 3, 4, 5, 6], $beforePlan->clipOrder());
+        $this->assertSame(5.0, $beforePlan->clips[0]['duration_seconds']);
+        $this->assertSame(0.2, $beforePlan->clips[0]['speech_timing_policy']['opening_visual_beat_seconds']);
+        $this->assertGreaterThan(2.3, $beforePlan->clips[0]['speech_rows'][0]['minimum_seconds']);
+        $this->assertSame($input, $beforePlan->savedSettings);
+        $this->assertCount(1, $beforePlan->overviewRuntimes);
+        $this->assertSame(38.0, $beforePlan->overviewRuntimes[0]['seconds']);
+        $this->assertNotContains('overview_total_runtime_missing', $beforeCodes);
+        $this->assertSame(12, count(array_filter($beforeCodes, static fn (string $code): bool => $code === 'speech_overrun')));
+        $this->assertSame(5, count(array_filter($beforeCodes, static fn (string $code): bool => $code === 'continuity_state_mismatch')));
+        $this->assertContains('continuity_audit_overclaim', $beforeCodes);
+        $this->assertContains('speech_pacing_overclaim', $beforeCodes);
+        $this->assertContains('speech_opening_visual_beat_missing', $beforeCodes);
+        $this->assertContains('speech_leaves_no_visual_tail', $beforeCodes);
+
+        $settings = new AiSetting;
+        $settings->provider = 'gemini';
+        $settings->model = 'gemini-2.5-flash';
+        $settings->api_key = 'test-provider-key';
+        $generation = Mockery::mock(PromptGenerationService::class);
+        $generation->shouldReceive('requestTargetedRepair')
+            ->once()
+            ->with($settings, Mockery::on(static fn (string $brief): bool => str_contains($brief, 'PAIR 5 — HANDOFF TYPE: A')
+                && str_contains($brief, 'CURRENT PRIOR ENDING CONTINUITY STATE:')
+                && str_contains($brief, 'CURRENT NEXT OPENING CONTINUITY STATE:')))
+            ->andReturn(implode("\n", array_map(
+                static fn (int $pair): string => 'PAIR '.$pair.' PHYSICAL STATE: PRIOR_ENDING',
+                range(1, 5),
+            )));
+
+        $result = (new PromptRepairService($this->auditor, $generation))->repair($settings, $content, $input);
+        $afterPlan = $this->auditor->canonicalProjectPlan($result['content'], $input);
+        $afterReview = $this->auditor->audit($result['content'], $input);
+
+        $this->assertTrue($result['repair_report']['applied']);
+        $this->assertSame('passed', $afterReview['status']);
+        $this->assertSame([], $afterReview['issues']);
+        $this->assertSame(39.0, $afterPlan->totalRuntimeSeconds());
+        $this->assertSame(39.0, $afterPlan->overviewRuntimes[0]['seconds']);
+        $this->assertCount(6, $afterPlan->overviewDurations);
+        $this->assertCount(6, $afterPlan->clipPlanDurations);
+        $this->assertSame(39.0, array_sum(array_column($afterPlan->clipPlanDurations, 'seconds')));
+        $this->assertSame('CLIP DURATION: 6 seconds', $this->auditor->fieldValue($result['content'], 'CLIP DURATION'));
+        $this->assertStringContainsString('- Clip 1 — 6 seconds', $result['content']);
+        $this->assertStringContainsString('Exact duration: 6 seconds', $result['content']);
+        $this->assertStringContainsString('Estimated overall running time: 00:39', $result['content']);
+        $this->assertStringContainsString('LINE: “The glass bottle is glowing.”', $result['content']);
+        $this->assertStringContainsString('LINE: “The bottle remains clear and smooth.”', $result['content']);
+        $this->assertContains('continuity_state_mismatch', array_column($result['repair_report']['fixed'], 'code'));
+        $this->assertContains('speech_overrun', array_column($result['repair_report']['fixed'], 'code'));
+        $this->assertContains('speech_leaves_no_visual_tail', array_column($result['repair_report']['fixed'], 'code'));
+        $this->assertSame([], $result['repair_report']['new_issues']);
+        $this->assertSame([], $result['repair_report']['unresolved']);
+    }
+
+    public function test_same_rejected_no_progress_signature_is_blocked_but_retryable_provider_failures_are_not(): void
+    {
+        $content = 'candidate prompt';
+        $brief = ['clip_count' => 6];
+        $review = ['issues' => [[
+            'code' => 'speech_overrun',
+            'category' => 'narration',
+            'clip' => 1,
+            'message' => 'Clip 1 speech row 1 exceeds the available duration.',
+        ]]];
+        $signature = PromptRepairService::repairSignature($content, $brief, $review);
+        $history = [[
+            'action' => 'repair',
+            'status' => 'completed',
+            'repair_signature' => $signature,
+            'report' => ['applied' => false, 'retryable' => false],
+        ]];
+
+        $this->assertTrue(PromptRepairService::hasNonRetryableNoProgress($history, $signature));
+        $history[0]['report']['retryable'] = true;
+        $this->assertFalse(PromptRepairService::hasNonRetryableNoProgress($history, $signature));
+        $this->assertFalse(PromptRepairService::hasNonRetryableNoProgress($history, PromptRepairService::repairSignature('changed prompt', $brief, $review)));
+    }
+
     public function test_equivalent_continuity_maps_are_reconciled_without_changing_scene_or_handoff(): void
     {
         $previous = 'cast=None; object=glass vial on bench; level=half full; environment=lab';
@@ -133,8 +221,8 @@ class PromptRepairServiceTest extends TestCase
         $this->assertStringContainsString('- Clip 1 — 5 seconds', $result['content']);
         $this->assertStringContainsString('Exact duration: 5 seconds', $result['content']);
         $this->assertStringContainsString('- Approximate total runtime: 5 seconds', $result['content']);
-        $this->assertStringContainsString('- 0.0–2.0s | VISIBLE ACTION: the bee gathers pollen | SPEAKER: Narrator | LINE: “The bee carries pollen.”', $result['content']);
-        $this->assertStringContainsString('- 2.2–4.2s | VISIBLE ACTION: the bee reaches another bloom | SPEAKER: Narrator | LINE: “It reaches another flower.”', $result['content']);
+        $this->assertStringContainsString('- 0.2–2.2s | VISIBLE ACTION: the bee gathers pollen | SPEAKER: Narrator | LINE: “The bee carries pollen.”', $result['content']);
+        $this->assertStringContainsString('- 2.4–4.4s | VISIBLE ACTION: the bee reaches another bloom | SPEAKER: Narrator | LINE: “It reaches another flower.”', $result['content']);
         $this->assertSame('passed', $result['quality_review']['status']);
         $this->assertSame([], $result['repair_report']['new_issues']);
         $this->assertTrue($result['repair_report']['applied']);
@@ -158,6 +246,48 @@ class PromptRepairServiceTest extends TestCase
         $this->assertNotContains('speech_overrun', array_column($result['repair_report']['fixed'], 'code'));
         $this->assertNotContains('declared_duration_constraint_violation', array_column($result['quality_review']['issues'], 'code'));
         $this->assertFalse($result['repair_report']['applied']);
+    }
+
+    public function test_project_runtime_maximum_counts_earlier_clip_expansions_in_the_same_repair(): void
+    {
+        $state = 'cast=None; object=gear; stage=rotating; environment=workshop';
+        $presentation = 'camera=macro; lighting=neutral; audio=quiet room tone';
+        $rows = [
+            '- 0.0–2.0s | VISIBLE ACTION: the gear turns | SPEAKER: Narrator | LINE: “The gear turns slowly.”',
+            '- 1.5–2.5s | VISIBLE ACTION: the gear stops | SPEAKER: Narrator | LINE: “It comes to rest.”',
+        ];
+        $content = $this->clip(1, 'INITIAL CLIP — NO PREVIOUS HANDOFF', 'TYPE A — DIRECT CONTINUATION', $state, $state, $presentation, $presentation, duration: 4, speechRows: $rows)
+            ."\n".$this->clip(2, 'TYPE A — DIRECT CONTINUATION', 'FINAL — NO NEXT HANDOFF', $state, $state, $presentation, $presentation, duration: 4, speechRows: $rows);
+        $input = $this->input(['clip_count' => 2, 'project_runtime_max_seconds' => 9]);
+        $service = new PromptRepairService($this->auditor, Mockery::mock(PromptGenerationService::class));
+
+        $result = $service->repair(null, $content, $input);
+        $plan = $this->auditor->canonicalProjectPlan($result['content'], $input);
+
+        $this->assertSame(9.0, $plan->totalRuntimeSeconds());
+        $this->assertSame([1 => 5.0, 2 => 4.0], $plan->clipDurations());
+        $this->assertTrue($result['repair_report']['applied']);
+        $this->assertSame([], $result['repair_report']['new_issues']);
+        $this->assertStringContainsString('would exceed the saved project-wide maximum of 9 seconds', implode(' ', $result['repair_report']['informational']));
+    }
+
+    public function test_project_runtime_minimum_prevents_a_clip_shrink_that_would_violate_it(): void
+    {
+        $state = 'cast=None; object=small brass gear; stage=polished; environment=workshop';
+        $presentation = 'camera=macro; lighting=neutral; audio=quiet room tone';
+        $row = '- 0.2–2.2s | VISIBLE ACTION: the gear turns slowly | SPEAKER: Narrator | LINE: “The gear turns.”';
+        $content = $this->clip(1, 'INITIAL CLIP — NO PREVIOUS HANDOFF', 'TYPE A — DIRECT CONTINUATION', $state, $state, $presentation, $presentation, duration: 12, speechRows: [$row])
+            ."\n".$this->clip(2, 'TYPE A — DIRECT CONTINUATION', 'TYPE A — DIRECT CONTINUATION', $state, $state, $presentation, $presentation, duration: 8, speechRows: [$row])
+            ."\n".$this->clip(3, 'TYPE A — DIRECT CONTINUATION', 'FINAL — NO NEXT HANDOFF', $state, $state, $presentation, $presentation, duration: 8, speechRows: [$row]);
+        $input = $this->input(['clip_count' => 3, 'project_runtime_min_seconds' => 27]);
+        $service = new PromptRepairService($this->auditor, Mockery::mock(PromptGenerationService::class));
+
+        $result = $service->repair(null, $content, $input);
+
+        $this->assertSame($content, $result['content']);
+        $this->assertContains('ai_duration_over_limit', array_column($result['repair_report']['unresolved'], 'code'));
+        $this->assertFalse($result['repair_report']['applied']);
+        $this->assertStringContainsString('would fall below the saved project-wide minimum of 27 seconds', implode(' ', $result['repair_report']['informational']));
     }
 
     public function test_safe_duration_repair_clamps_to_project_range_and_synchronizes_every_timing_reference(): void
@@ -271,22 +401,29 @@ class PromptRepairServiceTest extends TestCase
         $this->assertFalse($result['repair_report']['applied']);
     }
 
-    public function test_compatible_type_b_handoff_rewrites_only_an_inaccurate_exact_copy_claim(): void
+    public function test_type_b_handoff_rewrites_only_an_inaccurate_exact_copy_claim(): void
     {
         $prior = 'object=seed tray on greenhouse bench; stage=seeds planted; environment=greenhouse; motion=stationary';
         $next = 'environment=greenhouse; object=seed tray resting on the greenhouse bench; stage=seeds planted and ready for watering; motion=still';
         $first = $this->clip(1, 'INITIAL CLIP — NO PREVIOUS HANDOFF', 'TYPE B — NATURAL ACTION TRANSITION', $prior, $prior)
             ."\nEXACT ENDING STATE: The seed tray rests on the greenhouse bench, the seeds are planted, and the scene is still.";
-        $second = $this->clip(2, 'TYPE B — NATURAL ACTION TRANSITION', 'FINAL — NO NEXT HANDOFF', $next, $next)
+        $second = $this->clip(2, 'TYPE B — NATURAL ACTION TRANSITION', 'FINAL — NO NEXT HANDOFF', $prior, $next)
             ."\nEXACT OPENING FRAME: The seed tray rests on the greenhouse bench with planted seeds; the frame is still."
+            ."\nEXACT ENDING STATE: The planted seeds in the tray are ready for watering on the greenhouse bench."
             ."\n\n### FINAL CONTINUITY AUDIT\n- The Type B handoff is an exact state copy of the prior clip.";
+        $second = str_replace(
+            'VISIBLE CAUSE → ACTION → RESULT: A clear cause produces one visible action and result.',
+            'VISIBLE CAUSE → ACTION → RESULT: A hand lifts the seed tray from the bench and sets it down, leaving the planted seeds ready for watering.',
+            $second,
+        );
         $content = $first."\n".$second;
         $service = new PromptRepairService($this->auditor, Mockery::mock(PromptGenerationService::class));
 
         $before = $this->auditor->audit($content, $this->input(['clip_count' => 2]));
         $result = $service->repair(null, $content, $this->input(['clip_count' => 2]));
 
-        $this->assertSame('compatible', $before['handoffs'][0]['continuity_relation']);
+        $this->assertSame('exact', $before['handoffs'][0]['continuity_relation']);
+        $this->assertSame('compatible', $before['handoffs'][0]['overall_relation']);
         $this->assertFalse($before['handoffs'][0]['exact_copy']);
         $this->assertContains('continuity_audit_overclaim', array_column($before['issues'], 'code'));
         $this->assertStringContainsString('Handoffs with compatible, mismatched, or unverified states are not verbatim copies;', $result['content']);
@@ -344,8 +481,8 @@ class PromptRepairServiceTest extends TestCase
 
         $this->assertContains('speech_time_range_invalid', array_column($negativeBefore['issues'], 'code'));
         $this->assertContains('speech_exceeds_clip', array_column($beyondBefore['issues'], 'code'));
-        $this->assertStringContainsString('- 0.0–2.4s | VISIBLE ACTION:', $negativeResult['content']);
-        $this->assertStringContainsString('- 0.0–2.4s | VISIBLE ACTION:', $beyondResult['content']);
+        $this->assertStringContainsString('- 0.2–2.6s | VISIBLE ACTION:', $negativeResult['content']);
+        $this->assertStringContainsString('- 0.2–2.6s | VISIBLE ACTION:', $beyondResult['content']);
         $this->assertSame('passed', $negativeResult['quality_review']['status']);
         $this->assertSame('passed', $beyondResult['quality_review']['status']);
     }
@@ -387,6 +524,72 @@ class PromptRepairServiceTest extends TestCase
         $this->assertFalse($result['repair_report']['applied']);
     }
 
+    /**
+     * Reconstructed regression fixture: the original six-clip glass-bottle QA
+     * transcript was not present in the repository, so this clearly labeled case
+     * reproduces the reported 38-second parser, speech, handoff, and claim failures.
+     *
+     * @return array{0: string, 1: array<string, mixed>}
+     */
+    private function reconstructedSixClipGlassBottleFixture(): array
+    {
+        $durations = [5, 6, 7, 6, 7, 7];
+        $startState = 'cast=None; object=glass bottle G-01; material=borosilicate glass; process=molten gather; location=furnace exit; motion=held on blowpipe';
+        $endStates = [
+            'cast=None; object=glass bottle G-01; material=borosilicate glass; process=molten gather transferred; location=blowpipe station; motion=held on blowpipe',
+            'cast=None; object=glass bottle G-01; material=borosilicate glass; process=inflated parison; location=blow mold; motion=held by mold',
+            'cast=None; object=glass bottle G-01; material=borosilicate glass; process=neck shaped; location=neck ring; motion=held by mold',
+            'cast=None; object=glass bottle G-01; material=borosilicate glass; process=final shape formed; location=annealing lehr entrance; motion=conveyor moving east',
+            'cast=None; object=glass bottle G-01; material=borosilicate glass; process=annealed and cooled; location=inspection table; motion=stationary',
+            'cast=None; object=glass bottle G-01; material=borosilicate glass; process=inspected and accepted; location=packaging line; motion=conveyor moving east',
+        ];
+        $wrongOpening = 'cast=None; object=glass bottle G-01; material=borosilicate glass; process=broken fragments; location=scrap bin; motion=stationary';
+        $presentation = 'camera=macro tracking; lighting=warm furnace glow; audio=quiet glassworks ambience';
+        $overview = [
+            '## SECTION 1 — PROJECT OVERVIEW',
+            ...array_map(static fn (int $index, int $duration): string => '- Clip '.($index + 1).' — '.$duration.' seconds', array_keys($durations), $durations),
+            '- Estimated overall running time: 00:38',
+            '',
+            '## SECTION 7 — CLIP PLAN AND CONTINUITY MAP',
+        ];
+        foreach ($durations as $index => $duration) {
+            $overview[] = '- Clip '.($index + 1).' — Form one glass bottle stage';
+            $overview[] = '  - Exact duration: '.$duration.' seconds';
+        }
+        $overview[] = '';
+        $overview[] = '## SECTION 8 — COPY-AND-PASTE VIDEO PROMPTS';
+
+        foreach ($durations as $index => $duration) {
+            $number = $index + 1;
+            $incoming = $index === 0 ? 'INITIAL CLIP — NO PREVIOUS HANDOFF' : 'TYPE A — DIRECT CONTINUATION';
+            $outgoing = $index === count($durations) - 1 ? 'FINAL — NO NEXT HANDOFF' : 'TYPE A — DIRECT CONTINUATION';
+            $speechRows = [
+                '- 0.0–0.5s | VISIBLE ACTION: the glass bottle glows at the furnace exit | SPEAKER: Narrator | LINE: “The glass bottle is glowing.”',
+                '- '.($duration - 1.0).'–'.($duration - 0.05).'s | VISIBLE ACTION: the bottle advances through this manufacturing stage | SPEAKER: Narrator | LINE: “The bottle remains clear and smooth.”',
+            ];
+            $overview[] = $this->clip(
+                $number,
+                $incoming,
+                $outgoing,
+                $index === 0 ? $startState : $wrongOpening,
+                $endStates[$index],
+                $presentation,
+                $presentation,
+                duration: $duration,
+                speechRows: $speechRows,
+            );
+        }
+
+        $overview[] = '';
+        $overview[] = '## SECTION 9 — QA SUMMARY';
+        $overview[] = '## SECTION 10 — FINAL CONTINUITY AUDIT';
+        $overview[] = '- All five handoffs are consistent and verified.';
+        $overview[] = '- All clip durations are synchronized.';
+        $overview[] = '- Every spoken line respects natural pacing.';
+
+        return [implode("\n", $overview), $this->input(['clip_count' => 6])];
+    }
+
     private function clip(
         int $number,
         string $incoming,
@@ -400,7 +603,7 @@ class PromptRepairServiceTest extends TestCase
         string $extra = '',
     ): string {
         $rows = $speechRows ?? [
-            '- 0.0–2.0s | VISIBLE ACTION: a bee gathers pollen | SPEAKER: Narrator | LINE: “The bee carries pollen.”',
+            '- 0.2–2.2s | VISIBLE ACTION: a bee gathers pollen | SPEAKER: Narrator | LINE: “The bee carries pollen.”',
         ];
 
         return implode("\n", array_filter([

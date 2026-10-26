@@ -89,7 +89,7 @@ class PromptRepairTest extends TestCase
             ."## SECTION 7 — CLIP PLAN AND CONTINUITY MAP\n- Clip 1 — Gather pollen\n  - Exact duration: 4 seconds\n\n## SECTION 8 — COPY-AND-PASTE VIDEO PROMPTS\n"
             .$this->clip(1, 'INITIAL CLIP — NO PREVIOUS HANDOFF', 'FINAL — NO NEXT HANDOFF', $state, $state);
         $content = str_replace(
-            '- 0.0–2.0s | VISIBLE ACTION: the seed settles into soil | SPEAKER: Narrator | LINE: “The bee carries pollen.”',
+            '- 0.2–2.2s | VISIBLE ACTION: the seed settles into soil | SPEAKER: Narrator | LINE: “The bee carries pollen.”',
             '- 0.0–2.0s | VISIBLE ACTION: the bee gathers pollen | SPEAKER: Narrator | LINE: “The bee carries pollen.”' . "\n"
                 . '- 1.5–2.5s | VISIBLE ACTION: the bee reaches another flower | SPEAKER: Narrator | LINE: “It reaches another flower.”',
             $content,
@@ -139,7 +139,7 @@ class PromptRepairTest extends TestCase
             ->get(route('history.show', $run))
             ->assertOk()
             ->assertSee('Auto-Fix Issues')
-            ->assertSee('Clip 2 opening scene state does not exactly match Clip 1 ending state.');
+            ->assertSee('Clip 2 opening scene state does not satisfy the preceding handoff contract.');
     }
 
     public function test_unsupported_qa_findings_are_reported_without_consuming_a_repair_attempt(): void
@@ -164,22 +164,91 @@ class PromptRepairTest extends TestCase
             ->assertSee('Manual review needed');
     }
 
-    public function test_manual_repair_attempts_are_capped_at_two_and_restore_does_not_increase_the_repair_count(): void
+    public function test_same_nonprogress_repair_is_not_retried_or_charged_again(): void
     {
         $owner = User::factory()->create();
-        $prior = 'object=raw steel panel; stage=unformed; location=press table; environment=factory';
-        $next = 'object=finished car body; stage=painted; location=assembly bay; environment=factory';
-        $content = $this->clip(1, 'INITIAL CLIP — NO PREVIOUS HANDOFF', 'TYPE C — NARRATIVE / TEMPORAL TRANSITION', $prior, $prior)
-            ."\n".$this->clip(2, 'TYPE C — NARRATIVE / TEMPORAL TRANSITION', 'FINAL — NO NEXT HANDOFF', $next, $next);
+        $state = 'cast=None; object=turning gear; stage=rotating; environment=workshop';
+        $dialogue = '“One two three four five six seven eight nine ten eleven twelve thirteen fourteen fifteen sixteen seventeen eighteen nineteen twenty.”';
+        $content = str_replace(
+            '- 0.2–2.2s | VISIBLE ACTION: the seed settles into soil | SPEAKER: Narrator | LINE: “The bee carries pollen.”',
+            '- 0.2–3.9s | VISIBLE ACTION: the gear rotates | SPEAKER: Narrator | LINE: '.$dialogue,
+            $this->clip(1, 'INITIAL CLIP — NO PREVIOUS HANDOFF', 'FINAL — NO NEXT HANDOFF', $state, $state),
+        );
+        $run = $this->savedRun($owner, $content, ['clip_count' => 'auto', 'clip_duration' => 4]);
+        $url = route('history.repair', $run);
+
+        $this->actingAs($owner)
+            ->postJson($url)
+            ->assertOk()
+            ->assertJsonPath('repair_report.attempted', true)
+            ->assertJsonPath('repair_report.applied', false)
+            ->assertJsonPath('repair_report.retryable', false)
+            ->assertJsonPath('manual_attempts', 1);
+
+        $this->postJson($url)
+            ->assertOk()
+            ->assertJsonPath('repair_report.attempted', false)
+            ->assertJsonPath('repair_report.applied', false)
+            ->assertJsonPath('manual_attempts', 1)
+            ->assertJsonPath('can_repair', false)
+            ->assertJsonFragment(['code' => 'speech_overrun']);
+
+        $this->assertSame(1, \App\Services\PromptRepairService::manualAttempts($run->fresh()->repair_history));
+        $this->assertSame($content, $run->fresh()->content);
+    }
+
+    public function test_retryable_provider_failure_remains_eligible_but_the_manual_repair_budget_stays_bounded(): void
+    {
+        $owner = User::factory()->create();
+        $prior = 'cast=None; object=seed tray; stage=seeds planted; location=greenhouse bench; motion=stationary';
+        $next = 'cast=None; object=broken seed tray; stage=seeds missing; location=scrap bin; motion=stationary';
+        $content = $this->clip(1, 'INITIAL CLIP — NO PREVIOUS HANDOFF', 'TYPE A — DIRECT CONTINUATION', $prior, $prior)
+            ."\n".$this->clip(2, 'TYPE A — DIRECT CONTINUATION', 'FINAL — NO NEXT HANDOFF', $next, $next);
         $run = $this->savedRun($owner, $content, ['clip_count' => 2]);
         $url = route('history.repair', $run);
 
-        $this->actingAs($owner)->postJson($url)->assertOk()->assertJsonPath('manual_attempts', 1);
-        $this->postJson($url)->assertOk()->assertJsonPath('manual_attempts', 2)->assertJsonPath('can_repair', false);
-        $this->postJson($url)->assertStatus(409)->assertJsonPath('manual_attempts', 2);
+        $this->actingAs($owner)
+            ->postJson($url)
+            ->assertOk()
+            ->assertJsonPath('repair_report.retryable', true)
+            ->assertJsonPath('manual_attempts', 1)
+            ->assertJsonPath('can_repair', true);
 
-        $this->postJson(route('history.restore', $run))->assertOk()->assertJsonPath('manual_attempts', 2);
+        $this->postJson($url)
+            ->assertOk()
+            ->assertJsonPath('repair_report.retryable', true)
+            ->assertJsonPath('manual_attempts', 2)
+            ->assertJsonPath('can_repair', false);
+
+        $this->postJson($url)
+            ->assertStatus(409)
+            ->assertJsonPath('manual_attempts', 2);
+
         $this->assertSame(2, \App\Services\PromptRepairService::manualAttempts($run->fresh()->repair_history));
+    }
+
+    public function test_restoring_the_original_does_not_consume_a_manual_repair_attempt(): void
+    {
+        $owner = User::factory()->create();
+        $original = $this->validSingleClip();
+        $run = $this->savedRun($owner, $original, ['clip_count' => 1]);
+        $run->update([
+            'content' => str_replace('One visible action advances the beat.', 'A user-edited action description.', $original),
+            'repair_history' => [[
+                'action' => 'repair',
+                'status' => 'completed',
+                'report' => ['applied' => true, 'retryable' => false],
+            ]],
+        ]);
+
+        $this->actingAs($owner)
+            ->postJson(route('history.restore', $run))
+            ->assertOk()
+            ->assertJsonPath('content', $original)
+            ->assertJsonPath('repair_report.outcome', 'restored_original')
+            ->assertJsonPath('manual_attempts', 1);
+
+        $this->assertSame(1, \App\Services\PromptRepairService::manualAttempts($run->fresh()->repair_history));
     }
 
     private function savedRun(User $owner, string $content, array $input): PromptProject
@@ -234,7 +303,7 @@ class PromptRepairTest extends TestCase
             'OPENING PRESENTATION STATE: camera=medium; lighting=soft daylight; audio=quiet ambience',
             'ENDING PRESENTATION STATE: camera=medium; lighting=soft daylight; audio=quiet ambience',
             'SPEECH/VISUAL MAP:',
-            '- 0.0–2.0s | VISIBLE ACTION: the seed settles into soil | SPEAKER: Narrator | LINE: “The bee carries pollen.”',
+            '- 0.2–2.2s | VISIBLE ACTION: the seed settles into soil | SPEAKER: Narrator | LINE: “The bee carries pollen.”',
             'OUTGOING HANDOFF TYPE: '.$outgoing,
         ]);
     }

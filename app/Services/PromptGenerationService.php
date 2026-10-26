@@ -55,9 +55,11 @@ class PromptGenerationService
 
                 if ($corrected !== $content) {
                     $correctedReview = $auditor->audit($corrected, $input);
+                    $newIssues = $this->addedQualityIssues($qualityReview, $correctedReview);
                     $improved = $correctedReview['status'] === 'passed'
                         || ($correctedReview['status'] === 'needs_review'
-                            && count($correctedReview['issues']) < count($qualityReview['issues']));
+                            && count($correctedReview['issues']) < count($qualityReview['issues'])
+                            && $newIssues === []);
 
                     if ($improved) {
                         $qualityReview = $correctedReview;
@@ -147,7 +149,35 @@ REPAIR_POLICY;
             $issues,
         ));
 
-        return "AUTOMATIC QUALITY-CONTROL CORRECTION\nThe original response below contains one or more detectable structural/timing issues. Return the complete corrected response, preserving the original output order, selected project settings, clip count, story intent, canonical identities, and all unaffected content. Correct the affected clip and recheck both adjacent handoffs, exact scene/presentation state strings, timing maps, and the final marker. Do not rush speech to fit; shorten a line or, only when duration is AI-selected and remains within 10 seconds, allocate more time. Do not introduce filler or new factual claims. Do not append this audit or a score to the copy-ready response.\n\nORIGINAL USER BRIEF AND SETTINGS\n{$brief}\n\nDETECTABLE ISSUES\n{$issueList}\n\nDRAFT RESPONSE TO CORRECT\n{$draft}\n\nReturn only the complete corrected response.";
+        return "AUTOMATIC QUALITY-CONTROL CORRECTION\nThe original response below contains one or more detectable structural/timing issues. Return the complete corrected response, preserving the original output order, selected project settings, clip count, story intent, canonical identities, and all unaffected content. Correct the affected clip and recheck both adjacent handoffs, exact scene/presentation state strings, timing maps, and the final marker. Follow every explicit timing threshold in the detectable-issue messages, including opening visual lead-in, inter-line pauses, natural speaking time, and the ending visual tail. For an opening-beat issue, start the first speech row no earlier than the stated minimum; moving a line is not enough if its speech duration or the closing visual tail still fails. Do not rush speech to fit; shorten a line or, only when duration is AI-selected and remains within 10 seconds, allocate more time. Do not introduce filler or new factual claims. Do not append this audit or a score to the copy-ready response.\n\nORIGINAL USER BRIEF AND SETTINGS\n{$brief}\n\nDETECTABLE ISSUES\n{$issueList}\n\nDRAFT RESPONSE TO CORRECT\n{$draft}\n\nReturn only the complete corrected response.";
+    }
+
+    private function addedQualityIssues(array $before, array $after): array
+    {
+        $known = [];
+        foreach ($before['issues'] ?? [] as $issue) {
+            if (! is_array($issue)) {
+                continue;
+            }
+            $known[$this->qualityIssueKey($issue)] = true;
+        }
+
+        return array_values(array_filter(
+            $after['issues'] ?? [],
+            fn (mixed $issue): bool => is_array($issue) && ! isset($known[$this->qualityIssueKey($issue)]),
+        ));
+    }
+
+    private function qualityIssueKey(array $issue): string
+    {
+        $key = json_encode([
+            'code' => (string) ($issue['code'] ?? ''),
+            'category' => (string) ($issue['category'] ?? ''),
+            'clip' => $issue['clip'] ?? null,
+            'message' => (string) ($issue['message'] ?? ''),
+        ], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE);
+
+        return $key === false ? serialize($issue) : $key;
     }
 
     private function systemInstructions(array $input): string

@@ -13,13 +13,15 @@ class PromptRepairService
 {
     public const MAX_MANUAL_ATTEMPTS = 2;
 
-    private const MAX_AI_STATE_PAIRS = 4;
+    private const MAX_AI_STATE_PAIRS = 7;
 
     private const SPEECH_REPAIR_CODES = [
         'speech_rows_overlap',
         'speech_exceeds_clip',
         'speech_time_range_invalid',
         'speech_overrun',
+        'speech_opening_visual_beat_missing',
+        'speech_inter_line_pause_missing',
         'speech_leaves_no_visual_tail',
     ];
 
@@ -64,6 +66,44 @@ class PromptRepairService
         ));
     }
 
+    public static function repairSignature(string $content, array $brief, array $review): string
+    {
+        $issues = array_map(
+            static fn (array $issue): array => [
+                'code' => (string) ($issue['code'] ?? ''),
+                'category' => (string) ($issue['category'] ?? ''),
+                'clip' => $issue['clip'] ?? null,
+                'message' => (string) ($issue['message'] ?? ''),
+            ],
+            array_values(array_filter($review['issues'] ?? [], 'is_array')),
+        );
+        sort($issues);
+        $encoded = json_encode(
+            ['content' => $content, 'brief' => $brief, 'issues' => $issues],
+            JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE,
+        );
+
+        return hash('sha256', $encoded === false ? serialize([$content, $brief, $issues]) : $encoded);
+    }
+
+    public static function hasNonRetryableNoProgress(array $history, string $signature): bool
+    {
+        foreach (array_reverse($history) as $entry) {
+            if (! is_array($entry)
+                || ($entry['action'] ?? null) !== 'repair'
+                || ($entry['status'] ?? null) !== 'completed'
+                || ($entry['repair_signature'] ?? null) !== $signature
+                || ! is_array($entry['report'] ?? null)) {
+                continue;
+            }
+
+            return ($entry['report']['applied'] ?? false) !== true
+                && ($entry['report']['retryable'] ?? false) !== true;
+        }
+
+        return false;
+    }
+
     /**
      * @return array{
      *   content: string,
@@ -85,6 +125,7 @@ class PromptRepairService
         }
 
         $notes = [];
+        $retryable = false;
         $candidate = $this->applyDeterministicRepairs($content, $input, $originalReview, $notes);
         $deterministicReview = $this->auditor->audit($candidate, $input);
         $deterministicRegressions = $this->addedIssues($originalReview, $deterministicReview);
@@ -100,9 +141,15 @@ class PromptRepairService
 
         $statePairs = $this->stateMismatchPairs($candidate, $input, $workingReview);
         if ($statePairs !== []) {
-            $limitedPairs = array_slice($statePairs, 0, self::MAX_AI_STATE_PAIRS);
-            if (count($statePairs) > self::MAX_AI_STATE_PAIRS) {
-                $notes[] = 'Only the first '.self::MAX_AI_STATE_PAIRS.' ambiguous handoff pairs were sent for contextual review; remaining pairs stay flagged.';
+            $prioritizedPairs = $this->prioritizeStatePairs($statePairs);
+            $limitedPairs = array_slice($prioritizedPairs, 0, self::MAX_AI_STATE_PAIRS);
+            $omittedPairs = array_slice($prioritizedPairs, self::MAX_AI_STATE_PAIRS);
+            if ($omittedPairs !== []) {
+                $omittedLabels = array_map(
+                    static fn (array $pair): string => 'Clip '.$pair['prior_clip']['number'].'→'.$pair['next_clip']['number'],
+                    $omittedPairs,
+                );
+                $notes[] = 'The bounded contextual review sent '.count($limitedPairs).' handoff pair(s); the final adjacent handoff was prioritized. These omitted pairs remain unresolved: '.implode(', ', $omittedLabels).'.';
             }
 
             $decisions = [];
@@ -114,10 +161,12 @@ class PromptRepairService
                     );
                     $decisions = $this->parseStateDecisions($response, $limitedPairs);
                 } catch (\Throwable) {
-                    $notes[] = 'Contextual continuity review was unavailable; ambiguous state mismatches were left for manual review.';
+                    $retryable = true;
+                    $notes[] = 'Contextual continuity review was unavailable; ambiguous state mismatches were left for manual review. Retry only after provider availability changes.';
                 }
             } else {
-                $notes[] = 'No ready AI provider was available for contextual continuity review; ambiguous state mismatches were left for manual review.';
+                $retryable = true;
+                $notes[] = 'No ready AI provider was available for contextual continuity review; ambiguous state mismatches were left for manual review. Retry only after provider availability changes.';
             }
 
             $aiCandidate = $this->applyStateDecisions($candidate, $input, $limitedPairs, $decisions, $notes);
@@ -180,6 +229,7 @@ class PromptRepairService
             $notes,
             true,
             $rejectedCandidateIssues,
+            $retryable,
         );
     }
 
@@ -187,7 +237,8 @@ class PromptRepairService
     {
         $lineEnding = str_contains($content, "\r\n") ? "\r\n" : "\n";
         $lines = preg_split('/\R/u', str_replace("\r", '', $content)) ?: [];
-        $clips = $this->auditor->extractClips($content, $input);
+        $plan = $this->auditor->canonicalProjectPlan($content, $input);
+        $clips = $plan->clips;
         if ($clips === []) {
             return $content;
         }
@@ -200,11 +251,11 @@ class PromptRepairService
             $previousClip = $clips[$index - 1];
             $hasContinuityIssue = $this->hasIssue($review, 'continuity_state_mismatch', $nextClip['number']);
             if ($hasContinuityIssue) {
-                $ending = $this->auditor->fieldValue($previousClip['text'], 'ENDING CONTINUITY STATE');
-                $opening = $this->auditor->fieldValue($nextClip['text'], 'OPENING CONTINUITY STATE');
+                $ending = $previousClip['ending_continuity_state'];
+                $opening = $nextClip['opening_continuity_state'];
                 if ($ending !== null && $opening !== null && $this->equivalentStateMaps($ending, $opening)) {
-                    $openingProse = $this->auditor->fieldValue($nextClip['text'], 'EXACT OPENING FRAME');
-                    $endingProse = $this->auditor->fieldValue($previousClip['text'], 'EXACT ENDING STATE');
+                    $openingProse = $nextClip['exact_opening_frame'];
+                    $endingProse = $previousClip['exact_ending_state'];
                     $needsProseSync = $openingProse !== null
                         && $this->auditor->stateProseRelation($ending, $openingProse) === 'mismatch';
                     $endingProseRelation = $this->auditor->stateProseRelation($ending, $endingProse);
@@ -225,8 +276,8 @@ class PromptRepairService
 
             $hasPresentationIssue = $this->hasIssue($review, 'presentation_state_mismatch', $nextClip['number']);
             if ($hasPresentationIssue) {
-                $ending = $this->auditor->fieldValue($previousClip['text'], 'ENDING PRESENTATION STATE');
-                $opening = $this->auditor->fieldValue($nextClip['text'], 'OPENING PRESENTATION STATE');
+                $ending = $previousClip['ending_presentation_state'];
+                $opening = $nextClip['opening_presentation_state'];
                 if ($ending !== null && $opening !== null && $this->equivalentStateMaps($ending, $opening)) {
                     if ($this->replaceField($lines, $nextClip, 'OPENING PRESENTATION STATE', $ending)) {
                         $notes[] = 'Matched Clip '.$nextClip['number'].' presentation metadata deterministically because both key/value state maps contained the same facts.';
@@ -236,7 +287,8 @@ class PromptRepairService
         }
 
         $content = implode($lineEnding, $lines);
-        $clips = $this->auditor->extractClips($content, $input);
+        $plan = $this->auditor->canonicalProjectPlan($content, $input);
+        $clips = $plan->clips;
         $speechIssueClips = [];
         $durationIssueClips = [];
         foreach ($review['issues'] as $issue) {
@@ -258,17 +310,35 @@ class PromptRepairService
                 continue;
             }
 
-            $timing = $this->repairSpeechTiming($clip['text'], $input, $content);
+            $timing = $this->repairSpeechTiming($clip, $plan, $input);
             if ($timing === null) {
                 $notes[] = $hasSpeechIssue
                     ? 'Clip '.$clip['number'].' dialogue was preserved; its existing timing cannot fit the effective project and saved duration limits safely, so the findings remain for review.'
                     : 'Clip '.$clip['number'].' duration was left unchanged because no safe repair fits the effective project and saved duration limits.';
                 continue;
             }
-            if ($timing['duration'] !== null && $timing['duration'] !== $timing['old_duration']
-                && ! $this->canSynchronizeDurationRepresentations($content, $input)) {
-                $notes[] = 'Clip '.$clip['number'].' duration and speech timing were left unchanged because not every declared timing representation can be synchronized safely.';
-                continue;
+            if ($timing['duration'] !== null && $timing['duration'] !== $timing['old_duration']) {
+                // Include earlier accepted clip edits in the project-wide budget.
+                $content = implode($lineEnding, $lines);
+                if (! $this->canSynchronizeDurationRepresentations($content, $input)) {
+                    $notes[] = 'Clip '.$clip['number'].' duration and speech timing were left unchanged because not every declared timing representation can be synchronized safely.';
+                    continue;
+                }
+                $currentPlan = $this->auditor->canonicalProjectPlan($content, $input);
+                $runtimeMaximum = $currentPlan->projectRuntimeLimits['maximum'] ?? null;
+                $currentRuntime = $currentPlan->totalRuntimeSeconds();
+                $proposedRuntime = $currentRuntime === null
+                    ? null
+                    : $currentRuntime - $timing['old_duration'] + $timing['duration'];
+                if ($runtimeMaximum !== null && ($proposedRuntime === null || $proposedRuntime > $runtimeMaximum + 0.01)) {
+                    $notes[] = 'Clip '.$clip['number'].' duration was not changed: the proposed timing would exceed the saved project-wide maximum of '.$runtimeMaximum.' seconds; no dialogue or other clip duration was changed to make room.';
+                    continue;
+                }
+                $runtimeMinimum = $currentPlan->projectRuntimeLimits['minimum'] ?? null;
+                if ($runtimeMinimum !== null && ($proposedRuntime === null || $proposedRuntime < $runtimeMinimum - 0.01)) {
+                    $notes[] = 'Clip '.$clip['number'].' duration was not changed: the proposed timing would fall below the saved project-wide minimum of '.$runtimeMinimum.' seconds; no other clip was padded to make room.';
+                    continue;
+                }
             }
             if ($timing['changed']) {
                 foreach ($timing['rows'] as $row) {
@@ -306,34 +376,29 @@ class PromptRepairService
             return true;
         }
 
-        $limits = $this->auditor->durationLimits($content, $input);
-        if ($limits['conflict']) {
+        $plan = $this->auditor->canonicalProjectPlan($content, $input);
+        $limits = $plan->durationLimits;
+        if ($limits['conflict'] || ($plan->projectRuntimeLimits['conflict'] ?? false)) {
+            return false;
+        }
+        if (! $plan->hasCompleteSequentialClipDurations()) {
             return false;
         }
 
-        $clips = $this->auditor->extractClips($content, $input);
-        if ($clips === []) {
-            return false;
-        }
-
-        $durations = [];
-        foreach ($clips as $index => $clip) {
-            if ($clip['number'] !== $index + 1 || array_key_exists($clip['number'], $durations)) {
+        $durations = $plan->clipDurations();
+        foreach ($plan->clips as $clip) {
+            $duration = $clip['duration_seconds'] ?? null;
+            if (! is_numeric($duration) || $duration <= 0 || floor((float) $duration) !== (float) $duration) {
                 return false;
             }
-            $duration = $this->auditor->durationSeconds($clip['text']);
-            if ($duration === null || $duration <= 0 || floor($duration) !== $duration) {
+            if ($limits['fixed_duration'] !== null && abs((float) $duration - $limits['fixed_duration']) > 0.01) {
                 return false;
             }
-            if ($limits['fixed_duration'] !== null && abs($duration - $limits['fixed_duration']) > 0.01) {
-                return false;
-            }
-            $durations[$clip['number']] = $duration;
         }
 
         if ($this->auditor->hasProjectOverviewSection($content)) {
-            $references = $this->auditor->overviewDurationReferences($content);
-            if ($references === [] || $this->auditor->overviewRuntimeReferences($content) === []) {
+            $references = $plan->overviewDurations;
+            if ($references === [] || $plan->overviewRuntimes === []) {
                 return false;
             }
             $referencedClips = array_unique(array_column($references, 'clip'));
@@ -350,7 +415,7 @@ class PromptRepairService
         }
 
         if ($this->auditor->hasClipPlanSection($content)) {
-            $references = $this->auditor->clipPlanDurationReferences($content);
+            $references = $plan->clipPlanDurations;
             if ($references === []) {
                 return false;
             }
@@ -376,11 +441,8 @@ class PromptRepairService
             return $content;
         }
 
-        $clips = $this->auditor->extractClips($content, $input);
-        $durations = [];
-        foreach ($clips as $clip) {
-            $durations[$clip['number']] = (float) $this->auditor->durationSeconds($clip['text']);
-        }
+        $plan = $this->auditor->canonicalProjectPlan($content, $input);
+        $durations = $plan->clipDurations();
         if ($durations === []) {
             return $content;
         }
@@ -388,7 +450,7 @@ class PromptRepairService
         $lineEnding = str_contains($content, "\r\n") ? "\r\n" : "\n";
         $lines = preg_split('/\R/u', str_replace("\r", '', $content)) ?: [];
         $updates = [];
-        foreach ($this->auditor->overviewDurationReferences($content) as $reference) {
+        foreach ($plan->overviewDurations as $reference) {
             if (array_key_exists($reference['clip'], $durations)) {
                 $updates[] = [
                     ...$reference,
@@ -396,13 +458,13 @@ class PromptRepairService
                 ];
             }
         }
-        foreach ($this->auditor->overviewRuntimeReferences($content) as $reference) {
+        foreach ($plan->overviewRuntimes as $reference) {
             $updates[] = [
                 ...$reference,
                 'replacement' => $this->overviewDurationValue(array_sum($durations), $reference['unit'], $reference['value']),
             ];
         }
-        foreach ($this->auditor->clipPlanDurationReferences($content) as $reference) {
+        foreach ($plan->clipPlanDurations as $reference) {
             if (array_key_exists($reference['clip'], $durations)) {
                 $updates[] = [
                     ...$reference,
@@ -437,6 +499,26 @@ class PromptRepairService
 
     private function overviewDurationValue(float $seconds, string $unit, string $existing): string
     {
+        if (in_array($unit, ['clock_mmss', 'clock_hhmmss'], true)) {
+            $wholeSeconds = max(0, (int) round($seconds));
+            $existingParts = explode(':', $existing);
+            if ($unit === 'clock_hhmmss') {
+                $hours = intdiv($wholeSeconds, 3600);
+                $minutes = intdiv($wholeSeconds % 3600, 60);
+                $remainder = $wholeSeconds % 60;
+
+                return str_pad((string) $hours, max(2, strlen($existingParts[0] ?? '00')), '0', STR_PAD_LEFT)
+                    .':'.str_pad((string) $minutes, max(2, strlen($existingParts[1] ?? '00')), '0', STR_PAD_LEFT)
+                    .':'.str_pad((string) $remainder, max(2, strlen($existingParts[2] ?? '00')), '0', STR_PAD_LEFT);
+            }
+
+            $minutes = intdiv($wholeSeconds, 60);
+            $remainder = $wholeSeconds % 60;
+
+            return str_pad((string) $minutes, max(1, strlen($existingParts[0] ?? '0')), '0', STR_PAD_LEFT)
+                .':'.str_pad((string) $remainder, max(2, strlen($existingParts[1] ?? '00')), '0', STR_PAD_LEFT);
+        }
+
         $minutes = str_starts_with(strtolower($unit), 'm');
         $value = $minutes ? $seconds / 60 : $seconds;
         $decimalPoint = strpos($existing, '.');
@@ -491,14 +573,15 @@ class PromptRepairService
     }
 
     /** @return array{changed: bool, rows: array<int, array{line_index: int, replacement: string}>, duration: int|null, old_duration: int}|null */
-    private function repairSpeechTiming(string $clipText, array $input, ?string $projectContent = null): ?array
+    private function repairSpeechTiming(array $clip, PromptProjectPlan $plan, array $input): ?array
     {
-        $durationValue = $this->auditor->durationSeconds($clipText);
-        if ($durationValue === null || $durationValue <= 0 || floor($durationValue) !== $durationValue) {
+        $clipText = (string) ($clip['text'] ?? '');
+        $durationValue = $clip['duration_seconds'] ?? null;
+        if (! is_numeric($durationValue) || (float) $durationValue <= 0 || floor((float) $durationValue) !== (float) $durationValue) {
             return null;
         }
 
-        $limits = $this->auditor->durationLimits($projectContent ?? $clipText, $input);
+        $limits = $plan->durationLimits;
         if ($limits['conflict']) {
             return null;
         }
@@ -511,25 +594,32 @@ class PromptRepairService
             return null;
         }
 
+        $speechRows = is_array($clip['speech_rows'] ?? null) ? $clip['speech_rows'] : [];
+        preg_match_all('/\\bLINE\\s*:/iu', $clipText, $rawSpeechLines);
+        if (count($rawSpeechLines[0] ?? []) !== count($speechRows)) {
+            return null;
+        }
+        $sourceLines = preg_split('/\\R/u', $clipText) ?: [];
         $rows = [];
-        $pattern = '/^\\s*(?:[-*+•–]\\s+)?(-?\\d+(?:\\.\\d+)?)\\s*(?:s)?\\s*(?:–|—|-|to)\\s*(-?\\d+(?:\\.\\d+)?)\\s*s\\s*\\|\\s*VISIBLE ACTION:\\s*(.*?)\\s*\\|\\s*SPEAKER:\\s*(.*?)\\s*\\|\\s*LINE:\\s*(.+?)\\s*$/iu';
-        foreach (preg_split('/\\R/u', $clipText) ?: [] as $lineIndex => $line) {
-            $normalized = str_replace(['**', '__', '`'], '', $line);
-            if (preg_match($pattern, $normalized, $match) !== 1) {
-                continue;
-            }
-            if (trim($match[3]) === '' || trim($match[4]) === '' || trim($match[5]) === '') {
+        foreach ($speechRows as $speechRow) {
+            $lineIndex = $speechRow['line_index'] ?? null;
+            if (! is_numeric($lineIndex) || ! isset($sourceLines[(int) $lineIndex])
+                || ! is_numeric($speechRow['start'] ?? null)
+                || ! is_numeric($speechRow['end'] ?? null)
+                || trim((string) ($speechRow['action'] ?? '')) === ''
+                || trim((string) ($speechRow['speaker'] ?? '')) === ''
+                || trim((string) ($speechRow['line'] ?? '')) === '') {
                 return null;
             }
 
-            $minimum = ceil($this->auditor->minimumSpeechSeconds($match[5]) * 10) / 10;
+            $minimum = ceil(((float) ($speechRow['minimum_seconds'] ?? $this->auditor->minimumSpeechSeconds($speechRow['line']))) * 10) / 10;
             $rows[] = [
-                'line_index' => $lineIndex,
-                'start' => (float) $match[1],
-                'end' => (float) $match[2],
+                'line_index' => (int) $lineIndex,
+                'start' => (float) $speechRow['start'],
+                'end' => (float) $speechRow['end'],
                 'minimum' => $minimum,
-                'existing' => max(0.0, (float) $match[2] - (float) $match[1]),
-                'suffix' => $this->speechSuffix($line),
+                'existing' => max(0.0, (float) $speechRow['end'] - (float) $speechRow['start']),
+                'suffix' => $this->speechSuffix($sourceLines[(int) $lineIndex]),
             ];
         }
 
@@ -547,9 +637,13 @@ class PromptRepairService
             ];
         }
 
-        $gap = 0.2;
-        $tail = 0.3;
-        $minimumTotal = array_sum(array_column($rows, 'minimum')) + ($gap * max(0, count($rows) - 1)) + $tail;
+        $speechPolicy = is_array($clip['speech_timing_policy'] ?? null)
+            ? $clip['speech_timing_policy']
+            : $this->auditor->speechTimingPolicy($clipText);
+        $leadIn = (float) ($speechPolicy['opening_visual_beat_seconds'] ?? 0.2);
+        $gap = (float) ($speechPolicy['inter_line_pause_seconds'] ?? 0.2);
+        $tail = (float) ($speechPolicy['ending_pause_seconds'] ?? 0.3);
+        $minimumTotal = $leadIn + array_sum(array_column($rows, 'minimum')) + ($gap * max(0, count($rows) - 1)) + $tail;
         if ($minimumTotal > $targetDuration) {
             if (! $aiSelected) {
                 return null;
@@ -564,10 +658,10 @@ class PromptRepairService
             static fn (array $row): float => max($row['minimum'], $row['existing']),
             $rows,
         );
-        $schedule = $this->speechSchedule($rows, $preferredDurations, $targetDuration, $gap, $tail, true);
+        $schedule = $this->speechSchedule($rows, $preferredDurations, $targetDuration, $gap, $leadIn, $tail, true);
         if ($schedule === null) {
             $minimumDurations = array_column($rows, 'minimum');
-            $schedule = $this->speechSchedule($rows, $minimumDurations, $targetDuration, $gap, $tail, false);
+            $schedule = $this->speechSchedule($rows, $minimumDurations, $targetDuration, $gap, $leadIn, $tail, false);
         }
         if ($schedule === null) {
             return null;
@@ -593,13 +687,13 @@ class PromptRepairService
     }
 
     /** @return array<int, array{0: float, 1: float}>|null */
-    private function speechSchedule(array $rows, array $durations, int $duration, float $gap, float $tail, bool $preserveTiming): ?array
+    private function speechSchedule(array $rows, array $durations, int $duration, float $gap, float $leadIn, float $tail, bool $preserveTiming): ?array
     {
         $schedule = [];
         $cursor = null;
         foreach ($rows as $index => $row) {
             $start = $index === 0
-                ? ($preserveTiming ? max(0.0, (float) $row['start']) : 0.0)
+                ? ($preserveTiming ? max($leadIn, (float) $row['start']) : $leadIn)
                 : ($preserveTiming ? max((float) $row['start'], (float) $cursor + $gap) : (float) $cursor + $gap);
             $end = $start + $durations[$index];
             $schedule[] = [$start, $end];
@@ -611,7 +705,7 @@ class PromptRepairService
                 return null;
             }
 
-            return $this->speechSchedule($rows, $durations, $duration, $gap, $tail, false);
+            return $this->speechSchedule($rows, $durations, $duration, $gap, $leadIn, $tail, false);
         }
 
         return $schedule;
@@ -665,10 +759,26 @@ class PromptRepairService
         return $values;
     }
 
+    /** @param array<int, array<string, mixed>> $pairs @return array<int, array<string, mixed>> */
+    private function prioritizeStatePairs(array $pairs): array
+    {
+        $finalPair = [];
+        $otherPairs = [];
+        foreach ($pairs as $pair) {
+            if (($pair['is_final_handoff'] ?? false) === true) {
+                $finalPair[] = $pair;
+            } else {
+                $otherPairs[] = $pair;
+            }
+        }
+
+        return [...$finalPair, ...$otherPairs];
+    }
+
     /** @return array<int, array<string, mixed>> */
     private function stateMismatchPairs(string $content, array $input, array $review): array
     {
-        $clips = $this->auditor->extractClips($content, $input);
+        $clips = $this->auditor->canonicalProjectPlan($content, $input)->clips;
         $pairs = [];
         foreach ($clips as $index => $next) {
             if ($index === 0) {
@@ -684,33 +794,21 @@ class PromptRepairService
             $pairs[] = [
                 'pair' => count($pairs) + 1,
                 'physical' => $physical ? [
-                    'prior' => $this->auditor->fieldValue($previous['text'], 'ENDING CONTINUITY STATE'),
-                    'next' => $this->auditor->fieldValue($next['text'], 'OPENING CONTINUITY STATE'),
+                    'prior' => $previous['ending_continuity_state'],
+                    'next' => $next['opening_continuity_state'],
                 ] : null,
                 'presentation' => $presentation ? [
-                    'prior' => $this->auditor->fieldValue($previous['text'], 'ENDING PRESENTATION STATE'),
-                    'next' => $this->auditor->fieldValue($next['text'], 'OPENING PRESENTATION STATE'),
+                    'prior' => $previous['ending_presentation_state'],
+                    'next' => $next['opening_presentation_state'],
                 ] : null,
                 'prior_clip' => $previous,
                 'next_clip' => $next,
-                'handoff' => $this->handoffType($previous['text']),
+                'is_final_handoff' => $index === count($clips) - 1,
+                'handoff' => $previous['outgoing_type'],
             ];
         }
 
         return $pairs;
-    }
-
-    private function handoffType(string $text): ?string
-    {
-        $value = $this->auditor->fieldValue($text, 'OUTGOING HANDOFF TYPE');
-        if ($value === null) {
-            return null;
-        }
-        if (preg_match('/\bTYPE\s*([ABC])\b/i', $value, $match) === 1) {
-            return strtoupper($match[1]);
-        }
-
-        return null;
     }
 
     private function buildStateRepairBrief(array $pairs, array $input): string
@@ -853,7 +951,7 @@ class PromptRepairService
                     continue;
                 }
 
-                $clips = $this->auditor->extractClips($content, $input);
+                $clips = $this->auditor->canonicalProjectPlan($content, $input)->clips;
                 $previous = $this->findClip($clips, $pair['prior_clip']['number']);
                 $next = $this->findClip($clips, $pair['next_clip']['number']);
                 if ($previous === null || $next === null) {
@@ -973,7 +1071,7 @@ class PromptRepairService
         $key = $code.':'.(string) ($issue['clip'] ?? 'all');
         $message = (string) ($issue['message'] ?? '');
 
-        if (in_array($code, ['speech_map_incomplete', 'speech_time_range_invalid', 'speech_exceeds_clip', 'speech_overrun'], true)
+        if (in_array($code, ['speech_map_incomplete', 'speech_time_range_invalid', 'speech_exceeds_clip', 'speech_overrun', 'speech_inter_line_pause_missing'], true)
             && preg_match('/\bspeech\s+row\s+(\d+)/i', $message, $match) === 1) {
             return $key.':row:'.$match[1];
         }
@@ -996,6 +1094,7 @@ class PromptRepairService
         array $notes,
         bool $attempted,
         array $rejectedCandidateIssues = [],
+        bool $retryable = false,
     ): array {
         return [
             'content' => $content,
@@ -1003,6 +1102,7 @@ class PromptRepairService
             'repair_report' => [
                 'outcome' => $outcome,
                 'attempted' => $attempted,
+                'retryable' => $retryable,
                 'applied' => $applied,
                 'fixed' => array_values($fixed),
                 'unresolved' => array_values($unresolved),

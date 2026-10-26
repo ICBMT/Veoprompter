@@ -37,9 +37,13 @@ class PromptHistoryController extends Controller
         abort_unless((int) $project->user_id === (int) $request->user()->id, 404);
 
         $project->load('studioProject');
+        $brief = is_array($project->brief) ? $project->brief : [];
         $qualityReview = is_array($project->quality_review)
             ? $project->quality_review
-            : $auditor->audit((string) $project->content, is_array($project->brief) ? $project->brief : []);
+            : $auditor->audit((string) $project->content, $brief);
+        $repairHistory = is_array($project->repair_history) ? $project->repair_history : [];
+        $repairSignature = PromptRepairService::repairSignature((string) $project->content, $brief, $qualityReview);
+        $sameNoProgressRepairBlocked = PromptRepairService::hasNonRetryableNoProgress($repairHistory, $repairSignature);
 
         return view('history.show', [
             'project' => $project,
@@ -48,8 +52,9 @@ class PromptHistoryController extends Controller
             'manualRepairAttempts' => PromptRepairService::manualAttempts($project->repair_history ?? []),
             'maxRepairAttempts' => PromptRepairService::MAX_MANUAL_ATTEMPTS,
             'hasQaIssues' => ! empty($qualityReview['issues']),
-            'canRepair' => PromptRepairService::manualAttempts($project->repair_history ?? []) < PromptRepairService::MAX_MANUAL_ATTEMPTS
-                && PromptRepairService::hasSupportedIssues($qualityReview),
+            'canRepair' => PromptRepairService::manualAttempts($repairHistory) < PromptRepairService::MAX_MANUAL_ATTEMPTS
+                && PromptRepairService::hasSupportedIssues($qualityReview)
+                && ! $sameNoProgressRepairBlocked,
             'canRestoreOriginal' => is_string($project->original_content) && $project->content !== $project->original_content,
         ]);
     }
