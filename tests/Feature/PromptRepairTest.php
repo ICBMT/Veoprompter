@@ -86,6 +86,7 @@ class PromptRepairTest extends TestCase
         $state = 'cast=None; object=bee over flower; stage=pollen transfer; environment=garden';
         $presentation = 'camera=macro; lighting=daylight; audio=soft garden ambience';
         $content = "## PROJECT OVERVIEW\n- Clip 1 — 4 seconds\n- Approximate total runtime: 4 seconds\n\n"
+            ."## SECTION 7 — CLIP PLAN AND CONTINUITY MAP\n- Clip 1 — Gather pollen\n  - Exact duration: 4 seconds\n\n## SECTION 8 — COPY-AND-PASTE VIDEO PROMPTS\n"
             .$this->clip(1, 'INITIAL CLIP — NO PREVIOUS HANDOFF', 'FINAL — NO NEXT HANDOFF', $state, $state);
         $content = str_replace(
             '- 0.0–2.0s | VISIBLE ACTION: the seed settles into soil | SPEAKER: Narrator | LINE: “The bee carries pollen.”',
@@ -116,6 +117,7 @@ class PromptRepairTest extends TestCase
         $this->assertSame($content, $repaired->original_content);
         $this->assertStringContainsString('CLIP DURATION: 5 seconds', $repaired->content);
         $this->assertStringContainsString('- Clip 1 — 5 seconds', $repaired->content);
+        $this->assertStringContainsString('Exact duration: 5 seconds', $repaired->content);
         $this->assertStringContainsString('- Approximate total runtime: 5 seconds', $repaired->content);
         $this->assertStringContainsString('“The bee carries pollen.”', $repaired->content);
         $this->assertStringContainsString('“It reaches another flower.”', $repaired->content);
@@ -159,7 +161,7 @@ class PromptRepairTest extends TestCase
         $this->assertSame([], $run->fresh()->repair_history);
         $this->get(route('history.show', $run))
             ->assertOk()
-            ->assertSee('Auto-Fix Issues');
+            ->assertSee('Manual review needed');
     }
 
     public function test_manual_repair_attempts_are_capped_at_two_and_restore_does_not_increase_the_repair_count(): void

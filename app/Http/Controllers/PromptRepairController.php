@@ -61,7 +61,8 @@ class PromptRepairController extends Controller
                     'unresolved' => $issues,
                     'new_issues' => [],
                     'rejected_candidate_issues' => [],
-                    'notes' => $issues === [] ? [] : ['No safe automatic repair applies to the remaining QA findings.'],
+                    'informational' => $issues === [] ? [] : ['No additional safe automatic repair applies to the remaining QA findings.'],
+                    'notes' => $issues === [] ? [] : ['No additional safe automatic repair applies to the remaining QA findings.'],
                 ],
                 'manual_attempts' => $manualAttempts,
                 'max_attempts' => PromptRepairService::MAX_MANUAL_ATTEMPTS,
@@ -267,6 +268,9 @@ class PromptRepairController extends Controller
             'unresolved' => $review['issues'] ?? [],
             'new_issues' => [],
             'rejected_candidate_issues' => [],
+            'informational' => [$restored['changed']
+                ? 'The original generated prompt was restored and the full QA audit was rerun.'
+                : 'The saved prompt already matches its original version; the full QA audit was rerun.'],
             'notes' => [$restored['changed']
                 ? 'The original generated prompt was restored and the full QA audit was rerun.'
                 : 'The saved prompt already matches its original version; the full QA audit was rerun.'],

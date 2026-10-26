@@ -35,7 +35,12 @@ class PromptRepairService
             'presentation_state_mismatch',
             'overview_clip_duration_mismatch',
             'overview_total_runtime_mismatch',
+            'clip_plan_duration_mismatch',
+            'declared_duration_constraint_violation',
+            'ai_duration_over_limit',
             'continuity_audit_overclaim',
+            'timing_audit_overclaim',
+            'speech_pacing_overclaim',
             ...self::SPEECH_REPAIR_CODES,
         ], true);
     }
@@ -233,20 +238,36 @@ class PromptRepairService
         $content = implode($lineEnding, $lines);
         $clips = $this->auditor->extractClips($content, $input);
         $speechIssueClips = [];
+        $durationIssueClips = [];
         foreach ($review['issues'] as $issue) {
-            if (in_array($issue['code'], self::SPEECH_REPAIR_CODES, true) && $issue['clip'] !== null) {
+            if ($issue['clip'] === null) {
+                continue;
+            }
+            if (in_array($issue['code'], self::SPEECH_REPAIR_CODES, true)) {
                 $speechIssueClips[$issue['clip']] = true;
+            }
+            if (in_array($issue['code'], ['declared_duration_constraint_violation', 'ai_duration_over_limit'], true)) {
+                $durationIssueClips[$issue['clip']] = true;
             }
         }
 
         foreach ($clips as $clip) {
-            if (! isset($speechIssueClips[$clip['number']])) {
+            $hasSpeechIssue = isset($speechIssueClips[$clip['number']]);
+            $hasDurationIssue = isset($durationIssueClips[$clip['number']]);
+            if (! $hasSpeechIssue && ! $hasDurationIssue) {
                 continue;
             }
 
-            $timing = $this->repairSpeechTiming($clip['text'], $input);
+            $timing = $this->repairSpeechTiming($clip['text'], $input, $content);
             if ($timing === null) {
-                $notes[] = 'Clip '.$clip['number'].' dialogue was preserved; its existing timing cannot fit the selected duration safely, so speech findings remain for review.';
+                $notes[] = $hasSpeechIssue
+                    ? 'Clip '.$clip['number'].' dialogue was preserved; its existing timing cannot fit the effective project and saved duration limits safely, so the findings remain for review.'
+                    : 'Clip '.$clip['number'].' duration was left unchanged because no safe repair fits the effective project and saved duration limits.';
+                continue;
+            }
+            if ($timing['duration'] !== null && $timing['duration'] !== $timing['old_duration']
+                && ! $this->canSynchronizeDurationRepresentations($content, $input)) {
+                $notes[] = 'Clip '.$clip['number'].' duration and speech timing were left unchanged because not every declared timing representation can be synchronized safely.';
                 continue;
             }
             if ($timing['changed']) {
@@ -258,75 +279,134 @@ class PromptRepairService
                 }
                 if ($timing['duration'] !== null && $timing['duration'] !== $timing['old_duration']) {
                     $this->replaceField($lines, $clip, 'CLIP DURATION', $timing['duration'].' seconds');
-                    $notes[] = 'Clip '.$clip['number'].' received '.$timing['duration'].' seconds because its AI-selected duration was too short for the unchanged dialogue.';
+                    $notes[] = 'Clip '.$clip['number'].' duration was changed to '.$timing['duration'].' seconds within the effective project and saved limits; unchanged dialogue was preserved.';
                 }
-                $notes[] = 'Clip '.$clip['number'].' speech windows were re-timed without changing dialogue or visible-action text.';
+                if ($hasSpeechIssue) {
+                    $notes[] = 'Clip '.$clip['number'].' speech windows were re-timed without changing dialogue or visible-action text.';
+                }
             }
         }
 
         $content = implode($lineEnding, $lines);
-        $content = $this->synchronizeOverviewDurations($content, $input, $notes);
+        $content = $this->synchronizeDurationRepresentations($content, $input, $notes);
 
-        if ($this->hasIssue($this->auditor->audit($content, $input), 'continuity_audit_overclaim', null)) {
+        $finalAuditReview = $this->auditor->audit($content, $input);
+        if ($this->hasIssue($finalAuditReview, 'continuity_audit_overclaim', null)
+            || $this->hasIssue($finalAuditReview, 'timing_audit_overclaim', null)
+            || $this->hasIssue($finalAuditReview, 'speech_pacing_overclaim', null)) {
             $content = $this->correctFinalContinuityAuditClaims($content, $notes);
         }
 
         return $content;
     }
 
-    private function synchronizeOverviewDurations(string $content, array $input, array &$notes): string
+    private function canSynchronizeDurationRepresentations(string $content, array $input): bool
     {
         if (($input['mode'] ?? 'story') === 'extend') {
+            return true;
+        }
+
+        $limits = $this->auditor->durationLimits($content, $input);
+        if ($limits['conflict']) {
+            return false;
+        }
+
+        $clips = $this->auditor->extractClips($content, $input);
+        if ($clips === []) {
+            return false;
+        }
+
+        $durations = [];
+        foreach ($clips as $index => $clip) {
+            if ($clip['number'] !== $index + 1 || array_key_exists($clip['number'], $durations)) {
+                return false;
+            }
+            $duration = $this->auditor->durationSeconds($clip['text']);
+            if ($duration === null || $duration <= 0 || floor($duration) !== $duration) {
+                return false;
+            }
+            if ($limits['fixed_duration'] !== null && abs($duration - $limits['fixed_duration']) > 0.01) {
+                return false;
+            }
+            $durations[$clip['number']] = $duration;
+        }
+
+        if ($this->auditor->hasProjectOverviewSection($content)) {
+            $references = $this->auditor->overviewDurationReferences($content);
+            if ($references === [] || $this->auditor->overviewRuntimeReferences($content) === []) {
+                return false;
+            }
+            $referencedClips = array_unique(array_column($references, 'clip'));
+            foreach (array_keys($durations) as $clipNumber) {
+                if (! in_array($clipNumber, $referencedClips, true)) {
+                    return false;
+                }
+            }
+            foreach ($referencedClips as $clipNumber) {
+                if (! array_key_exists($clipNumber, $durations)) {
+                    return false;
+                }
+            }
+        }
+
+        if ($this->auditor->hasClipPlanSection($content)) {
+            $references = $this->auditor->clipPlanDurationReferences($content);
+            if ($references === []) {
+                return false;
+            }
+            $referencedClips = array_unique(array_column($references, 'clip'));
+            foreach (array_keys($durations) as $clipNumber) {
+                if (! in_array($clipNumber, $referencedClips, true)) {
+                    return false;
+                }
+            }
+            foreach ($referencedClips as $clipNumber) {
+                if (! array_key_exists($clipNumber, $durations)) {
+                    return false;
+                }
+            }
+        }
+
+        return true;
+    }
+
+    private function synchronizeDurationRepresentations(string $content, array $input, array &$notes): string
+    {
+        if (($input['mode'] ?? 'story') === 'extend' || ! $this->canSynchronizeDurationRepresentations($content, $input)) {
             return $content;
         }
 
         $clips = $this->auditor->extractClips($content, $input);
         $durations = [];
         foreach ($clips as $clip) {
-            if (array_key_exists($clip['number'], $durations)) {
-                $notes[] = 'Project-overview timing was left unchanged because duplicate clip numbers make synchronization ambiguous.';
-                return $content;
-            }
-            $duration = $this->auditor->durationSeconds($clip['text']);
-            if ($duration !== null && $duration > 0) {
-                $durations[$clip['number']] = $duration;
-            }
+            $durations[$clip['number']] = (float) $this->auditor->durationSeconds($clip['text']);
         }
-
         if ($durations === []) {
             return $content;
-        }
-
-        $durationChoice = $input['clip_duration'] ?? ProjectSettings::AI_CHOICE;
-        if (! ProjectSettings::isAiChoice($durationChoice) && is_numeric($durationChoice)) {
-            foreach ($durations as $duration) {
-                if (abs($duration - (float) $durationChoice) > 0.01) {
-                    $notes[] = 'Project-overview timing was left unchanged because a copy-ready duration conflicts with the selected fixed manual duration.';
-                    return $content;
-                }
-            }
         }
 
         $lineEnding = str_contains($content, "\r\n") ? "\r\n" : "\n";
         $lines = preg_split('/\R/u', str_replace("\r", '', $content)) ?: [];
         $updates = [];
         foreach ($this->auditor->overviewDurationReferences($content) as $reference) {
-            if (! array_key_exists($reference['clip'], $durations)) {
-                continue;
-            }
-            $updates[] = [
-                ...$reference,
-                'replacement' => $this->overviewDurationValue($durations[$reference['clip']], $reference['unit'], $reference['value']),
-            ];
-        }
-
-        $allClipDurationsKnown = count($durations) === count($clips);
-        if ($allClipDurationsKnown) {
-            $total = array_sum($durations);
-            foreach ($this->auditor->overviewRuntimeReferences($content) as $reference) {
+            if (array_key_exists($reference['clip'], $durations)) {
                 $updates[] = [
                     ...$reference,
-                    'replacement' => $this->overviewDurationValue($total, $reference['unit'], $reference['value']),
+                    'replacement' => $this->overviewDurationValue($durations[$reference['clip']], $reference['unit'], $reference['value']),
+                ];
+            }
+        }
+        foreach ($this->auditor->overviewRuntimeReferences($content) as $reference) {
+            $updates[] = [
+                ...$reference,
+                'replacement' => $this->overviewDurationValue(array_sum($durations), $reference['unit'], $reference['value']),
+            ];
+        }
+        foreach ($this->auditor->clipPlanDurationReferences($content) as $reference) {
+            if (array_key_exists($reference['clip'], $durations)) {
+                $updates[] = [
+                    ...$reference,
+                    'replacement' => $this->overviewDurationValue($durations[$reference['clip']], $reference['unit'], $reference['value']),
                 ];
             }
         }
@@ -350,7 +430,7 @@ class PromptRepairService
             return $content;
         }
 
-        $notes[] = 'Synchronized project-overview clip durations and total runtime with the final copy-ready CLIP DURATION values.';
+        $notes[] = 'Synchronized all parseable project-overview, clip-plan / shot-list durations, and total runtime with the final copy-ready CLIP DURATION values.';
 
         return implode($lineEnding, $lines);
     }
@@ -370,40 +450,70 @@ class PromptRepairService
 
     private function correctFinalContinuityAuditClaims(string $content, array &$notes): string
     {
-        $claimLines = $this->auditor->continuityAuditClaimLineIndexes($content);
+        $claimGroups = [
+            'continuity' => $this->auditor->continuityAuditClaimLineIndexes($content),
+            'timing' => $this->auditor->timingAuditClaimLineIndexes($content),
+            'speech' => $this->auditor->speechPacingAuditClaimLineIndexes($content),
+        ];
+        $claimLines = [];
+        foreach ($claimGroups as $kind => $indexes) {
+            foreach ($indexes as $index) {
+                $claimLines[$index][$kind] = true;
+            }
+        }
         if ($claimLines === []) {
             return $content;
         }
 
         $lineEnding = str_contains($content, "\r\n") ? "\r\n" : "\n";
         $lines = preg_split('/\R/u', str_replace("\r", '', $content)) ?: [];
-        foreach ($claimLines as $lineIndex) {
+        foreach ($claimLines as $lineIndex => $kinds) {
             if (! isset($lines[$lineIndex])) {
                 continue;
             }
             preg_match('/^\\s*(?:(?:[-*+]\\s+)|(?:>\\s*)?)?/u', $lines[$lineIndex], $prefix);
-            $lines[$lineIndex] = ($prefix[0] ?? '').'Handoffs with compatible, mismatched, or unverified states are not verbatim copies; reserve exact-copy claims for verified structured and written matches.';
+            $evidenceBasedLines = [];
+            if (isset($kinds['continuity'])) {
+                $evidenceBasedLines[] = 'Handoffs with compatible, mismatched, or unverified states are not verbatim copies; reserve exact-copy claims for verified structured and written matches.';
+            }
+            if (isset($kinds['timing'])) {
+                $evidenceBasedLines[] = 'Timing claims reflect parsed QA only; overview totals are compared with the final clip sum, and clip-plan values are checked when present. Missing or conflicting timings remain for review.';
+            }
+            if (isset($kinds['speech'])) {
+                $evidenceBasedLines[] = 'Text QA uses conservative word-time estimates; actual delivery and same-clip visual alignment still require human review.';
+            }
+            $lines[$lineIndex] = ($prefix[0] ?? '').implode(' ', $evidenceBasedLines);
         }
 
-        $notes[] = 'Corrected the final continuity-audit wording so non-exact handoffs are not described as verbatim copies.';
+        $notes[] = 'Rephrased final-audit claims to match the evidence available from full text QA; actual speech delivery and rendered visuals remain for human review.';
 
         return implode($lineEnding, $lines);
     }
 
     /** @return array{changed: bool, rows: array<int, array{line_index: int, replacement: string}>, duration: int|null, old_duration: int}|null */
-    private function repairSpeechTiming(string $clipText, array $input): ?array
+    private function repairSpeechTiming(string $clipText, array $input, ?string $projectContent = null): ?array
     {
         $durationValue = $this->auditor->durationSeconds($clipText);
         if ($durationValue === null || $durationValue <= 0 || floor($durationValue) !== $durationValue) {
             return null;
         }
 
-        $durationChoice = $input['clip_duration'] ?? ProjectSettings::AI_CHOICE;
-        $aiSelected = ProjectSettings::isAiChoice($durationChoice);
-        $rows = [];
-        $pattern = '/^\s*(?:[-*+•–]\s+)?(-?\d+(?:\.\d+)?)\s*(?:s)?\s*(?:–|—|-|to)\s*(-?\d+(?:\.\d+)?)\s*s\s*\|\s*VISIBLE ACTION:\s*(.*?)\s*\|\s*SPEAKER:\s*(.*?)\s*\|\s*LINE:\s*(.+?)\s*$/iu';
+        $limits = $this->auditor->durationLimits($projectContent ?? $clipText, $input);
+        if ($limits['conflict']) {
+            return null;
+        }
+        $aiSelected = $limits['is_ai_selected'];
+        $oldDuration = (int) $durationValue;
+        $targetDuration = $oldDuration;
+        if ($aiSelected) {
+            $targetDuration = max($limits['minimum'], min($targetDuration, $limits['maximum']));
+        } elseif ($limits['fixed_duration'] === null || $oldDuration !== $limits['fixed_duration']) {
+            return null;
+        }
 
-        foreach (preg_split('/\R/u', $clipText) ?: [] as $lineIndex => $line) {
+        $rows = [];
+        $pattern = '/^\\s*(?:[-*+•–]\\s+)?(-?\\d+(?:\\.\\d+)?)\\s*(?:s)?\\s*(?:–|—|-|to)\\s*(-?\\d+(?:\\.\\d+)?)\\s*s\\s*\\|\\s*VISIBLE ACTION:\\s*(.*?)\\s*\\|\\s*SPEAKER:\\s*(.*?)\\s*\\|\\s*LINE:\\s*(.+?)\\s*$/iu';
+        foreach (preg_split('/\\R/u', $clipText) ?: [] as $lineIndex => $line) {
             $normalized = str_replace(['**', '__', '`'], '', $line);
             if (preg_match($pattern, $normalized, $match) !== 1) {
                 continue;
@@ -424,24 +534,30 @@ class PromptRepairService
         }
 
         if ($rows === []) {
-            return null;
+            $audioOff = in_array(strtolower((string) ($input['narration'] ?? '1')), ['0', 'false', 'off', 'none'], true);
+            if (! $audioOff || $targetDuration === $oldDuration) {
+                return null;
+            }
+
+            return [
+                'changed' => true,
+                'rows' => [],
+                'duration' => $targetDuration,
+                'old_duration' => $oldDuration,
+            ];
         }
 
         $gap = 0.2;
         $tail = 0.3;
         $minimumTotal = array_sum(array_column($rows, 'minimum')) + ($gap * max(0, count($rows) - 1)) + $tail;
-        $oldDuration = (int) $durationValue;
-        $targetDuration = $oldDuration;
         if ($minimumTotal > $targetDuration) {
-            if (! $aiSelected || $minimumTotal > 10) {
+            if (! $aiSelected) {
                 return null;
             }
-            $targetDuration = (int) ceil($minimumTotal);
-        } elseif ($aiSelected && $targetDuration > 10) {
-            $targetDuration = 10;
-            if ($minimumTotal > $targetDuration) {
-                return null;
-            }
+            $targetDuration = max($limits['minimum'], (int) ceil($minimumTotal));
+        }
+        if ($targetDuration < $limits['minimum'] || $targetDuration > $limits['maximum']) {
+            return null;
         }
 
         $preferredDurations = array_map(
@@ -892,6 +1008,7 @@ class PromptRepairService
                 'unresolved' => array_values($unresolved),
                 'new_issues' => array_values($newIssues),
                 'rejected_candidate_issues' => array_values($rejectedCandidateIssues),
+                'informational' => array_values(array_unique($notes)),
                 'notes' => array_values(array_unique($notes)),
             ],
         ];

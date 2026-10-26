@@ -121,6 +121,7 @@ class PromptRepairServiceTest extends TestCase
             '- 1.5–2.5s | VISIBLE ACTION: the bee reaches another bloom | SPEAKER: Narrator | LINE: “It reaches another flower.”',
         ];
         $content = "## PROJECT OVERVIEW\n- Clip 1 — 4 seconds\n- Approximate total runtime: 4 seconds\n\n"
+            ."## SECTION 7 — CLIP PLAN AND CONTINUITY MAP\n- Clip 1 — Gather pollen\n  - Exact duration: 4 seconds\n\n## SECTION 8 — COPY-AND-PASTE VIDEO PROMPTS\n"
             .$this->clip(1, 'INITIAL CLIP — NO PREVIOUS HANDOFF', 'FINAL — NO NEXT HANDOFF', $state, $state, $presentation, $presentation, duration: 4, speechRows: $rows);
         $service = new PromptRepairService($this->auditor, Mockery::mock(PromptGenerationService::class));
 
@@ -130,12 +131,144 @@ class PromptRepairServiceTest extends TestCase
         $this->assertContains('speech_rows_overlap', array_column($before['issues'], 'code'));
         $this->assertSame('CLIP DURATION: 5 seconds', $this->auditor->fieldValue($result['content'], 'CLIP DURATION'));
         $this->assertStringContainsString('- Clip 1 — 5 seconds', $result['content']);
+        $this->assertStringContainsString('Exact duration: 5 seconds', $result['content']);
         $this->assertStringContainsString('- Approximate total runtime: 5 seconds', $result['content']);
         $this->assertStringContainsString('- 0.0–2.0s | VISIBLE ACTION: the bee gathers pollen | SPEAKER: Narrator | LINE: “The bee carries pollen.”', $result['content']);
         $this->assertStringContainsString('- 2.2–4.2s | VISIBLE ACTION: the bee reaches another bloom | SPEAKER: Narrator | LINE: “It reaches another flower.”', $result['content']);
         $this->assertSame('passed', $result['quality_review']['status']);
         $this->assertSame([], $result['repair_report']['new_issues']);
         $this->assertTrue($result['repair_report']['applied']);
+    }
+
+    public function test_project_duration_range_prevents_dialogue_from_forcing_an_over_limit_expansion(): void
+    {
+        $state = 'cast=None; object=turning gear; stage=rotating; environment=workshop';
+        $presentation = 'camera=close-up; lighting=neutral; audio=machine hum';
+        $dialogue = '“One two three four five six seven eight nine ten eleven twelve thirteen fourteen fifteen sixteen seventeen eighteen nineteen twenty twenty-one twenty-two twenty-three.”';
+        $row = '- 0.0–4.0s | VISIBLE ACTION: the gear rotates | SPEAKER: Narrator | LINE: '.$dialogue;
+        $content = "## PROJECT OVERVIEW\nProject clip duration range: 3–7 seconds.\n- Clip 1 — 4 seconds\n- Approximate total runtime: 4 seconds\n\n"
+            .$this->clip(1, 'INITIAL CLIP — NO PREVIOUS HANDOFF', 'FINAL — NO NEXT HANDOFF', $state, $state, $presentation, $presentation, duration: 4, speechRows: [$row]);
+        $service = new PromptRepairService($this->auditor, Mockery::mock(PromptGenerationService::class));
+
+        $result = $service->repair(null, $content, $this->input());
+
+        $this->assertSame($content, $result['content']);
+        $this->assertStringContainsString($dialogue, $result['content']);
+        $this->assertContains('speech_overrun', array_column($result['repair_report']['unresolved'], 'code'));
+        $this->assertNotContains('speech_overrun', array_column($result['repair_report']['fixed'], 'code'));
+        $this->assertNotContains('declared_duration_constraint_violation', array_column($result['quality_review']['issues'], 'code'));
+        $this->assertFalse($result['repair_report']['applied']);
+    }
+
+    public function test_safe_duration_repair_clamps_to_project_range_and_synchronizes_every_timing_reference(): void
+    {
+        $state = 'cast=None; object=small brass gear; stage=polished; environment=workshop';
+        $presentation = 'camera=macro; lighting=neutral; audio=quiet room tone';
+        $silent = $this->clip(1, 'INITIAL CLIP — NO PREVIOUS HANDOFF', 'FINAL — NO NEXT HANDOFF', $state, $state, $presentation, $presentation, duration: 8, speechRows: []);
+        $silent = str_replace('SPEECH/VISUAL MAP:', 'SPEECH/VISUAL MAP: None — spoken audio is off', $silent);
+        $content = "## PROJECT OVERVIEW\nAll clips must stay between 3 and 7 seconds.\n- Clip 1 — 8 seconds\n- Approximate total runtime: 8 seconds\n\n"
+            ."## SECTION 7 — CLIP PLAN AND CONTINUITY MAP\n- Clip 1 — Inspect the polished gear\n  - Exact duration: 8 seconds\n\n## SECTION 8 — COPY-AND-PASTE VIDEO PROMPTS\n"
+            .$silent;
+        $service = new PromptRepairService($this->auditor, Mockery::mock(PromptGenerationService::class));
+
+        $before = $this->auditor->audit($content, $this->input(['narration' => '0']));
+        $result = $service->repair(null, $content, $this->input(['narration' => '0']));
+
+        $this->assertContains('declared_duration_constraint_violation', array_column($before['issues'], 'code'));
+        $this->assertSame('CLIP DURATION: 7 seconds', $this->auditor->fieldValue($result['content'], 'CLIP DURATION'));
+        $this->assertStringContainsString('- Clip 1 — 7 seconds', $result['content']);
+        $this->assertStringContainsString('Exact duration: 7 seconds', $result['content']);
+        $this->assertStringContainsString('- Approximate total runtime: 7 seconds', $result['content']);
+        $this->assertSame('passed', $result['quality_review']['status']);
+        $this->assertContains('declared_duration_constraint_violation', array_column($result['repair_report']['fixed'], 'code'));
+        $this->assertNotContains('declared_duration_constraint_violation', array_column($result['repair_report']['unresolved'], 'code'));
+        $this->assertSame([], $result['repair_report']['new_issues']);
+    }
+
+    public function test_incomplete_clip_plan_blocks_duration_expansion_instead_of_leaving_a_stale_plan(): void
+    {
+        $state = 'cast=None; object=bee near a flower; stage=pollen transfer; environment=garden';
+        $presentation = 'camera=macro; lighting=daylight; audio=soft garden ambience';
+        $rows = [
+            '- 0.0–2.0s | VISIBLE ACTION: the bee gathers pollen | SPEAKER: Narrator | LINE: “The bee carries pollen.”',
+            '- 1.5–2.5s | VISIBLE ACTION: the bee reaches a bloom | SPEAKER: Narrator | LINE: “It reaches another flower.”',
+        ];
+        $content = "## SECTION 7 — CLIP PLAN AND CONTINUITY MAP\n- Clip 1 — Gather pollen\n  - Exact duration: to be determined\n\n## SECTION 8 — COPY-AND-PASTE VIDEO PROMPTS\n"
+            .$this->clip(1, 'INITIAL CLIP — NO PREVIOUS HANDOFF', 'FINAL — NO NEXT HANDOFF', $state, $state, $presentation, $presentation, duration: 4, speechRows: $rows);
+        $service = new PromptRepairService($this->auditor, Mockery::mock(PromptGenerationService::class));
+
+        $result = $service->repair(null, $content, $this->input());
+
+        $this->assertSame($content, $result['content']);
+        $this->assertSame('CLIP DURATION: 4 seconds', $this->auditor->fieldValue($result['content'], 'CLIP DURATION'));
+        $this->assertContains('clip_plan_duration_missing', array_column($result['repair_report']['unresolved'], 'code'));
+        $this->assertContains('speech_rows_overlap', array_column($result['repair_report']['unresolved'], 'code'));
+        $this->assertNotContains('speech_rows_overlap', array_column($result['repair_report']['fixed'], 'code'));
+    }
+
+    public function test_final_audit_claims_are_rephrased_from_qa_evidence_and_remaining_findings_stay_unresolved(): void
+    {
+        $state = 'cast=None; object=turning gear; stage=rotating; environment=workshop';
+        $dialogue = '“One two three four five six seven eight nine ten eleven twelve thirteen fourteen fifteen sixteen seventeen eighteen nineteen twenty twenty-one twenty-two twenty-three.”';
+        $row = '- 0.0–1.0s | VISIBLE ACTION: the gear turns | SPEAKER: Narrator | LINE: '.$dialogue;
+        $clip = $this->clip(1, 'INITIAL CLIP — NO PREVIOUS HANDOFF', 'FINAL — NO NEXT HANDOFF', $state, $state, duration: 4, speechRows: [$row]);
+        $content = $clip."\n\n### FINAL CONTINUITY AUDIT\n- All clip durations are synchronized, and every spoken line respects natural pacing.";
+        $service = new PromptRepairService($this->auditor, Mockery::mock(PromptGenerationService::class));
+
+        $result = $service->repair(null, $content, $this->input());
+        $fixedCodes = array_column($result['repair_report']['fixed'], 'code');
+        $unresolvedCodes = array_column($result['repair_report']['unresolved'], 'code');
+
+        $this->assertStringContainsString('Timing claims reflect parsed QA only', $result['content']);
+        $this->assertStringContainsString('actual delivery and same-clip visual alignment still require human review', $result['content']);
+        $this->assertContains('speech_overrun', $unresolvedCodes);
+        $this->assertNotContains('speech_overrun', $fixedCodes);
+        $this->assertContains('timing_audit_overclaim', $fixedCodes);
+        $this->assertContains('speech_pacing_overclaim', $fixedCodes);
+        $this->assertEmpty(array_intersect($fixedCodes, $unresolvedCodes));
+        $this->assertTrue($result['repair_report']['applied']);
+    }
+
+    public function test_new_issue_in_a_rejected_repair_candidate_is_not_reported_as_fixed_or_saved(): void
+    {
+        $previous = 'cast=None; object=glass vial; level=half full; environment=lab';
+        $reordered = 'environment=lab; level=half full; object=glass vial; cast=None';
+        $content = $this->clip(1, 'INITIAL CLIP — NO PREVIOUS HANDOFF', 'TYPE A — DIRECT CONTINUATION', $previous, $previous)
+            ."\n".$this->clip(2, 'TYPE A — DIRECT CONTINUATION', 'FINAL — NO NEXT HANDOFF', $reordered, $reordered);
+        $input = $this->input(['clip_count' => 2]);
+        $baseAuditor = new PromptOutputAuditor;
+        $originalReview = $baseAuditor->audit($content, $input);
+        $auditor = new class($content, $originalReview) extends PromptOutputAuditor {
+            public function __construct(private string $originalContent, private array $originalReview) {}
+
+            public function audit(string $content, array $input): array
+            {
+                if ($content === $this->originalContent) {
+                    return $this->originalReview;
+                }
+                $review = parent::audit($content, $input);
+                $review['issues'][] = [
+                    'code' => 'test_introduced_duration_inconsistency',
+                    'category' => 'duration',
+                    'clip' => 1,
+                    'message' => 'A synthetic regression issue introduced only in this candidate.',
+                    'repairable' => false,
+                ];
+                $review['status'] = 'needs_review';
+
+                return $review;
+            }
+        };
+        $service = new PromptRepairService($auditor, Mockery::mock(PromptGenerationService::class));
+
+        $result = $service->repair(null, $content, $input);
+
+        $this->assertSame($content, $result['content']);
+        $this->assertSame([], $result['repair_report']['fixed']);
+        $this->assertSame([], $result['repair_report']['new_issues']);
+        $this->assertContains('continuity_state_mismatch', array_column($result['repair_report']['unresolved'], 'code'));
+        $this->assertContains('test_introduced_duration_inconsistency', array_column($result['repair_report']['rejected_candidate_issues'], 'code'));
+        $this->assertFalse($result['repair_report']['applied']);
     }
 
     public function test_compatible_type_b_handoff_rewrites_only_an_inaccurate_exact_copy_claim(): void

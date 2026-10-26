@@ -125,6 +125,53 @@ class PromptOutputAuditorTest extends TestCase
         $this->assertNotContains('ai_duration_over_limit', array_column($manualReview['issues'], 'code'));
     }
 
+    public function test_clip_plan_duration_is_compared_with_the_copy_ready_clip(): void
+    {
+        $state = 'cast=None; object=wooden bowl; stage=carved; environment=workshop';
+        $plan = "## SECTION 7 — CLIP PLAN AND CONTINUITY MAP\n- Clip 1 — Finish the carved bowl\n  - Exact duration: 5 seconds\n\n## SECTION 8 — COPY-AND-PASTE VIDEO PROMPTS\n";
+        $content = $plan.$this->clip(1, 'INITIAL CLIP — NO PREVIOUS HANDOFF', 'FINAL — NO NEXT HANDOFF', $state, $state);
+
+        $review = $this->auditor->audit($content, $this->input());
+
+        $this->assertContains('clip_plan_duration_mismatch', array_column($review['issues'], 'code'));
+        $this->assertStringContainsString('clip plan lists Clip 1 as 5 seconds', $this->issue($review, 'clip_plan_duration_mismatch')['message']);
+    }
+
+    public function test_project_declared_clip_range_is_enforced_and_conflicts_with_a_fixed_choice_are_reported(): void
+    {
+        $state = 'cast=None; object=wooden bowl; stage=carved; environment=workshop';
+        $content = "## PROJECT OVERVIEW\nAll clips must stay between 3 and 7 seconds.\nClip durations: 8 seconds\nApproximate total runtime: 8 seconds\n\n"
+            .$this->clip(1, 'INITIAL CLIP — NO PREVIOUS HANDOFF', 'FINAL — NO NEXT HANDOFF', $state, $state);
+        $aiReview = $this->auditor->audit($content, $this->input());
+        $fixedReview = $this->auditor->audit($content, $this->input(['clip_duration' => 8]));
+
+        $this->assertContains('declared_duration_constraint_violation', array_column($aiReview['issues'], 'code'));
+        $this->assertContains('duration_constraint_conflict', array_column($fixedReview['issues'], 'code'));
+        $this->assertSame(3, $this->auditor->durationLimits($content, $this->input())['minimum']);
+        $this->assertSame(7, $this->auditor->durationLimits($content, $this->input())['maximum']);
+
+        $mixedRules = $this->auditor->durationLimits('', $this->input([
+            'creative_direction' => 'Manual clips must be between 4 and 20 seconds; AI clips must stay between 3 and 7 seconds.',
+        ]));
+        $this->assertSame(3, $mixedRules['minimum']);
+        $this->assertSame(7, $mixedRules['maximum']);
+    }
+
+    public function test_ai_durations_below_four_seconds_remain_allowed_without_a_project_lower_bound(): void
+    {
+        $state = 'cast=None; object=seed; stage=planted; environment=greenhouse';
+        $clip = str_replace(
+            'CLIP DURATION: 4 seconds',
+            'CLIP DURATION: 3 seconds',
+            $this->clip(1, 'INITIAL CLIP — NO PREVIOUS HANDOFF', 'FINAL — NO NEXT HANDOFF', $state, $state),
+        );
+
+        $review = $this->auditor->audit($clip, $this->input());
+
+        $this->assertNotContains('declared_duration_constraint_violation', array_column($review['issues'], 'code'));
+        $this->assertNotContains('ai_duration_over_limit', array_column($review['issues'], 'code'));
+    }
+
     public function test_a_factual_contradiction_is_not_mislabeled_as_verified_by_text_checks(): void
     {
         $state = 'cast=None; object=Earth; stage=not applicable; environment=diagram';
@@ -172,6 +219,65 @@ class PromptOutputAuditorTest extends TestCase
         $review = $this->auditor->audit($partial, $this->input(['clip_count' => 2]));
 
         $this->assertContains('overview_clip_duration_missing', array_column($review['issues'], 'code'));
+    }
+
+    public function test_compound_minute_and_second_durations_are_left_unparseable_for_human_review(): void
+    {
+        $state = 'cast=None; object=wooden bowl; stage=carved; environment=workshop';
+        $clip = $this->clip(1, 'INITIAL CLIP — NO PREVIOUS HANDOFF', 'FINAL — NO NEXT HANDOFF', $state, $state);
+        $content = "## PROJECT OVERVIEW\n- Clip 1 — 1 minute 30 seconds\n- Approximate total runtime: 1 minute 30 seconds\n\n"
+            ."## CLIP PLAN AND CONTINUITY MAP\n- Clip 1 — Finish the bowl\n  - Exact duration: 1 minute 30 seconds\n\n"
+            .$clip;
+
+        $review = $this->auditor->audit($content, $this->input());
+        $codes = array_column($review['issues'], 'code');
+
+        $this->assertSame([], $this->auditor->overviewDurationReferences($content));
+        $this->assertSame([], $this->auditor->overviewRuntimeReferences($content));
+        $this->assertSame([], $this->auditor->clipPlanDurationReferences($content));
+        $this->assertContains('overview_clip_durations_unverifiable', $codes);
+        $this->assertContains('overview_total_runtime_missing', $codes);
+        $this->assertContains('clip_plan_duration_missing', $codes);
+    }
+
+    public function test_final_audit_pacing_and_synchronization_claims_need_matching_qa_evidence(): void
+    {
+        $state = 'cast=None; object=spinning wheel; stage=rotating; environment=workshop';
+        $clip = $this->clip(1, 'INITIAL CLIP — NO PREVIOUS HANDOFF', 'FINAL — NO NEXT HANDOFF', $state, $state);
+        $clip = str_replace(
+            '- 0.0–2.0s | VISIBLE ACTION: pollen transfers to a bee | SPEAKER: Narrator | LINE: “The bee carries pollen.”',
+            '- 0.0–1.0s | VISIBLE ACTION: the wheel spins | SPEAKER: Narrator | LINE: “One two three four five six seven eight nine ten eleven.”',
+            $clip,
+        );
+        $content = $clip."\n\n### FINAL CONTINUITY AUDIT\n- All clip durations are synchronized.\n- Every spoken line respects natural pacing.";
+
+        $review = $this->auditor->audit($content, $this->input());
+        $codes = array_column($review['issues'], 'code');
+
+        $this->assertContains('speech_overrun', $codes);
+        $this->assertContains('timing_audit_overclaim', $codes);
+        $this->assertContains('speech_pacing_overclaim', $codes);
+    }
+
+    public function test_final_audit_timing_and_pacing_claims_are_allowed_when_all_text_checks_pass(): void
+    {
+        $state = 'cast=None; object=spinning wheel; stage=rotating; environment=workshop';
+        $speech = '- 0.0–3.2s | VISIBLE ACTION: the wheel spins steadily | SPEAKER: Narrator | LINE: “The wheel turns smoothly.”';
+        $clip = $this->clip(1, 'INITIAL CLIP — NO PREVIOUS HANDOFF', 'FINAL — NO NEXT HANDOFF', $state, $state);
+        $clip = str_replace(
+            '- 0.0–2.0s | VISIBLE ACTION: pollen transfers to a bee | SPEAKER: Narrator | LINE: “The bee carries pollen.”',
+            $speech,
+            $clip,
+        );
+        $content = "## PROJECT OVERVIEW\n- Clip 1 — 4 seconds\n- Approximate total runtime: 4 seconds\n\n"
+            ."## CLIP PLAN AND CONTINUITY MAP\n- Clip 1 — Wheel\n  - Exact duration: 4 seconds\n\n"
+            .$clip."\n\n### FINAL CONTINUITY AUDIT\n- All clip durations are synchronized.\n- Every spoken line respects natural pacing.";
+
+        $review = $this->auditor->audit($content, $this->input());
+        $codes = array_column($review['issues'], 'code');
+
+        $this->assertNotContains('timing_audit_overclaim', $codes);
+        $this->assertNotContains('speech_pacing_overclaim', $codes);
     }
 
     public function test_structured_continuity_state_conflicting_with_exact_frame_prose_is_flagged(): void

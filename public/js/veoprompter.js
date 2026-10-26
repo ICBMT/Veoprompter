@@ -357,7 +357,7 @@
             repairButton.dataset.repairUrl = latestRepairUrl;
             repairButton.disabled = !repairAllowedByServer || latestManualRepairAttempts >= maxManualRepairAttempts;
             repairButton.textContent = repairButton.disabled
-                ? (latestManualRepairAttempts >= maxManualRepairAttempts ? 'Repair limit reached' : 'No safe automatic fixes')
+                ? (latestManualRepairAttempts >= maxManualRepairAttempts ? 'Repair limit reached' : 'Manual review needed')
                 : 'Auto-Fix Issues';
         }
         if (restoreButton) {

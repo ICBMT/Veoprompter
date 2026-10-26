@@ -47,21 +47,24 @@
             applied: 'Repairs applied',
             applied_with_remaining_issues: 'Safe repairs applied; review remains',
             no_issues: 'No QA issues remain',
-            no_supported_issues: 'No safe automatic repair was available',
+            no_supported_issues: 'No additional safe automatic repair is available',
             no_safe_changes: 'No safe changes were made',
             rejected_new_issues: 'A candidate was rejected because it added QA findings',
         };
         addText(reportPanel, 'h3', `Auto-Fix report · ${labels[report.outcome] || 'Repair check complete'}`);
         renderIssueGroup(reportPanel, 'Fixed', report.fixed);
-        renderIssueGroup(reportPanel, 'Still unresolved', report.unresolved);
-        renderIssueGroup(reportPanel, 'New issues in the saved prompt', report.new_issues);
+        renderIssueGroup(reportPanel, 'Unresolved / Needs Review', report.unresolved);
+        renderIssueGroup(reportPanel, 'New Issues in the saved prompt', report.new_issues);
         if (Array.isArray(report.rejected_candidate_issues) && report.rejected_candidate_issues.length) {
             renderIssueGroup(reportPanel, 'New findings in a rejected candidate (not saved)', report.rejected_candidate_issues);
         }
-        if (Array.isArray(report.notes) && report.notes.length) {
-            addText(reportPanel, 'h4', 'Notes');
+        const informational = Array.isArray(report.informational)
+            ? report.informational
+            : (Array.isArray(report.notes) ? report.notes : []);
+        if (informational.length) {
+            addText(reportPanel, 'h4', 'Informational / Review');
             const notes = document.createElement('ul');
-            report.notes.forEach((note) => addText(notes, 'li', String(note)));
+            informational.forEach((note) => addText(notes, 'li', String(note)));
             reportPanel.append(notes);
         }
         reportPanel.hidden = false;
@@ -178,7 +181,7 @@
             repairButton.hidden = !hasQaIssues;
             repairButton.textContent = attempts >= maxAttempts
                 ? 'Repair limit reached'
-                : canRepair ? 'Auto-Fix Issues' : 'No safe automatic fixes';
+                : canRepair ? 'Auto-Fix Issues' : 'Manual review needed';
         }
         if (restoreButton) {
             const restoreUrl = safeLocalUrl(payload.restore_url);

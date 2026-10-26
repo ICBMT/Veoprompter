@@ -48,6 +48,8 @@ class PromptHistoryController extends Controller
             'manualRepairAttempts' => PromptRepairService::manualAttempts($project->repair_history ?? []),
             'maxRepairAttempts' => PromptRepairService::MAX_MANUAL_ATTEMPTS,
             'hasQaIssues' => ! empty($qualityReview['issues']),
+            'canRepair' => PromptRepairService::manualAttempts($project->repair_history ?? []) < PromptRepairService::MAX_MANUAL_ATTEMPTS
+                && PromptRepairService::hasSupportedIssues($qualityReview),
             'canRestoreOriginal' => is_string($project->original_content) && $project->content !== $project->original_content,
         ]);
     }
