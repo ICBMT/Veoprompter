@@ -96,6 +96,30 @@
             });
         }
 
+        const handoffs = Array.isArray(review.handoffs) ? review.handoffs : [];
+        const handoffsWrap = panel.querySelector('[data-quality-review-handoffs-wrap]');
+        const handoffsList = panel.querySelector('[data-quality-review-handoffs]');
+        if (handoffsWrap && handoffsList) {
+            handoffsList.replaceChildren();
+            handoffs.forEach((handoff) => {
+                const type = typeof handoff.type === 'string' ? handoff.type : '?';
+                const handoffRelation = handoff.overall_relation || handoff.continuity_relation;
+                const relation = handoffRelation === 'exact'
+                    ? 'exact state match'
+                    : handoffRelation === 'compatible' && type === 'B'
+                        ? 'compatible state description, not a verbatim copy'
+                        : handoffRelation === 'compatible'
+                            ? 'compatible wording'
+                            : handoffRelation === 'mismatch'
+                                ? 'state mismatch'
+                                : 'state not verified';
+                const from = Number(handoff.from_clip) || '?';
+                const to = Number(handoff.to_clip) || '?';
+                addText(handoffsList, 'li', `Clip ${from} → Clip ${to} · Type ${type}: ${relation}`);
+            });
+            handoffsWrap.hidden = handoffs.length === 0;
+        }
+
         const issues = Array.isArray(review.issues) ? review.issues : [];
         const issuesWrap = panel.querySelector('[data-quality-review-issues-wrap]');
         const issuesList = panel.querySelector('[data-quality-review-issues]');

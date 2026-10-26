@@ -33,6 +33,9 @@ class PromptRepairService
         return in_array($code, [
             'continuity_state_mismatch',
             'presentation_state_mismatch',
+            'overview_clip_duration_mismatch',
+            'overview_total_runtime_mismatch',
+            'continuity_audit_overclaim',
             ...self::SPEECH_REPAIR_CODES,
         ], true);
     }
@@ -195,7 +198,21 @@ class PromptRepairService
                 $ending = $this->auditor->fieldValue($previousClip['text'], 'ENDING CONTINUITY STATE');
                 $opening = $this->auditor->fieldValue($nextClip['text'], 'OPENING CONTINUITY STATE');
                 if ($ending !== null && $opening !== null && $this->equivalentStateMaps($ending, $opening)) {
-                    if ($this->replaceField($lines, $nextClip, 'OPENING CONTINUITY STATE', $ending)) {
+                    $openingProse = $this->auditor->fieldValue($nextClip['text'], 'EXACT OPENING FRAME');
+                    $endingProse = $this->auditor->fieldValue($previousClip['text'], 'EXACT ENDING STATE');
+                    $needsProseSync = $openingProse !== null
+                        && $this->auditor->stateProseRelation($ending, $openingProse) === 'mismatch';
+                    $endingProseRelation = $this->auditor->stateProseRelation($ending, $endingProse);
+                    $canSyncProse = ! $needsProseSync
+                        || ($endingProse !== null && in_array($endingProseRelation, ['exact', 'compatible'], true));
+
+                    if (! $canSyncProse) {
+                        $notes[] = 'Clip '.$nextClip['number'].' continuity metadata was left for review because its written opening conflicts with the safe structured-state source.';
+                    } elseif ($this->replaceField($lines, $nextClip, 'OPENING CONTINUITY STATE', $ending)) {
+                        if ($needsProseSync && $endingProse !== null) {
+                            $this->replaceField($lines, $nextClip, 'EXACT OPENING FRAME', $endingProse);
+                            $notes[] = 'Aligned Clip '.$nextClip['number'].' exact opening-state prose to the existing prior ending description; visible-action and dialogue text were preserved.';
+                        }
                         $notes[] = 'Matched Clip '.$nextClip['number'].' continuity metadata deterministically because both key/value state maps contained the same facts.';
                     }
                 }
@@ -246,6 +263,129 @@ class PromptRepairService
                 $notes[] = 'Clip '.$clip['number'].' speech windows were re-timed without changing dialogue or visible-action text.';
             }
         }
+
+        $content = implode($lineEnding, $lines);
+        $content = $this->synchronizeOverviewDurations($content, $input, $notes);
+
+        if ($this->hasIssue($this->auditor->audit($content, $input), 'continuity_audit_overclaim', null)) {
+            $content = $this->correctFinalContinuityAuditClaims($content, $notes);
+        }
+
+        return $content;
+    }
+
+    private function synchronizeOverviewDurations(string $content, array $input, array &$notes): string
+    {
+        if (($input['mode'] ?? 'story') === 'extend') {
+            return $content;
+        }
+
+        $clips = $this->auditor->extractClips($content, $input);
+        $durations = [];
+        foreach ($clips as $clip) {
+            if (array_key_exists($clip['number'], $durations)) {
+                $notes[] = 'Project-overview timing was left unchanged because duplicate clip numbers make synchronization ambiguous.';
+                return $content;
+            }
+            $duration = $this->auditor->durationSeconds($clip['text']);
+            if ($duration !== null && $duration > 0) {
+                $durations[$clip['number']] = $duration;
+            }
+        }
+
+        if ($durations === []) {
+            return $content;
+        }
+
+        $durationChoice = $input['clip_duration'] ?? ProjectSettings::AI_CHOICE;
+        if (! ProjectSettings::isAiChoice($durationChoice) && is_numeric($durationChoice)) {
+            foreach ($durations as $duration) {
+                if (abs($duration - (float) $durationChoice) > 0.01) {
+                    $notes[] = 'Project-overview timing was left unchanged because a copy-ready duration conflicts with the selected fixed manual duration.';
+                    return $content;
+                }
+            }
+        }
+
+        $lineEnding = str_contains($content, "\r\n") ? "\r\n" : "\n";
+        $lines = preg_split('/\R/u', str_replace("\r", '', $content)) ?: [];
+        $updates = [];
+        foreach ($this->auditor->overviewDurationReferences($content) as $reference) {
+            if (! array_key_exists($reference['clip'], $durations)) {
+                continue;
+            }
+            $updates[] = [
+                ...$reference,
+                'replacement' => $this->overviewDurationValue($durations[$reference['clip']], $reference['unit'], $reference['value']),
+            ];
+        }
+
+        $allClipDurationsKnown = count($durations) === count($clips);
+        if ($allClipDurationsKnown) {
+            $total = array_sum($durations);
+            foreach ($this->auditor->overviewRuntimeReferences($content) as $reference) {
+                $updates[] = [
+                    ...$reference,
+                    'replacement' => $this->overviewDurationValue($total, $reference['unit'], $reference['value']),
+                ];
+            }
+        }
+
+        usort($updates, static fn (array $left, array $right): int => [$right['line_index'], $right['offset']] <=> [$left['line_index'], $left['offset']]);
+        $changed = false;
+        foreach ($updates as $update) {
+            $lineIndex = $update['line_index'];
+            if (! isset($lines[$lineIndex])) {
+                continue;
+            }
+            $current = substr($lines[$lineIndex], $update['offset'], $update['length']);
+            if ($current === $update['replacement']) {
+                continue;
+            }
+            $lines[$lineIndex] = substr_replace($lines[$lineIndex], $update['replacement'], $update['offset'], $update['length']);
+            $changed = true;
+        }
+
+        if (! $changed) {
+            return $content;
+        }
+
+        $notes[] = 'Synchronized project-overview clip durations and total runtime with the final copy-ready CLIP DURATION values.';
+
+        return implode($lineEnding, $lines);
+    }
+
+    private function overviewDurationValue(float $seconds, string $unit, string $existing): string
+    {
+        $minutes = str_starts_with(strtolower($unit), 'm');
+        $value = $minutes ? $seconds / 60 : $seconds;
+        $decimalPoint = strpos($existing, '.');
+        $decimals = $decimalPoint === false ? 0 : min(6, strlen($existing) - $decimalPoint - 1);
+        if ($minutes && abs($value - round($value)) > 0.000001) {
+            $decimals = max(4, $decimals);
+        }
+
+        return number_format($value, $decimals, '.', '');
+    }
+
+    private function correctFinalContinuityAuditClaims(string $content, array &$notes): string
+    {
+        $claimLines = $this->auditor->continuityAuditClaimLineIndexes($content);
+        if ($claimLines === []) {
+            return $content;
+        }
+
+        $lineEnding = str_contains($content, "\r\n") ? "\r\n" : "\n";
+        $lines = preg_split('/\R/u', str_replace("\r", '', $content)) ?: [];
+        foreach ($claimLines as $lineIndex) {
+            if (! isset($lines[$lineIndex])) {
+                continue;
+            }
+            preg_match('/^\\s*(?:(?:[-*+]\\s+)|(?:>\\s*)?)?/u', $lines[$lineIndex], $prefix);
+            $lines[$lineIndex] = ($prefix[0] ?? '').'Handoffs with compatible, mismatched, or unverified states are not verbatim copies; reserve exact-copy claims for verified structured and written matches.';
+        }
+
+        $notes[] = 'Corrected the final continuity-audit wording so non-exact handoffs are not described as verbatim copies.';
 
         return implode($lineEnding, $lines);
     }
@@ -514,6 +654,8 @@ class PromptRepairService
             'VISUAL REPRESENTATION',
             'OPENING CONTINUITY STATE',
             'ENDING CONTINUITY STATE',
+            'EXACT OPENING FRAME',
+            'EXACT ENDING STATE',
             'OPENING PRESENTATION STATE',
             'ENDING PRESENTATION STATE',
         ];
@@ -567,9 +709,19 @@ class PromptRepairService
         foreach ($pairs as $pair) {
             $choice = $decisions[$pair['pair']] ?? [];
             foreach ([
-                'physical' => ['ENDING CONTINUITY STATE', 'OPENING CONTINUITY STATE'],
-                'presentation' => ['ENDING PRESENTATION STATE', 'OPENING PRESENTATION STATE'],
-            ] as $kind => [$endingField, $openingField]) {
+                'physical' => [
+                    'ending' => 'ENDING CONTINUITY STATE',
+                    'opening' => 'OPENING CONTINUITY STATE',
+                    'ending_prose' => 'EXACT ENDING STATE',
+                    'opening_prose' => 'EXACT OPENING FRAME',
+                ],
+                'presentation' => [
+                    'ending' => 'ENDING PRESENTATION STATE',
+                    'opening' => 'OPENING PRESENTATION STATE',
+                    'ending_prose' => null,
+                    'opening_prose' => null,
+                ],
+            ] as $kind => $fields) {
                 if ($pair[$kind] === null) {
                     continue;
                 }
@@ -592,12 +744,39 @@ class PromptRepairService
                     continue;
                 }
 
+                $sourceClip = $decision === 'PRIOR_ENDING' ? $previous : $next;
+                $targetClip = $decision === 'PRIOR_ENDING' ? $next : $previous;
+                $sourceProseField = $decision === 'PRIOR_ENDING' ? $fields['ending_prose'] : $fields['opening_prose'];
+                $targetProseField = $decision === 'PRIOR_ENDING' ? $fields['opening_prose'] : $fields['ending_prose'];
+                $sourceProse = $sourceProseField === null ? null : $this->auditor->fieldValue($sourceClip['text'], $sourceProseField);
+                $targetProse = $targetProseField === null ? null : $this->auditor->fieldValue($targetClip['text'], $targetProseField);
+                $sourceProseRelation = $this->auditor->stateProseRelation($value, $sourceProse);
+                $needsProseSync = $targetProse !== null
+                    && $this->auditor->stateProseRelation($value, $targetProse) === 'mismatch';
+                if ($kind === 'physical' && $sourceProse !== null
+                    && ! in_array($sourceProseRelation, ['exact', 'compatible'], true)) {
+                    $notes[] = 'Pair '.$pair['pair'].' continuity was left for manual review because the selected structured state is not validated by its exact-state prose.';
+                    continue;
+                }
+                if ($needsProseSync && ($sourceProse === null
+                    || ! in_array($sourceProseRelation, ['exact', 'compatible'], true))) {
+                    $notes[] = 'Pair '.$pair['pair'].' continuity was left for manual review because its written state cannot be safely synchronized from the selected source.';
+                    continue;
+                }
+
                 $lines = preg_split('/\R/u', str_replace("\r", '', $content)) ?: [];
-                $leftChanged = $this->replaceField($lines, $previous, $endingField, $value);
-                $rightChanged = $this->replaceField($lines, $next, $openingField, $value);
-                if ($leftChanged || $rightChanged) {
+                $leftChanged = $this->replaceField($lines, $previous, $fields['ending'], $value);
+                $rightChanged = $this->replaceField($lines, $next, $fields['opening'], $value);
+                $proseChanged = false;
+                if ($needsProseSync && $targetProseField !== null && $sourceProse !== null) {
+                    $proseChanged = $this->replaceField($lines, $targetClip, $targetProseField, $sourceProse);
+                }
+                if ($leftChanged || $rightChanged || $proseChanged) {
                     $content = implode($lineEnding, $lines);
-                    $notes[] = 'Pair '.$pair['pair'].' '.$kind.' metadata was reconciled using the contextually selected existing value; clip prose and transition labels were not changed.';
+                    $notes[] = 'Pair '.$pair['pair'].' '.$kind.' metadata was reconciled using an existing state; dialogue, visible-action text, and transition labels were preserved.';
+                    if ($proseChanged) {
+                        $notes[] = 'The conflicting exact opening/ending state description was aligned to the selected existing prose without rewriting action text.';
+                    }
                 }
             }
         }

@@ -315,6 +315,32 @@
             checksList.append(item);
         });
 
+        const handoffsWrap = qualityReviewPanel.querySelector('[data-quality-review-handoffs-wrap]');
+        const handoffsList = qualityReviewPanel.querySelector('[data-quality-review-handoffs]');
+        if (handoffsWrap && handoffsList) {
+            handoffsList.replaceChildren();
+            const handoffs = Array.isArray(review.handoffs) ? review.handoffs : [];
+            handoffs.forEach((handoff) => {
+                const type = typeof handoff.type === 'string' ? handoff.type : '?';
+                const handoffRelation = handoff.overall_relation || handoff.continuity_relation;
+                const relation = handoffRelation === 'exact'
+                    ? 'exact state match'
+                    : handoffRelation === 'compatible' && type === 'B'
+                        ? 'compatible state description, not a verbatim copy'
+                        : handoffRelation === 'compatible'
+                            ? 'compatible wording'
+                            : handoffRelation === 'mismatch'
+                                ? 'state mismatch'
+                                : 'state not verified';
+                const from = Number(handoff.from_clip) || '?';
+                const to = Number(handoff.to_clip) || '?';
+                const item = document.createElement('li');
+                item.textContent = `Clip ${from} → Clip ${to} · Type ${type}: ${relation}`;
+                handoffsList.append(item);
+            });
+            handoffsWrap.hidden = handoffs.length === 0;
+        }
+
         const issuesWrap = qualityReviewPanel.querySelector('[data-quality-review-issues-wrap]');
         const issuesList = qualityReviewPanel.querySelector('[data-quality-review-issues]');
         issuesList.replaceChildren();

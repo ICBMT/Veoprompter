@@ -52,6 +52,8 @@ class PromptRepairTest extends TestCase
             ->assertOk()
             ->assertSee('Compare with the original generated prompt')
             ->assertSee('Auto-Fix Issues')
+            ->assertSee('Handoff state relationships')
+            ->assertSee('compatible wording')
             ->assertSee('data-prompt-run-id="'.$restored->id.'"', false);
     }
 
@@ -76,6 +78,48 @@ class PromptRepairTest extends TestCase
 
         $this->assertSame($run->content, $run->fresh()->content);
         $this->assertSame([], $run->fresh()->repair_history);
+    }
+
+    public function test_saved_run_auto_fix_persists_synchronized_overview_clip_duration_and_total_runtime(): void
+    {
+        $owner = User::factory()->create();
+        $state = 'cast=None; object=bee over flower; stage=pollen transfer; environment=garden';
+        $presentation = 'camera=macro; lighting=daylight; audio=soft garden ambience';
+        $content = "## PROJECT OVERVIEW\n- Clip 1 — 4 seconds\n- Approximate total runtime: 4 seconds\n\n"
+            .$this->clip(1, 'INITIAL CLIP — NO PREVIOUS HANDOFF', 'FINAL — NO NEXT HANDOFF', $state, $state);
+        $content = str_replace(
+            '- 0.0–2.0s | VISIBLE ACTION: the seed settles into soil | SPEAKER: Narrator | LINE: “The bee carries pollen.”',
+            '- 0.0–2.0s | VISIBLE ACTION: the bee gathers pollen | SPEAKER: Narrator | LINE: “The bee carries pollen.”' . "\n"
+                . '- 1.5–2.5s | VISIBLE ACTION: the bee reaches another flower | SPEAKER: Narrator | LINE: “It reaches another flower.”',
+            $content,
+        );
+        $content = str_replace(
+            'OPENING PRESENTATION STATE: camera=medium; lighting=soft daylight; audio=quiet ambience',
+            'OPENING PRESENTATION STATE: '.$presentation,
+            $content,
+        );
+        $content = str_replace(
+            'ENDING PRESENTATION STATE: camera=medium; lighting=soft daylight; audio=quiet ambience',
+            'ENDING PRESENTATION STATE: '.$presentation,
+            $content,
+        );
+        $run = $this->savedRun($owner, $content, ['clip_count' => 'auto']);
+
+        $this->actingAs($owner)
+            ->postJson(route('history.repair', $run))
+            ->assertOk()
+            ->assertJsonPath('repair_report.applied', true)
+            ->assertJsonPath('quality_review.status', 'passed')
+            ->assertJsonPath('manual_attempts', 1);
+
+        $repaired = $run->fresh();
+        $this->assertSame($content, $repaired->original_content);
+        $this->assertStringContainsString('CLIP DURATION: 5 seconds', $repaired->content);
+        $this->assertStringContainsString('- Clip 1 — 5 seconds', $repaired->content);
+        $this->assertStringContainsString('- Approximate total runtime: 5 seconds', $repaired->content);
+        $this->assertStringContainsString('“The bee carries pollen.”', $repaired->content);
+        $this->assertStringContainsString('“It reaches another flower.”', $repaired->content);
+        $this->assertSame([], $repaired->quality_review['issues']);
     }
 
     public function test_legacy_saved_runs_without_a_stored_review_are_audited_and_offer_auto_fix(): void

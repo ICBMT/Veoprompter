@@ -141,6 +141,91 @@ class PromptOutputAuditorTest extends TestCase
         $this->assertContains('No external research sources were retrieved by this generation endpoint; do not treat the prompt as independently fact-checked.', $review['limitations']);
     }
 
+    public function test_project_overview_clip_durations_and_total_runtime_are_compared_with_the_copy_ready_clips(): void
+    {
+        $state = 'cast=None; object=single seed tray; stage=seeds planted; environment=greenhouse';
+        $overview = "## PROJECT OVERVIEW\nClip durations: 5 seconds, 4 seconds\nApproximate total runtime: 9 seconds\n\n";
+        $content = $overview
+            .$this->clip(1, 'INITIAL CLIP — NO PREVIOUS HANDOFF', 'TYPE A — DIRECT CONTINUATION', $state, $state)
+            ."\n".$this->clip(2, 'TYPE A — DIRECT CONTINUATION', 'FINAL — NO NEXT HANDOFF', $state, $state);
+
+        $review = $this->auditor->audit($content, $this->input(['clip_count' => 2]));
+        $codes = array_column($review['issues'], 'code');
+
+        $this->assertContains('overview_clip_duration_mismatch', $codes);
+        $this->assertContains('overview_total_runtime_mismatch', $codes);
+        $this->assertSame('warning', $this->check($review, 'duration')['status']);
+    }
+
+    public function test_project_overview_missing_or_unparseable_duration_references_are_not_silently_passed(): void
+    {
+        $state = 'cast=None; object=single seed tray; stage=seeds planted; environment=greenhouse';
+        $clips = $this->clip(1, 'INITIAL CLIP — NO PREVIOUS HANDOFF', 'TYPE A — DIRECT CONTINUATION', $state, $state)
+            ."\n".$this->clip(2, 'TYPE A — DIRECT CONTINUATION', 'FINAL — NO NEXT HANDOFF', $state, $state);
+        $unparseable = "## PROJECT OVERVIEW\nClip durations: to be determined\nApproximate total runtime: TBD\n\n".$clips;
+        $review = $this->auditor->audit($unparseable, $this->input(['clip_count' => 2]));
+
+        $this->assertContains('overview_clip_durations_unverifiable', array_column($review['issues'], 'code'));
+        $this->assertContains('overview_total_runtime_missing', array_column($review['issues'], 'code'));
+
+        $partial = "## PROJECT OVERVIEW\nClip 1 — 4 seconds\nApproximate total runtime: 8 seconds\n\n".$clips;
+        $review = $this->auditor->audit($partial, $this->input(['clip_count' => 2]));
+
+        $this->assertContains('overview_clip_duration_missing', array_column($review['issues'], 'code'));
+    }
+
+    public function test_structured_continuity_state_conflicting_with_exact_frame_prose_is_flagged(): void
+    {
+        $state = 'object=red door closed; location=hallway';
+        $clip = $this->clip(1, 'INITIAL CLIP — NO PREVIOUS HANDOFF', 'FINAL — NO NEXT HANDOFF', $state, $state)
+            ."\nEXACT OPENING FRAME: The red door stands open in the hallway."
+            ."\nEXACT ENDING STATE: The red door remains wide open in the hallway.";
+
+        $review = $this->auditor->audit($clip, $this->input());
+
+        $this->assertSame(2, count(array_filter(
+            $review['issues'],
+            static fn (array $issue): bool => $issue['code'] === 'continuity_prose_state_mismatch',
+        )));
+    }
+
+    public function test_compatible_type_b_state_is_reported_as_compatible_not_an_exact_copy(): void
+    {
+        $prior = 'object=seed tray on greenhouse bench; stage=seeds planted; environment=greenhouse; motion=stationary';
+        $next = 'environment=greenhouse; object=seed tray resting on the greenhouse bench; stage=seeds planted and ready for watering; motion=still';
+        $first = $this->clip(1, 'INITIAL CLIP — NO PREVIOUS HANDOFF', 'TYPE B — NATURAL ACTION TRANSITION', $prior, $prior)
+            ."\nEXACT ENDING STATE: The seed tray rests on the greenhouse bench, the seeds are planted, and the scene is still.";
+        $second = $this->clip(2, 'TYPE B — NATURAL ACTION TRANSITION', 'FINAL — NO NEXT HANDOFF', $next, $next)
+            ."\nEXACT OPENING FRAME: The seed tray rests on the greenhouse bench with planted seeds; the frame is still."
+            ."\n\n### FINAL CONTINUITY AUDIT\n- The Type B handoff is an exact state copy of the prior clip.";
+
+        $review = $this->auditor->audit($first."\n".$second, $this->input(['clip_count' => 2]));
+
+        $this->assertSame('compatible', $review['handoffs'][0]['continuity_relation']);
+        $this->assertSame('compatible', $review['handoffs'][0]['overall_relation']);
+        $this->assertFalse($review['handoffs'][0]['exact_copy']);
+        $this->assertContains('continuity_audit_overclaim', array_column($review['issues'], 'code'));
+        $this->assertNotContains('continuity_state_mismatch', array_column($review['issues'], 'code'));
+    }
+
+    public function test_type_b_with_exact_structured_states_but_compatible_prose_is_not_a_verbatim_copy(): void
+    {
+        $state = 'object=seed tray on greenhouse bench; stage=seeds planted; environment=greenhouse; motion=stationary';
+        $first = $this->clip(1, 'INITIAL CLIP — NO PREVIOUS HANDOFF', 'TYPE B — NATURAL ACTION TRANSITION', $state, $state)
+            ."\nEXACT ENDING STATE: Seeds are planted in the seed tray on the greenhouse bench, still.";
+        $second = $this->clip(2, 'TYPE B — NATURAL ACTION TRANSITION', 'FINAL — NO NEXT HANDOFF', $state, $state)
+            ."\nEXACT OPENING FRAME: The planted seeds remain in the seed tray on the greenhouse bench, motionless."
+            ."\n\n### FINAL CONTINUITY AUDIT\n- The Type B handoff is an exact state copy of the prior clip.";
+
+        $review = $this->auditor->audit($first."\n".$second, $this->input(['clip_count' => 2]));
+
+        $this->assertSame('exact', $review['handoffs'][0]['continuity_relation']);
+        $this->assertSame('compatible', $review['handoffs'][0]['written_opening_relation']);
+        $this->assertSame('compatible', $review['handoffs'][0]['overall_relation']);
+        $this->assertFalse($review['handoffs'][0]['exact_copy']);
+        $this->assertContains('continuity_audit_overclaim', array_column($review['issues'], 'code'));
+    }
+
     public function test_missing_structured_prompt_is_reported_as_not_checked_not_as_passed(): void
     {
         $review = $this->auditor->audit('A plain unstructured answer.', $this->input());
