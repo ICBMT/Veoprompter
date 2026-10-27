@@ -1,0 +1,150 @@
+# Feature Request: Video Subtitle Studio — Animated Karaoke Subtitles
+
+Implement a complete **Video Subtitle Studio** feature inside the existing Laravel AI Video Storyteller application.
+
+## 1. First, inspect the existing application
+
+Before making changes:
+- Inspect the existing Laravel architecture, routes, controllers, models, views, storage configuration, queue setup, and UI conventions.
+- Identify the correct place to integrate this feature without disrupting existing prompt-generation functionality.
+- Reuse existing patterns and components where appropriate.
+- Do not rebuild the application or replace existing features.
+- Provide a brief implementation plan, then proceed with implementation.
+
+## 2. Core user experience
+
+Add a dedicated **Video Subtitle Studio** page where users can:
+
+1. Upload an MP4 video from their computer.
+2. Choose a subtitle preset, with the approved animated karaoke style selected by default.
+3. Start processing and see meaningful progress updates.
+4. Wait while the application transcribes the audio and renders the subtitles.
+5. Preview the finished video and download the final MP4.
+
+The uploaded original video must remain unchanged.
+
+## 3. Processing pipeline
+
+Implement this end-to-end local processing workflow:
+
+1. Validate and safely store the uploaded video.
+2. Use FFmpeg to extract a mono, 16 kHz WAV audio track.
+3. Run OpenAI Whisper locally to transcribe the audio in English by default, with word-level timestamps enabled.
+4. Parse the transcription JSON, including each segment's text and individual word start/end times.
+5. Generate an ASS subtitle file using the selected style preset.
+6. Use FFmpeg with libass to burn the subtitles into the original video.
+7. Preserve the original audio stream where compatible and produce a finished MP4.
+8. Store the output safely and make it available through an authorized preview/download route.
+
+Use the locally installed FFmpeg and Whisper executables on the Ubuntu machine. Do not require a paid transcription API or external video-generation API.
+
+Check actual executable paths, versions, and dependencies before assuming they are installed. Make these configurable through environment variables where appropriate.
+
+## 4. Default subtitle preset: Animated Karaoke
+
+Reproduce the subtitle style that was tested successfully on a real video in the development environment.
+
+Required appearance:
+- Vertical-video canvas: 720 × 1280 reference resolution, with correct scaling for other input resolutions.
+- DejaVu Sans Bold or a configurable equivalent font.
+- White subtitle text.
+- Yellow highlighting for the currently spoken word.
+- Dark outline and subtle shadow for readability.
+- Bottom-centered placement with safe horizontal and vertical margins.
+- Automatic line wrapping at word boundaries, targeting approximately 26 characters per line at the reference resolution.
+- Keep each complete sentence visible while its words highlight according to their individual timestamps.
+- Use smooth karaoke highlighting without creating a separate visual subtitle event for every word.
+- Preserve sentence-level timing, word timing, punctuation, and natural pauses as accurately as possible.
+- Avoid excessive animation, flashing, repeated popping, jumping text, or epilepsy-inducing effects.
+
+Use ASS karaoke timing or an equivalent stable implementation to highlight words within a sentence. Use explicit line breaks when necessary to keep text within the frame.
+
+Do not simply copy the previous experimental implementation without testing its behavior. Validate line wrapping, highlighting progression, animation stability, and subtitle timing against representative videos.
+
+## 5. Additional subtitle controls
+
+Keep the first implementation focused, but structure it so these controls can be added or configured easily:
+- Subtitle language.
+- Font size.
+- Highlight colour.
+- Maximum line length.
+- Vertical position.
+- Animation enabled/disabled.
+- Subtitle preset selection.
+
+The default preset must reproduce the approved style without requiring the user to adjust settings for each upload.
+
+## 6. Background processing and progress
+
+Video processing must not run synchronously inside a normal web request.
+
+Use Laravel queues and background jobs where supported by the existing application. Provide clear processing states such as:
+- Uploaded
+- Extracting audio
+- Transcribing
+- Generating subtitles
+- Rendering video
+- Completed
+- Failed
+
+Show useful progress feedback in the UI. Capture command output and errors for debugging without exposing sensitive server paths or internal error details to ordinary users.
+
+Handle long-running processes, timeouts, retries, and failed jobs safely. Avoid duplicate processing when users refresh or submit the same job repeatedly.
+
+## 7. Security and reliability
+
+- Validate file type, extension, MIME type, size, and processing limits.
+- Never interpolate untrusted filenames or user input directly into shell commands.
+- Use safe process execution with argument arrays or an equivalent escaping-safe approach.
+- Prevent path traversal and arbitrary file access.
+- Keep uploads, temporary files, transcripts, subtitle files, and outputs in controlled storage locations.
+- Ensure users can access only their own jobs and outputs if authentication exists.
+- Clean up temporary files after successful completion or according to a safe retention policy.
+- Handle videos with no audio, no recognizable speech, unsupported codecs, transcription failures, and FFmpeg errors gracefully.
+- Never delete the original upload when a job fails.
+- Ensure temporary files and failed jobs do not accumulate indefinitely.
+
+## 8. Integration and UI
+
+Follow the application's existing Laravel conventions and visual design. Use the current frontend stack rather than introducing a new framework unnecessarily.
+
+Implement the necessary migrations, models, controllers, form requests, services, queued jobs, routes, views/components, storage handling, and configuration files as appropriate.
+
+Keep the processing logic separate from controllers so it can be tested and maintained.
+
+## 9. Testing and acceptance criteria
+
+Add automated tests for the relevant Laravel functionality, including:
+- Upload validation.
+- Job creation and status transitions.
+- Authorization and download access.
+- Failure handling and cleanup.
+- Subtitle generation from sample word-timestamp JSON.
+- ASS timestamp formatting and escaping.
+- Line wrapping and karaoke timing generation.
+
+Where possible, add an integration test using a short generated test video with known speech or a small test WAV. Avoid downloading large models during ordinary automated tests.
+
+Manually verify the final result using the installed local FFmpeg and Whisper tools.
+
+The feature is complete only when:
+1. A user can upload a video through the Laravel interface.
+2. The background job processes it end-to-end.
+3. The output is a playable MP4 with the approved animated, wrapped, word-highlighted subtitles.
+4. The subtitles stay synchronized with the audio.
+5. Long sentences fit the frame and do not flash or jump between words.
+6. The original video remains intact.
+7. The finished video can be previewed and downloaded.
+8. Existing application features continue to work.
+
+## 10. Implementation discipline
+
+- Inspect first; do not guess the application's current structure.
+- Reuse the tested subtitle styling as the visual reference.
+- Make focused changes and avoid unrelated refactoring.
+- Run the tests that the environment actually supports and report any tests that could not run.
+- Do not claim success based only on code inspection or mocked tests.
+- Report the files changed, configuration required, commands to run, test results, and any remaining limitations.
+- Do not stop after producing a plan; implement the feature and verify it as far as the environment permits.
+
+They video quality should not be compromized to output should be with 1:1 quality to the input.
