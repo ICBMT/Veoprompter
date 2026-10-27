@@ -33,6 +33,13 @@ Route::middleware('user.auth')->group(function (): void {
     Route::post('/presence', [PresenceController::class, 'ping'])->middleware('throttle:2,1')->name('presence.ping');
     Route::post('/voice-samples', [VoiceSampleController::class, 'store'])->middleware('throttle:12,1')->name('voice-samples.store');
 
+    Route::get('/subtitles', [\App\Http\Controllers\SubtitleVideoController::class, 'index'])->name('subtitles.index');
+    Route::post('/subtitles', [\App\Http\Controllers\SubtitleVideoController::class, 'store'])->middleware('throttle:3,1')->name('subtitles.store');
+    Route::get('/subtitles/{subtitleVideo}', [\App\Http\Controllers\SubtitleVideoController::class, 'show'])->name('subtitles.show');
+    Route::get('/subtitles/{subtitleVideo}/status', [\App\Http\Controllers\SubtitleVideoController::class, 'status'])->middleware('throttle:30,1')->name('subtitles.status');
+    Route::get('/subtitles/{subtitleVideo}/preview', [\App\Http\Controllers\SubtitleVideoController::class, 'preview'])->name('subtitles.preview');
+    Route::get('/subtitles/{subtitleVideo}/download', [\App\Http\Controllers\SubtitleVideoController::class, 'download'])->name('subtitles.download');
+
     Route::get('/projects', [StudioProjectController::class, 'index'])->name('projects.index');
     Route::get('/projects/create', [StudioProjectController::class, 'create'])->name('projects.create');
     Route::post('/projects', [StudioProjectController::class, 'store'])->name('projects.store');

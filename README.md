@@ -146,3 +146,7 @@ The test suite covers the master prompt's synchronization with root `prompt.txt`
 - `app/Http/Controllers/PromptHistoryController.php` — private prompt library, search, and owner-checked detail/deletion.
 - `app/Http/Controllers/Admin/AiSettingsController.php` and `UserManagementController.php` — administrator-only provider setup, registered-user activity, prompt review, and temporary test accounts.
 - `resources/views/` and `public/css`, `public/js` — responsive studio, account, and history interface with copy/download helpers. GSAP 3.15.0 and ScrollTrigger are self-hosted under `public/js/vendor`; Inter 5.3.0 variable fonts are self-hosted under `public/fonts` with their OFL license. The motion layer respects reduced-motion preferences.
+
+## Video Subtitle Studio
+
+Upload a finished MP4 at `/subtitles` for local Whisper transcription and animated, word-highlighted subtitles. Processing uses a dedicated background queue and private, owner-authorized preview/download routes; the original upload is not modified. See [Subtitle Studio setup, quality contract, tests, and deployment checklist](docs/subtitle-studio.md) before enabling the worker. Burning subtitles requires re-encoding: lossless H.264 is the default, not a claim of bit-identical output.

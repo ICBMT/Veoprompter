@@ -31,6 +31,16 @@ return [
 
     'connections' => [
 
+        // Dedicated long-running worker; never use the synchronous web connection.
+        'subtitles' => [
+            'driver' => 'database',
+            'connection' => env('DB_QUEUE_CONNECTION'),
+            'table' => 'jobs',
+            'queue' => 'subtitles',
+            'retry_after' => 7500,
+            'after_commit' => true,
+        ],
+
         'sync' => [
             'driver' => 'sync',
         ],

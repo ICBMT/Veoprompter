@@ -19,6 +19,8 @@
     <script src="/js/veoprompter.js" defer></script>
     <script src="/js/prompt-repair.js" defer></script>
     <script src="/js/site-motion.js" defer></script>
+    @stack('scripts')
+    @stack('styles')
 </head>
 <body>
 @php
@@ -45,6 +47,10 @@
                 <a href="{{ route('history.index', [], false) }}" class="nav-link {{ request()->routeIs('history.*') ? 'is-active' : '' }}">
                     <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M4 5.2A2.2 2.2 0 0 1 6.2 3h8.6A2.2 2.2 0 0 1 17 5.2v9.6a2.2 2.2 0 0 1-2.2 2.2H6.2A2.2 2.2 0 0 1 4 14.8V5.2Z"/><path d="M7 6.5h7M7 9.5h7M7 12.5h4M2.5 6v9"/></svg>
                     <span>Prompt library</span>
+                </a>
+                <a href="{{ route('subtitles.index', [], false) }}" class="nav-link {{ request()->routeIs('subtitles.*') ? 'is-active' : '' }}">
+                    <svg viewBox="0 0 20 20" aria-hidden="true"><rect x="2" y="4" width="16" height="12" rx="2"/><path d="M5 10h4m2 0h4M5 13h10"/></svg>
+                    <span>Subtitle Studio</span>
                 </a>
                 <a href="{{ route('account.edit', [], false) }}" class="nav-link {{ request()->routeIs('account.*') ? 'is-active' : '' }}">
                     <svg viewBox="0 0 20 20" aria-hidden="true"><circle cx="10" cy="6.2" r="3.2"/><path d="M3.5 17c.7-3.5 2.8-5.2 6.5-5.2s5.8 1.7 6.5 5.2"/></svg>
