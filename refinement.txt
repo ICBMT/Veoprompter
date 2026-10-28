@@ -1,0 +1,155 @@
+The objective is to make the existing AI Video Storyteller / VeoPrompter generate the most reliable, internally consistent, production-ready video prompt package possible on the FIRST attempt, for arbitrary topics, projects, prompt formats, clip counts, and supported video-generation tools.
+
+Do not optimize for passing a single test prompt. Optimize for reliable first-pass generation and genuine clip-to-clip continuity.
+
+## 1. Inspect the Existing System First
+
+Before changing anything, inspect the actual first-pass generation pipeline, planner, schemas, prompt templates, character-bible logic, duration and speech allocation, handoff generation, serializer, final QA engine, Auto-Fix system, audit-report generator, and existing tests.
+
+Trace how information flows from user input to the canonical plan, generated sections, copy-ready clip prompts, QA results, and final report.
+
+Use the actual implementation and QA catalogue as evidence. Do not guess what errors exist, and do not assume every QA warning is a true defect. Distinguish genuine generation defects, parser or validator defects, duplicate findings, and informational warnings.
+
+Preserve the current architecture and all working behavior. Make focused, generic improvements rather than rebuilding the application or adding topic-specific exceptions.
+
+## 2. Convert Every Detectable QA Error into a Prevention Contract
+
+Create a complete inventory of every existing detectable QA issue and its underlying failure mode.
+
+For every issue, establish:
+
+- The exact condition that constitutes the defect.
+- The earliest pipeline stage capable of preventing it.
+- The invariant or generation rule that prevents it.
+- The independent final-output check that detects it if prevention fails.
+- A generic regression test proving both valid and invalid cases.
+
+Cover every actual QA category, including timing and runtime, dialogue pacing, missing or malformed fields, inconsistent duration representations, character and object identity, state continuity, transition classification, handoff mismatches, process chronology, unsupported claims, and contradictory audit reports wherever these checks exist.
+
+Use negative constraints in the planner instructions where helpful, but do not rely on negative prompt text alone. Enforce deterministic requirements in structured planning, validation, serialization, and tests wherever technically possible.
+
+Do not merely add a longer list of prohibitions. Eliminate the causes that allow the errors to occur.
+
+## 3. Make Seamless Type A Continuity the Default
+
+The default objective is one coherent, continuous visual sequence, as though all clips belong to the same recording and world.
+
+For each adjacent pair, maintain a canonical outgoing state and derive the next incoming state from it. Include all applicable continuity dimensions:
+
+- Character identity, anatomy, face, age, clothing, colors, proportions, and accessories.
+- Character count, location, pose, orientation, gaze, movement, and relationships to other subjects.
+- Props, tools, vehicles, and other objects, including identity, quantity, position, orientation, condition, and ownership.
+- Environment, geography, background, weather, lighting, time of day, and spatial relationships.
+- Camera position, framing, lens characteristics, screen direction, motion, focus, and visual style.
+- Process stages, material conditions, object transformations, and every relevant state variable.
+
+Only constrain dimensions that are applicable to the actual scene. Do not invent missing facts or unnecessarily freeze natural movement.
+
+Type A must begin from a state genuinely compatible with the previous clip's final state. Preserve continuing motion and spatial relationships rather than merely repeating similar descriptive wording.
+
+When a video tool cannot reliably carry hidden state between separate generations, explicitly use its supported reference-frame, character-reference, image-reference, or continuation mechanisms when available. If a tool lacks such capabilities, maximize continuity through explicit visual anchors and honest tool-specific instructions. Never promise perfect continuity that the tool cannot guarantee.
+
+## 4. Use Type B and Type C Only When Justified
+
+Prefer Type A seamless continuation whenever the story and tool support it.
+
+Use Type B only when a meaningful natural-action transition is necessary. Its opening must match the preceding ending state, followed by an explicit, visible action that explains the transition. Do not use Type B to conceal a mismatch or skip a required state.
+
+Use Type C only when a real narrative, temporal, location, or process transition is required. Clearly identify the before state, the transition or passage of time, and the after state. Do not falsely describe it as a seamless continuation.
+
+Classify each handoff once in the canonical plan and derive its labels, explanations, incoming state, outgoing state, and copy-ready instructions consistently throughout the output.
+
+Do not create extra transitions simply to accommodate planning errors. If seamless continuity is impossible or inappropriate, explain the reason through the appropriate transition contract.
+
+## 5. Solve Timing Before Final Prompt Writing
+
+Establish one authoritative timing plan before rendering the overview, clip plan, shot list, speech rows, and copy-ready prompts.
+
+Use the project's actual duration constraints and the same timing constants and rules as QA.
+
+Account for opening and ending pads, pauses, delivery speed, pronunciation difficulty, dialogue, visual actions, and any required transition. Do not silently shorten protected dialogue, compress meaningful actions, or violate declared duration limits to make a clip fit.
+
+If the required content cannot fit safely, use an allowed alternative such as allocating more time, changing the clip count when permitted, or reporting the issue as unresolved. Respect fixed clip counts and duration constraints when they are authoritative.
+
+Derive every duration representation from the same canonical allocation. The total runtime must equal the sum of final clip durations. Overview values, per-clip values, clip-plan values, shot-list values, structured metadata, and copy-ready duration fields must agree.
+
+## 6. Generate Every Section from One Canonical Plan
+
+Use one authoritative structured plan for project settings, duration allocations, dialogue, speakers, character identities, visual references, process stages, scene states, and handoff classifications.
+
+Derive all user-visible sections from that plan wherever possible. Avoid separately generating the same facts in multiple places.
+
+Ensure that:
+- Required sections and fields are present and parseable.
+- Every clip has one unambiguous duration and correct sequence position.
+- Handoff labels agree everywhere.
+- Character and object identities are stable.
+- Dialogue, visible actions, and timing are compatible.
+- Process stages are chronologically coherent and do not skip required steps.
+- Project-specific settings override defaults.
+- Tool-specific instructions are used only when supported by that tool.
+- The output remains faithful to the existing package structure and formatting contract.
+
+Do not solve inconsistency by simply adding more prose to the final prompt.
+
+## 7. Make Character and Object Control Generic
+
+Preserve and strengthen the existing character-bible and subject-identity mechanisms.
+
+Every recurring character, creature, product, vehicle, machine, or other continuity-critical subject must have a stable canonical identity and sufficient defining attributes.
+
+Insert the relevant identity description and reference instructions into every clip where that subject appears, using the existing architecture. Do not introduce duplicate characters, substitute designs, unexplained workers or bystanders, extra copies of objects, changing clothing, or unrequested visual variants.
+
+Respect explicit user constraints such as no people, no animals, one subject only, or a fixed character roster. Do not add a character merely because a prompt template expects one.
+
+For processes without characters, maintain equivalent continuity for materials, machinery, geometry, quantities, and transformation states.
+
+## 8. Treat the Final Prompt as the Actual Product
+
+After constructing the complete package, independently validate the exact serialized output that the user will receive.
+
+Do not rely solely on the canonical plan being valid. Detect discrepancies introduced during serialization, template expansion, or section generation.
+
+Use deterministic checks for deterministic facts. Use bounded AI judgment only for genuinely ambiguous contextual decisions, and validate its proposals before accepting them.
+
+Every issue must be classified from evidence:
+- Fixed: present before repair and absent from final QA.
+- Unresolved / Needs Review: still detected or cannot be safely resolved.
+- New Issues: introduced by generation or repair.
+- Informational / Review: relevant observations that are not confirmed failures.
+
+Never report an issue as fixed merely because a repair operation executed. Never claim exact state matching, synchronized timing, scientific accuracy, or complete dialogue compliance unless the relevant checks actually support that claim.
+
+Preserve the original prompt and history. Retain the existing maximum of two repair attempts and full QA after every repair. Do not silently invent missing facts or rewrite dialogue unless an existing explicit rule permits it.
+
+## 9. Build Generic Regression Tests from the Entire QA Catalogue
+
+Add or strengthen tests for every detectable issue, including both positive cases and deliberately malformed cases.
+
+At minimum, include:
+- Duration and total-runtime disagreements.
+- Missing or unparseable clip-plan durations.
+- Dialogue that exceeds available speech windows.
+- Duration repairs that violate declared constraints.
+- Mismatched character, prop, environment, camera, or process states.
+- Type A false continuity and Type B transitions without valid bridges.
+- Type C transitions falsely presented as seamless.
+- Conflicting handoff labels across sections.
+- Missing character definitions and unauthorized extra characters.
+- Contradictions between structured data and copy-ready prompts.
+- False audit claims and inconsistent Fixed/Unresolved reporting.
+- Repairs that introduce new issues.
+- Valid prompts that must not trigger false positives.
+- A completely consistent package that passes final QA.
+
+Use multiple unrelated topics and different prompt formats, including both character-led stories and character-free processes. Add regression tests for every additional QA defect discovered during inspection.
+
+## 10. Measure First-Pass Reliability and Report Honestly
+
+Keep first-pass QA results separate from post-repair results. Record the original issue count, issue categories, final unresolved count, newly introduced issues, and whether the first pass was clean.
+
+Run the relevant tests, inspect the actual diff, and report what was verified versus what remains unverified. Do not claim improved live-model reliability without comparative generation evidence.
+
+Do not overwrite the original prompt history, push changes, or perform unrelated refactors without authorization.
+
+The final objective is a generally reliable generation pipeline that produces coherent, well-paced, internally consistent prompts on the first attempt and maximizes seamless continuity across supported video tools—without pretending that prompt engineering alone can guarantee flawless rendered footage.
