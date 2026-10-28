@@ -482,6 +482,9 @@ class PromptStudioTest extends TestCase
         $this->assertSame([], $response->json('quality_review.issues'));
         Http::assertSentCount(1);
         $this->assertSame('deterministic', $response->json('quality_review.repair_method'));
+        $this->assertSame('needs_review', $response->json('quality_review.first_pass.status'));
+        $this->assertContains('speech_overrun', $response->json('quality_review.first_pass.issue_codes'));
+        $this->assertGreaterThan(0, $response->json('quality_review.first_pass.issue_count'));
         $this->assertStringContainsString('The tiny bee carries bright yellow pollen from this flower to another flower.', $response->json('content'));
 
         $run = $owner->promptProjects()->firstOrFail();

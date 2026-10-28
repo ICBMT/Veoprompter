@@ -41,6 +41,60 @@ class PromptPlanningPolicyTest extends TestCase
         $this->assertStringContainsString('Reallocate clips during planning', $brief);
     }
 
+    public function test_first_pass_contract_uses_active_qa_constants_in_every_video_format(): void
+    {
+        config(['prompt_qa.speech.words_per_second' => 1.7,
+            'prompt_qa.speech.young_audience_words_per_second' => 1.4,
+            'prompt_qa.speech.opening_visual_beat_seconds' => 0.5,
+            'prompt_qa.speech.inter_line_pause_seconds' => 0.4,
+            'prompt_qa.speech.ending_pause_seconds' => 0.8,
+            'prompt_qa.speech.handoff_closing_pause_seconds' => 1.2]);
+        foreach (array_keys(\App\Support\ProjectSettings::videoTypes()) as $type) {
+            $input = ['mode' => 'story', 'video_type' => $type, 'clip_count' => 'quality', 'audience' => 'Preschool children'];
+            $system = $this->invokePolicy('systemInstructions', $input);
+            $this->assertStringContainsString('FIRST-PASS PRODUCTION CONTRACT — VERSION 1', $system);
+            $this->assertStringContainsString('Minimum opening visual seconds: 0.5', $system);
+            $this->assertStringContainsString('Minimum inter-line pause seconds: 0.4', $system);
+            $this->assertStringContainsString('Minimum closing visual seconds: 1.2', $system);
+            $this->assertStringContainsString('words_per_second: 1.4', $system);
+            $this->assertStringContainsString('Copy strings, do not paraphrase them.', $system);
+            $this->assertStringContainsString('READ BACK THE COMPLETED TEXT', $system);
+            $this->assertStringNotContainsString('- 0.0–1.8s', $this->invokePolicy('buildCreativeBrief', $input, false));
+        }
+        $extension = $this->invokePolicy('systemInstructions', ['mode' => 'extend', 'narration' => '0']);
+        $this->assertStringContainsString('A single extension remains one prompt', $extension);
+        $this->assertStringContainsString('silent clips use the explicit silent marker', $extension);
+    }
+
+    public function test_first_pass_metadata_does_not_mislabel_an_unparsed_response_as_clean(): void
+    {
+        $text = '## PROJECT OVERVIEW'."\nNo copy-ready blocks in this fixture.";
+        Http::fake(['*' => Http::response(['candidates' => [['content' => ['parts' => [['text' => $text]]]]]])]);
+        $settings = new AiSetting(['provider' => 'gemini', 'model' => 'test-model', 'api_key' => 'test-secret']);
+        $result = (new PromptGenerationService)->generateWithQualityReview($settings,
+            ['mode' => 'story', 'clip_count' => 'quality']);
+        $this->assertSame('not_checked', $result['quality_review']['first_pass']['status']);
+        $this->assertSame(0, $result['quality_review']['first_pass']['clip_count']);
+        $this->assertSame('automated_text_checks', $result['quality_review']['first_pass']['scope']);
+        $this->assertSame(1, $result['quality_review']['first_pass']['contract_version']);
+    }
+
+    public function test_a_clean_first_response_is_preserved_without_a_repair_call(): void
+    {
+        $text = SpeechTimingTest::fixture('COPY CLIP 1 PROMPT', [
+            '- 0.2–2.0s | VISIBLE ACTION: wheel turns | SPEAKER: Narrator | LINE: “It turns.”',
+        ]);
+        Http::fake(['*' => Http::response(['candidates' => [['content' => ['parts' => [['text' => $text]]]]]])]);
+        $settings = new AiSetting(['provider' => 'gemini', 'model' => 'test-model', 'api_key' => 'test-secret']);
+        $result = (new PromptGenerationService)->generateWithQualityReview($settings, SpeechTimingTest::input());
+        $this->assertSame($text, $result['content']);
+        $this->assertSame('passed', $result['quality_review']['first_pass']['status']);
+        $this->assertSame(0, $result['quality_review']['first_pass']['issue_count']);
+        $this->assertSame([], $result['quality_review']['first_pass']['issue_codes']);
+        $this->assertFalse($result['quality_review']['repair_attempted']);
+        Http::assertSentCount(1);
+    }
+
     public function test_fixed_settings_and_extensions_do_not_silently_grow(): void
     {
         foreach ([['mode' => 'story', 'clip_count' => '3', 'clip_duration' => '6'],

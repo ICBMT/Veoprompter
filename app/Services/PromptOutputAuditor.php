@@ -2290,18 +2290,34 @@ class PromptOutputAuditor
     {
         $wordCount = $this->wordCount($line);
         $sentencePauses = $this->sentencePauseCount($line);
-        $wordsPerSecond = max(0.1, $this->speechPolicy('words_per_second', 2.5));
-        if (preg_match('/\b(preschool|toddler|early learner|young children)\b/i', (string) ($input['audience'] ?? '')) === 1) {
-            $wordsPerSecond = min($wordsPerSecond, $this->speechPolicy('young_audience_words_per_second', 2.2));
-        }
+        $estimate = $this->speechEstimatePolicy($input);
+        $wordsPerSecond = $estimate['words_per_second'];
         preg_match_all('/\b[\p{L}]{12,}\b/u', $line, $technicalWords);
-        $pronunciation = count($technicalWords[0] ?? []) * $this->speechPolicy('technical_word_extra_seconds', 0.15);
-        $pauseMinimum = max(0.0, $this->speechPolicy('sentence_pause_min_seconds', 0.12));
-        $pausePerSentence = max(0.0, $this->speechPolicy('sentence_pause_per_sentence_seconds', 0.12));
-        $pauseMaximum = max($pauseMinimum, $this->speechPolicy('sentence_pause_max_seconds', 0.45));
+        $pronunciation = count($technicalWords[0] ?? []) * $estimate['technical_word_extra_seconds'];
+        $pauseMinimum = $estimate['sentence_pause_min_seconds'];
+        $pausePerSentence = $estimate['sentence_pause_per_sentence_seconds'];
+        $pauseMaximum = $estimate['sentence_pause_max_seconds'];
         $sentencePause = max($pauseMinimum, min($pauseMaximum, $sentencePauses * $pausePerSentence));
 
         return ($wordCount / $wordsPerSecond) + $sentencePause + $pronunciation;
+    }
+
+    /** One source for both first-pass planning constants and QA's text estimates. */
+    public function speechEstimatePolicy(array $input = []): array
+    {
+        $rate = max(0.1, $this->speechPolicy('words_per_second', 2.5));
+        if (preg_match('/\b(preschool|toddler|early learner|young children)\b/i', (string) ($input['audience'] ?? '')) === 1) {
+            $rate = max(0.1, min($rate, $this->speechPolicy('young_audience_words_per_second', 2.2)));
+        }
+        $minimum = $this->speechPolicy('sentence_pause_min_seconds', 0.12);
+
+        return [
+            'words_per_second' => $rate,
+            'sentence_pause_min_seconds' => $minimum,
+            'sentence_pause_per_sentence_seconds' => $this->speechPolicy('sentence_pause_per_sentence_seconds', 0.12),
+            'sentence_pause_max_seconds' => max($minimum, $this->speechPolicy('sentence_pause_max_seconds', 0.45)),
+            'technical_word_extra_seconds' => $this->speechPolicy('technical_word_extra_seconds', 0.15),
+        ];
     }
 
     /** Conservative text estimate; not measured TTS or rendered speech. */

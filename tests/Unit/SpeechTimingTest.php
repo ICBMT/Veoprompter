@@ -54,6 +54,17 @@ class SpeechTimingTest extends TestCase
         $this->assertGreaterThan(1 / 2.5 + 0.12, $auditor->minimumSpeechSeconds('Electromagnetism.'));
     }
 
+    public function test_planning_estimate_constants_are_the_same_values_used_to_compute_qa_time(): void
+    {
+        $auditor = new PromptOutputAuditor;
+        foreach ([[], ['audience' => 'Preschool children']] as $input) {
+            $policy = $auditor->speechEstimatePolicy($input);
+            $expected = 2 / $policy['words_per_second'] + max($policy['sentence_pause_min_seconds'],
+                min($policy['sentence_pause_max_seconds'], $policy['sentence_pause_per_sentence_seconds']));
+            $this->assertEqualsWithDelta($expected, $auditor->minimumSpeechSeconds('It moves.', $input), 0.0001);
+        }
+    }
+
     public function test_boundary_pads_are_not_weakened_by_rounding_tolerance(): void
     {
         $auditor = new PromptOutputAuditor;

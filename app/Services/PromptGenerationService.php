@@ -36,6 +36,15 @@ class PromptGenerationService
         $content = $this->requestText($settings, $systemInstructions, $brief, $referenceFrame, $this->outputTokenBudget($input));
         $auditor = new PromptOutputAuditor;
         $qualityReview = $auditor->audit($content, $input);
+        // Capture the original response before either repair path changes it. Never confuse repaired QA with first-pass QA.
+        $firstPass = [
+            'scope' => 'automated_text_checks',
+            'status' => $qualityReview['status'],
+            'issue_count' => count($qualityReview['issues']),
+            'issue_codes' => array_values(array_unique(array_column($qualityReview['issues'], 'code'))),
+            'clip_count' => count($auditor->extractClips($content, $input)),
+            'contract_version' => 1,
+        ];
         if (PromptRepairService::hasSupportedIssues($qualityReview)) {
             $timed = (new PromptRepairService($auditor, $this))->repair(null, $content, $input);
             if ($timed['repair_report']['applied']) {
@@ -102,6 +111,8 @@ class PromptGenerationService
                 $qualityReview['repair_outcome'] = 'failed';
             }
         }
+
+        $qualityReview['first_pass'] = $firstPass;
 
         return [
             'content' => $content,
@@ -249,7 +260,7 @@ FACTUAL ACCURACY AND SOURCE HONESTY — Keep scientific, historical, chronologic
 
 VISUAL TEACHING CLARITY — Give every educational clip one primary idea and one legible cause → action → result. Show the actual component or mechanism being discussed. Explicitly label each clip's `VISUAL REPRESENTATION:` as a literal scene, cutaway, diagram, overlay, or illustrative metaphor. Keep internal geometry, layouts, scale, labels, and camera perspective consistent; avoid clutter, simultaneous competing mechanisms, and overloaded clips. Apply the same focus to non-educational beats without forcing a lesson.
 
-TIMED SPEECH AND STRUCTURED PROMPT CONTRACT — In every standalone clip prompt, include the exact one-line fields `CLIP DURATION: N seconds`, `PRIMARY IDEA:`, `VISUAL REPRESENTATION:`, `VISIBLE CAUSE → ACTION → RESULT:`, `OPENING CONTINUITY STATE:`, `ENDING CONTINUITY STATE:`, `OPENING PRESENTATION STATE:`, and `ENDING PRESENTATION STATE:`. Include `SPEECH/VISUAL MAP:` followed by exact per-line timing rows in this form: `- 0.0–1.8s | VISIBLE ACTION: [simultaneous visible action/result] | SPEAKER: [Narrator or exact canonical character name] | LINE: “[exact words]”`. Estimate speaking time conservatively at 2.5–3 words/second initially for ordinary English (plan conservatively at 2.5, slower for young audiences or technical words), plus pronunciation difficulty, natural pauses, and comprehension time; reserve time for visual setup/action and a settled ending, and split complete narration across adjacent clips when count is AI-selected rather than rushing or deleting requested content; preserve fixed-count constraints and report infeasibility when necessary. Do not describe a component before it appears or after its action is over. When speech is intentionally absent, say so explicitly; when audio is off, use `SPEECH/VISUAL MAP: None — spoken audio is off` and include no spoken words. Keep each metadata value on one line.
+TIMED SPEECH AND STRUCTURED PROMPT CONTRACT — In every standalone clip prompt, include the exact one-line fields `CLIP DURATION: N seconds`, `PRIMARY IDEA:`, `VISUAL REPRESENTATION:`, `VISIBLE CAUSE → ACTION → RESULT:`, `OPENING CONTINUITY STATE:`, `ENDING CONTINUITY STATE:`, `OPENING PRESENTATION STATE:`, and `ENDING PRESENTATION STATE:`. Include `SPEECH/VISUAL MAP:` followed by exact per-line timing rows in this form: `- 0.2–1.8s | VISIBLE ACTION: [simultaneous visible action/result] | SPEAKER: [Narrator or exact canonical character name] | LINE: “[exact words]”`. Estimate speaking time conservatively at 2.5–3 words/second initially for ordinary English (plan conservatively at 2.5, slower for young audiences or technical words), plus pronunciation difficulty, natural pauses, and comprehension time; reserve time for visual setup/action and a settled ending, and split complete narration across adjacent clips when count is AI-selected rather than rushing or deleting requested content; preserve fixed-count constraints and report infeasibility when necessary. Do not describe a component before it appears or after its action is over. When speech is intentionally absent, say so explicitly; when audio is off, use `SPEECH/VISUAL MAP: None — spoken audio is off` and include no spoken words. Keep each metadata value on one line.
 
 MATCHED HANDOFF CONTRACT — Compare each prior ending with the next opening across canonical cast/identity, poses and positions, carried objects, materials/process state, environment, camera and motion, lighting, and audible action. The prior `OUTGOING HANDOFF TYPE:` must exactly match the next `TRANSITION TYPE:`. Do not choose Type A merely because openings match: Type A continues an already-in-progress action with no separate bridge to depict; Type B also opens on the exact prior state, then begins a new visible physical action and shows the complete physical bridge after that opening. Every incoming clip copies the prior `ENDING CONTINUITY STATE:` value exactly into its `OPENING CONTINUITY STATE:`. Type A and Type B also copy the prior `ENDING PRESENTATION STATE:` value exactly into their opening. For Type B, the destination clip begins from that identical prior physical and presentation state, then shows the complete bridge only after the matching opening; never cut directly to its changed state or presentation. Type C begins from the actual prior continuity state and shows its intentional progression inside the clip; any presentation change must be motivated by the transition. Type A copies its opening unchanged, then lets the already-in-progress action advance naturally without a restart; Type B presentation changes are visible only after that opening. Type B must show the complete physically plausible bridge; Type C is an intentional, non-seamless before → credible intermediate change → after progression. Never use a label to hide a skipped stage, impossible change, or unaccounted interval. The last clip must mark `OUTGOING HANDOFF TYPE: FINAL — NO NEXT HANDOFF`.
 
@@ -264,7 +275,8 @@ POLICY;
             .($modeInstructions === '' ? '' : "\n\n".$modeInstructions)
             .($aiChoiceInstructions === '' ? '' : "\n\n".$aiChoiceInstructions)
             .($speechInstructions === '' ? '' : "\n\n".$speechInstructions)
-            ."\n\n".$this->continuityFirstPlanningInstructions($input);
+            ."\n\n".$this->continuityFirstPlanningInstructions($input)
+            ."\n\n".$this->firstPassProductionContract($input);
     }
 
     private function speechInstructions(array $input): string
@@ -376,7 +388,7 @@ POLICY;
                 : 'Off; no on-screen spoken dialogue',
             'Speech-to-visual alignment' => ! $spokenAudioEnabled
                 ? 'Speech is off; write `SPEECH/VISUAL MAP: None — spoken audio is off` in every clip and include no spoken words.'
-                : 'For every exact narration or dialogue line, use a clip-relative time row `- 0.0–1.8s | VISIBLE ACTION: ... | SPEAKER: ... | LINE: “...”`; map it only to the visible action/object/result in this same clip. Estimate 2.5–3 words per second initially for ordinary English (2.5 conservatively; slower for young audiences or technical words) plus pronunciation and pause allowance; do not rush or overlap lines. Keep character speakers visible during their lines. For an invisible educational mechanism, show a clear, accurate, labeled cutaway/diagram/overlay in that clip and narrate only what it visibly represents. Leave visual setup/action and a settled ending.',
+                : 'For every exact narration or dialogue line, use a clip-relative time row `- 0.2–1.8s | VISIBLE ACTION: ... | SPEAKER: ... | LINE: “...”`; map it only to the visible action/object/result in this same clip. Estimate 2.5–3 words per second initially for ordinary English (2.5 conservatively; slower for young audiences or technical words) plus pronunciation and pause allowance; do not rush or overlap lines. Keep character speakers visible during their lines. For an invisible educational mechanism, show a clear, accurate, labeled cutaway/diagram/overlay in that clip and narrate only what it visibly represents. Leave visual setup/action and a settled ending.',
             'Background music' => ($input['music'] ?? true) ? 'Include subtle music that never overpowers speech' : 'No background music',
             'Sound effects' => ($input['sound_effects'] ?? true) ? 'Use only restrained, action-matched sound effects' : 'No sound effects',
         ];
@@ -515,6 +527,25 @@ POLICY;
             : 'Keep the fixed count or single extension exactly. Do not invent extra clip blocks, repeat or delete essential narration, or rush speech to conceal an infeasible brief. State an unresolved count/duration/content conflict if the full requested content cannot fit.';
 
         return "CONTINUITY-FIRST PACING — FINAL PLANNING RULE\nFor every speech-containing clip in every format (including extensions and character dialogue), establish the image for 0.2–0.4 seconds before the first word, leave at least 0.2 seconds between separate lines and at least 0.3 seconds after the final word. These are minimum visual/pausing allocations inside the existing 2–3 second headroom, not extra allowances to double-count. Available speech time = declared duration minus opening pad, closing pad, inter-line pauses and any non-overlapping visual-only beats. Estimate exact words at roughly 2.5–3 words/second for ordinary English, using 2.5 conservatively, slower for technical pronunciation, emphasis or younger audiences. This is a text estimate, not measured TTS; other languages need language-appropriate planning and verification. Treat quoted/scripted user dialogue as verbatim protected text. Never speed up an existing delivery or rewrite protected dialogue.\nSpeech-off settings remain authoritative: do not invent narration/dialogue, and retain the silent speech-map marker. When speech is enabled and count is AI-selected, the spillover rule below overrides generic shorten-line advice.\n{$timing}\n{$splitting}\nPlan long continuous takes and divide them at genuinely consecutive moments so Type A direct continuation is the preferred handoff wherever honest. Use additional connected clips to let ongoing motion, narration, and physical stages unfold without resets. Type B/C are exceptions, not quotas: use B only for a genuinely new visible bridge action, and C only for necessary non-seamless temporal/narrative progression. Briefly justify each B/C choice in the clip plan. Never relabel a jump as Type A, invent travel, freeze a changing object, hide prerequisites, or claim perfect rendered continuity. For Type A, only the copied opening is unchanged; the existing action advances naturally inside the clip. An extension remains one prompt governed by its supplied evidence, not a new multi-clip chain.\nIn every standalone video-generator prompt, include a concise TIMING FLEXIBILITY note stating its actual declared N-second window: redistribute sub-beat/action/speech start and end times earlier or later inside that window to fit natural delivery, while preserving exact spoken wording/order, visible alignment, opening/ending states, pauses and settled tail. Never authorize exceeding or silently changing CLIP DURATION, speeding speech, skipping action, or moving words into an unseen future event. If a target tool offers only fixed durations, use an allowed duration and plan within it; the planner must update all duration views before export if it chooses a different allowed duration.";
+    }
+
+    private function firstPassProductionContract(array $input): string
+    {
+        $auditor = new PromptOutputAuditor;
+        // A/B/C handoffs may require a longer configured closing pause than a final clip.
+        $timing = $auditor->speechTimingPolicy('OUTGOING HANDOFF TYPE: TYPE A — DIRECT CONTINUATION');
+        $constants = $this->formatFields([
+            'Minimum opening visual seconds' => $timing['opening_visual_beat_seconds'],
+            'Minimum inter-line pause seconds' => $timing['inter_line_pause_seconds'],
+            'Minimum closing visual seconds' => $timing['ending_pause_seconds'],
+            ...$auditor->speechEstimatePolicy($input),
+        ]);
+        $contract = file_get_contents(resource_path('prompts/first-pass-contract.txt'));
+        if ($contract === false) {
+            throw new PromptGenerationException('The first-pass planning contract could not be loaded.');
+        }
+
+        return "FIRST-PASS PRODUCTION CONTRACT — VERSION 1\nThese request-specific planning rules take precedence over generic examples/defaults in the master, including illustrative timestamps and speech rates; never override safety, protected dialogue, selected fixed settings, evidence limits or source honesty. Return the selected format, not a second diagnostic document.\n\nACTIVE QA SPEECH CONSTANTS — use these actual values, not a faster generic rate\n{$constants}\n\n{$contract}";
     }
 
     private function clipCountBrief(mixed $clipCount): string

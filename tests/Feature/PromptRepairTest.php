@@ -20,6 +20,11 @@ class PromptRepairTest extends TestCase
         $content = $this->clip(1, 'INITIAL CLIP — NO PREVIOUS HANDOFF', 'TYPE A — DIRECT CONTINUATION', $previous, $previous)
             ."\n".$this->clip(2, 'TYPE A — DIRECT CONTINUATION', 'FINAL — NO NEXT HANDOFF', $reordered, $reordered);
         $run = $this->savedRun($owner, $content, ['clip_count' => 2]);
+        $firstPass = ['scope' => 'automated_text_checks', 'status' => 'needs_review',
+            'issue_count' => 1, 'issue_codes' => ['continuity_state_mismatch'], 'clip_count' => 2, 'contract_version' => 1];
+        $run->quality_review = [...$run->quality_review, 'first_pass' => $firstPass];
+        $run->save();
+
 
         $this->actingAs($owner)
             ->postJson(route('history.repair', $run))
@@ -35,6 +40,13 @@ class PromptRepairTest extends TestCase
         $this->assertStringContainsString('OPENING CONTINUITY STATE: '.$previous, $repaired->content);
         $this->assertSame('repair', $repaired->repair_history[0]['action']);
         $this->assertSame('completed', $repaired->repair_history[0]['status']);
+        $this->assertSame($firstPass, $repaired->quality_review['first_pass']);
+        $this->postJson(route('history.repair', $repaired))
+            ->assertOk()
+            ->assertJsonPath('quality_review.first_pass.status', 'needs_review')
+            ->assertJsonPath('quality_review.status', 'passed')
+            ->assertJsonPath('manual_attempts', 1);
+
 
         $this->postJson(route('history.restore', $repaired))
             ->assertOk()
@@ -47,6 +59,7 @@ class PromptRepairTest extends TestCase
         $this->assertSame($content, $restored->content);
         $this->assertSame($content, $restored->original_content);
         $this->assertSame('restore', $restored->repair_history[1]['action']);
+        $this->assertSame($firstPass, $restored->quality_review['first_pass']);
 
         $this->get(route('history.show', $restored))
             ->assertOk()

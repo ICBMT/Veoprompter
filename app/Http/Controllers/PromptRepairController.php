@@ -25,7 +25,7 @@ class PromptRepairController extends Controller
 
         $auditedContent = (string) $project->content;
         $brief = is_array($project->brief) ? $project->brief : [];
-        $currentReview = $auditor->audit($auditedContent, $brief);
+        $currentReview = $this->preserveFirstPass($auditor->audit($auditedContent, $brief), $project);
         if (! PromptRepairService::hasSupportedIssues($currentReview)) {
             $fresh = DB::transaction(function () use ($request, $project, $auditedContent, $currentReview): ?PromptProject {
                 $locked = PromptProject::query()->whereKey($project->getKey())->lockForUpdate()->firstOrFail();
@@ -229,7 +229,7 @@ class PromptRepairController extends Controller
             ];
 
             $locked->content = $result['content'];
-            $locked->quality_review = $result['quality_review'];
+            $locked->quality_review = $this->preserveFirstPass($result['quality_review'], $locked);
             if ($locked->original_content === null) {
                 // Older saved runs predate the original-content column; preserve their
                 // current prompt as the baseline before applying the first repair.
@@ -289,7 +289,7 @@ class PromptRepairController extends Controller
             }
 
             $original = $locked->original_content;
-            $review = $auditor->audit($original, is_array($locked->brief) ? $locked->brief : []);
+            $review = $this->preserveFirstPass($auditor->audit($original, is_array($locked->brief) ? $locked->brief : []), $locked);
             if ($locked->content === $original) {
                 $locked->quality_review = $review;
                 $locked->save();
@@ -361,6 +361,17 @@ class PromptRepairController extends Controller
             'repair_url' => route('history.repair', $fresh, false),
             'restore_url' => route('history.restore', $fresh, false),
         ]);
+    }
+
+    /** Original generation evidence must not become the result of a later repair/re-audit/restore. */
+    private function preserveFirstPass(array $review, PromptProject $project): array
+    {
+        $saved = $project->quality_review;
+        if (is_array($saved) && is_array($saved['first_pass'] ?? null)) {
+            $review['first_pass'] = $saved['first_pass'];
+        }
+
+        return $review;
     }
 
     private function finishReservation(int|string $projectId, string $attemptId, array $attributes): void

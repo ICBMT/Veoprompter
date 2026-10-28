@@ -154,3 +154,5 @@ Upload a finished MP4 at `/subtitles` for local Whisper transcription and animat
 See [continuity-first maximum-quality planning](docs/prompt-planning.md) for speech spillover, 2–3 second visual headroom, Type A preference, and server-side provider output budgets.
 
 See [speech timing and safe narration repair](docs/speech-timing.md) for opening/closing pads, breathing pauses, exact-dialogue protection and unresolved overflow handling.
+
+See [first-pass error prevention](docs/first-pass-planning.md) for the canonical-plan/preflight contract and original-response QA measurements.
