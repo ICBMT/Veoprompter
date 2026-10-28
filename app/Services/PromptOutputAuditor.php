@@ -381,9 +381,10 @@ class PromptOutputAuditor
             $clip['speech_timing_policy'] = $this->speechTimingPolicy($text);
             $clip['speech_rows'] = $this->speechRows($text);
             foreach ($clip['speech_rows'] as &$speechRow) {
-                $speechRow['minimum_seconds'] = $this->minimumSpeechSeconds($speechRow['line']);
+                $speechRow['minimum_seconds'] = $this->minimumSpeechSeconds($speechRow['line'], $input);
             }
             unset($speechRow);
+            $clip['speech_budget'] = $this->speechBudget($clip['speech_rows'], $clip['duration_seconds'], $clip['speech_timing_policy'], $input);
             $clip['minimum_speech_duration_seconds'] = array_sum(array_column($clip['speech_rows'], 'minimum_seconds'));
             $clip['minimum_duration_with_visual_beats_seconds'] = $clip['speech_rows'] === []
                 ? 0.0
@@ -676,6 +677,13 @@ class PromptOutputAuditor
             $requiredInterLinePause = $speechTimingPolicy['inter_line_pause_seconds'];
             $requiredEndingPause = $speechTimingPolicy['ending_pause_seconds'];
             $timingTolerance = $speechTimingPolicy['timing_tolerance_seconds'];
+            $budget = $this->speechBudget($speechRows, $duration, $speechTimingPolicy, $input);
+            if ($budget['fits'] === false) {
+                $this->addIssue($issues, 'speech_budget_exceeded', 'narration', $number,
+                    'Clip '.$number.' needs about '.round($budget['required_seconds'], 2).' seconds for its exact words, but only '
+                    .round($budget['available_seconds'], 2).' seconds remain after opening, closing and inter-line pauses. Preserve dialogue; allocate permitted time or replan across connected clips when count is AI-selected. Otherwise this conflict remains unresolved.');
+            }
+
             if ($speechRows[0]['start'] + $timingTolerance < $openingBeat) {
                 $this->addIssue(
                     $issues,
@@ -748,7 +756,7 @@ class PromptOutputAuditor
                 $wordCount = $this->wordCount($row['line']);
                 $minimumSeconds = is_numeric($row['minimum_seconds'] ?? null)
                     ? (float) $row['minimum_seconds']
-                    : $this->minimumSpeechSeconds($row['line']);
+                    : $this->minimumSpeechSeconds($row['line'], $input);
                 $availableSeconds = max(0, $row['end'] - $row['start']);
                 if ($wordCount > 0 && $availableSeconds + 0.05 < $minimumSeconds) {
                     $this->addIssue(
@@ -756,12 +764,12 @@ class PromptOutputAuditor
                         'speech_overrun',
                         'narration',
                         $number,
-                        'Clip '.$number.' speech row '.($rowIndex + 1).' has '.$wordCount.' words in '.round($availableSeconds, 1).' seconds; allow about '.round($minimumSeconds, 1).' seconds at a natural pace plus any pronunciation/comprehension needs. Shorten it or allocate more AI-selected time; never rush.',
+                        'Clip '.$number.' speech row '.($rowIndex + 1).' has '.$wordCount.' words in '.round($availableSeconds, 1).' seconds; allow about '.round($minimumSeconds, 1).' seconds at a natural pace plus any pronunciation/comprehension needs. Preserve the exact words and speaker order. Allocate more time only within declared limits, or split into connected clips when count is AI-selected; otherwise leave the conflict unresolved. Never rush or silently rewrite protected dialogue.',
                     );
                 }
             }
 
-            $lastSpeechEnd = $speechRows[array_key_last($speechRows)]['end'];
+            $lastSpeechEnd = max(array_column($speechRows, 'end'));
             if ($duration !== null && $duration - $lastSpeechEnd + $timingTolerance < $requiredEndingPause) {
                 $this->addIssue(
                     $issues,
@@ -2278,17 +2286,100 @@ class PromptOutputAuditor
         return count($matches[0] ?? []);
     }
 
-    public function minimumSpeechSeconds(string $line): float
+    public function minimumSpeechSeconds(string $line, array $input = []): float
     {
         $wordCount = $this->wordCount($line);
         $sentencePauses = $this->sentencePauseCount($line);
-        $wordsPerSecond = max(0.1, $this->speechPolicy('words_per_second', 2.2));
+        $wordsPerSecond = max(0.1, $this->speechPolicy('words_per_second', 2.5));
+        if (preg_match('/\b(preschool|toddler|early learner|young children)\b/i', (string) ($input['audience'] ?? '')) === 1) {
+            $wordsPerSecond = min($wordsPerSecond, $this->speechPolicy('young_audience_words_per_second', 2.2));
+        }
+        preg_match_all('/\b[\p{L}]{12,}\b/u', $line, $technicalWords);
+        $pronunciation = count($technicalWords[0] ?? []) * $this->speechPolicy('technical_word_extra_seconds', 0.15);
         $pauseMinimum = max(0.0, $this->speechPolicy('sentence_pause_min_seconds', 0.12));
         $pausePerSentence = max(0.0, $this->speechPolicy('sentence_pause_per_sentence_seconds', 0.12));
         $pauseMaximum = max($pauseMinimum, $this->speechPolicy('sentence_pause_max_seconds', 0.45));
         $sentencePause = max($pauseMinimum, min($pauseMaximum, $sentencePauses * $pausePerSentence));
 
-        return ($wordCount / $wordsPerSecond) + $sentencePause;
+        return ($wordCount / $wordsPerSecond) + $sentencePause + $pronunciation;
+    }
+
+    /** Conservative text estimate; not measured TTS or rendered speech. */
+    public function speechBudget(array $rows, ?float $duration, array $policy, array $input = []): array
+    {
+        $overhead = $rows === [] ? 0.0 : $policy['opening_visual_beat_seconds']
+            + $policy['ending_pause_seconds'] + max(0, count($rows) - 1) * $policy['inter_line_pause_seconds'];
+        $required = array_sum(array_map(fn (array $row): float => $this->minimumSpeechSeconds($row['line'], $input), $rows));
+        $available = $duration === null ? null : max(0.0, $duration - $overhead);
+
+        return ['available_seconds' => $available, 'required_seconds' => $required,
+            'visual_and_pause_seconds' => $overhead,
+            'fits' => $available === null ? null : $required <= $available + $policy['timing_tolerance_seconds']];
+    }
+
+    /** Unaffected clip bodies must survive in order, even if a safe split changes numbering. */
+    public function preservesUnaffectedClips(string $before, string $after, array $input, array $issues): bool
+    {
+        $affected = [];
+        foreach ($issues as $issue) {
+            if (is_numeric($issue['clip'] ?? null)) {
+                $number = (int) $issue['clip'];
+                foreach ([$number - 1, $number, $number + 1] as $neighbor) {
+                    $affected[$neighbor] = true;
+                }
+            }
+        }
+        $candidates = $this->extractClips($after, $input);
+        $cursor = 0;
+        foreach ($this->extractClips($before, $input) as $clip) {
+            if (isset($affected[$clip['number']])) {
+                // Consume at least its original slot; do not match a later protected clip to an earlier duplicate.
+                $cursor++;
+                continue;
+            }
+            $found = false;
+            while (isset($candidates[$cursor])) {
+                if (trim($candidates[$cursor++]['text']) === trim($clip['text'])) {
+                    $found = true;
+                    break;
+                }
+            }
+            if (! $found) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    /** Preserve spoken text and speaker order, allowing only redistribution between clips/rows. */
+    public function preservesSpokenContent(string $before, string $after, array $input): bool
+    {
+        $signature = function (string $text) use ($input): ?array {
+            $runs = [];
+            foreach ($this->canonicalProjectPlan($text, $input)->clips as $clip) {
+                preg_match_all('/\bLINE\s*:/iu', str_replace(['**', '__', '`'], '', $clip['text']), $markers);
+                if (count($markers[0]) !== count($clip['speech_rows'])) {
+                    return null;
+                }
+                foreach ($clip['speech_rows'] as $row) {
+                    $unquoted = preg_replace('/\A["“‘]|["”’]\z/u', '', trim($row['line'])) ?? $row['line'];
+                    $words = preg_replace('/\s+/u', ' ', $unquoted);
+                    $last = array_key_last($runs);
+                    if ($last !== null && $runs[$last]['speaker'] === $row['speaker']) {
+                        $runs[$last]['text'] .= ' '.$words;
+                    } else {
+                        $runs[] = ['speaker' => $row['speaker'], 'text' => $words];
+                    }
+                }
+            }
+
+            return $runs;
+        };
+        $original = $signature($before);
+        $candidate = $signature($after);
+
+        return $original !== null && $candidate !== null && ($original === [] || $original === $candidate);
     }
 
     public function speechTimingPolicy(string $clipText = ''): array
@@ -2300,10 +2391,10 @@ class PromptOutputAuditor
         }
 
         return [
-            'opening_visual_beat_seconds' => $this->speechPolicy('opening_visual_beat_seconds', 0.2),
-            'inter_line_pause_seconds' => $this->speechPolicy('inter_line_pause_seconds', 0.2),
-            'ending_pause_seconds' => $endingPause,
-            'timing_tolerance_seconds' => $this->speechPolicy('timing_tolerance_seconds', 0.05),
+            'opening_visual_beat_seconds' => max(0.2, $this->speechPolicy('opening_visual_beat_seconds', 0.2)),
+            'inter_line_pause_seconds' => max(0.2, $this->speechPolicy('inter_line_pause_seconds', 0.2)),
+            'ending_pause_seconds' => max(0.3, $endingPause),
+            'timing_tolerance_seconds' => $this->speechPolicy('timing_tolerance_seconds', 0.0001),
         ];
     }
 

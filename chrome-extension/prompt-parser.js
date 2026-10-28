@@ -180,7 +180,11 @@ function structuredSpeechWarnings(chunk, duration) {
         return warnings;
     }
 
+    if (rows[0].start + 0.0001 < 0.2) {
+        warnings.push(`Clip ${number} starts speech before the required 0.2-second opening visual beat.`);
+    }
     let previousEnd = null;
+    let requiredSpeech = 0;
     rows.forEach((row, index) => {
         if (!row.action || !row.speaker || !row.line) {
             warnings.push(`Clip ${number} speech row ${index + 1} needs a visible action, speaker, and exact line.`);
@@ -194,17 +198,25 @@ function structuredSpeechWarnings(chunk, duration) {
         if (previousEnd !== null && row.start < previousEnd) {
             warnings.push(`Clip ${number} has overlapping speech windows; leave natural pauses instead of layering or rushing lines.`);
         }
+        if (previousEnd !== null && row.start >= previousEnd && row.start - previousEnd + 0.0001 < 0.2) {
+            warnings.push(`Clip ${number} speech row ${index + 1} needs at least a 0.2-second breathing pause.`);
+        }
         previousEnd = Math.max(previousEnd ?? 0, row.end);
 
         const words = estimateWords(row.line);
         const pauseCount = (row.line.match(/[.!?…](?:\s|$)/gu) || []).length;
-        const minimumSeconds = (words / 2.2) + Math.max(0.12, Math.min(0.45, pauseCount * 0.12));
+        const technicalWords = (row.line.match(/\b[\p{L}]{12,}\b/gu) || []).length;
+        const minimumSeconds = technicalWords * 0.15 + (words / 2.5) + Math.max(0.12, Math.min(0.45, pauseCount * 0.12));
+        requiredSpeech += minimumSeconds;
         if (words > 0 && row.end - row.start + 0.05 < minimumSeconds) {
-            warnings.push(`Clip ${number} speech row ${index + 1} has ${words} words in ${(row.end - row.start).toFixed(1)} seconds; shorten it or allocate enough time for natural delivery.`);
+            warnings.push(`Clip ${number} speech row ${index + 1} has ${words} words in ${(row.end - row.start).toFixed(1)} seconds; preserve the exact words and allocate enough permitted time or replan across connected clips; never rush.`);
         }
     });
 
-    if (duration !== null && duration - rows.at(-1).end < 0.25) {
+    if (duration !== null && requiredSpeech > Math.max(0, duration - 0.2 - 0.3 - Math.max(0, rows.length - 1) * 0.2) + 0.0001) {
+        warnings.push(`Clip ${number} has insufficient total speech time after reserving opening, closing and inter-line pauses; preserve words and replan within the project limits.`);
+    }
+    if (duration !== null && duration - Math.max(...rows.map((row) => row.end)) + 0.0001 < 0.3) {
         warnings.push(`Clip ${number} leaves no settled visual beat after the final spoken line.`);
     }
     return warnings;

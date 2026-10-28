@@ -20,6 +20,7 @@ class PromptRepairService
         'speech_exceeds_clip',
         'speech_time_range_invalid',
         'speech_overrun',
+        'speech_budget_exceeded',
         'speech_opening_visual_beat_missing',
         'speech_inter_line_pause_missing',
         'speech_leaves_no_visual_tail',
@@ -140,6 +141,10 @@ class PromptRepairService
         }
 
         $statePairs = $this->stateMismatchPairs($candidate, $input, $workingReview);
+        if ($statePairs === [] && ($input['mode'] ?? 'story') !== 'extend'
+            && ($input['clip_count'] ?? '') === ProjectSettings::AI_QUALITY_CLIP_COUNT) {
+            $this->proposeSpeechRepartition($settings, $candidate, $input, $workingReview, $notes, $retryable);
+        }
         if ($statePairs !== []) {
             $prioritizedPairs = $this->prioritizeStatePairs($statePairs);
             $limitedPairs = array_slice($prioritizedPairs, 0, self::MAX_AI_STATE_PAIRS);
@@ -313,7 +318,7 @@ class PromptRepairService
             $timing = $this->repairSpeechTiming($clip, $plan, $input);
             if ($timing === null) {
                 $notes[] = $hasSpeechIssue
-                    ? 'Clip '.$clip['number'].' dialogue was preserved; its existing timing cannot fit the effective project and saved duration limits safely, so the findings remain for review.'
+                    ? 'Clip '.$clip['number'].' dialogue was preserved; its existing timing cannot fit the effective project and saved duration limits safely, so the findings remain for review. No words, speaker identities, existing delivery windows, visual setup or longer pauses were shortened. Replan the connected scene across more clips when count is AI-selected; a fixed count/duration requires an explicit user change.'
                     : 'Clip '.$clip['number'].' duration was left unchanged because no safe repair fits the effective project and saved duration limits.';
                 continue;
             }
@@ -572,6 +577,58 @@ class PromptRepairService
         return implode($lineEnding, $lines);
     }
 
+    /** Contextual overflow proposals stay unresolved until a safe replan and full QA can prove them. */
+    private function proposeSpeechRepartition(?AiSetting $settings, string $content, array $input, array $review, array &$notes, bool &$retryable): void
+    {
+        $numbers = [];
+        foreach ($review['issues'] ?? [] as $issue) {
+            if (in_array($issue['code'] ?? '', self::SPEECH_REPAIR_CODES, true)) {
+                $numbers[(int) $issue['clip']] = true;
+            }
+        }
+        $excerpts = [];
+        foreach ($this->auditor->canonicalProjectPlan($content, $input)->clips as $clip) {
+            if (isset($numbers[$clip['number']]) && $clip['speech_rows'] !== []) {
+                $excerpts[] = ['clip' => $clip['number'], 'duration' => $clip['duration_seconds'],
+                    'speech_budget' => $clip['speech_budget'], 'visible_action' => $clip['visible_cause_action_result'],
+                    'speech_rows' => $clip['speech_rows']];
+            }
+        }
+        if ($excerpts === [] || ! $settings?->isReady()) {
+            return;
+        }
+        // One bounded advisory request; never ask a model to solve an impossible fixed window by rewriting words.
+        $excerpts = array_slice($excerpts, 0, 4);
+        $encoded = json_encode(['saved_settings' => $input, 'affected_clips' => $excerpts], JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE);
+        if ($encoded === false || strlen($encoded) > 24000) {
+            $notes[] = 'Contextual speech proposal exceeded the bounded review size; overflow remains unresolved.';
+            return;
+        }
+        try {
+            $response = $this->generation->requestSpeechTimingProposal($settings, $encoded);
+            $decisions = json_decode($response, true);
+            $allowed = array_column($excerpts, 'clip');
+            $seen = [];
+            foreach (is_array($decisions['clips'] ?? null) ? $decisions['clips'] : [] as $decision) {
+                if (! is_array($decision) || ! in_array($decision['clip'] ?? null, $allowed, true)
+                    || isset($seen[$decision['clip']])
+                    || ! in_array($decision['proposal'] ?? '', ['SPLIT_REQUIRED', 'REVIEW'], true)) {
+                    continue;
+                }
+                $seen[$decision['clip']] = true;
+                $notes[] = 'Clip '.$decision['clip'].($decision['proposal'] === 'SPLIT_REQUIRED'
+                    ? ': AI proposes splitting the connected visible scene and exact dialogue across more clips. No split was applied: safe visual alignment, all duration views, project limits and handoffs require a contextual replan followed by full QA.'
+                    : ': AI could not propose a safe split within the supplied context. Exact dialogue is unchanged and timing remains unresolved.');
+            }
+            if ($seen === []) {
+                $notes[] = 'Contextual speech review supplied no valid bounded proposal; overflow remains unresolved.';
+            }
+        } catch (\Throwable) {
+            $retryable = true;
+            $notes[] = 'Contextual speech review was unavailable. No dialogue was changed; overflow remains unresolved.';
+        }
+    }
+
     /** @return array{changed: bool, rows: array<int, array{line_index: int, replacement: string}>, duration: int|null, old_duration: int}|null */
     private function repairSpeechTiming(array $clip, PromptProjectPlan $plan, array $input): ?array
     {
@@ -640,10 +697,18 @@ class PromptRepairService
         $speechPolicy = is_array($clip['speech_timing_policy'] ?? null)
             ? $clip['speech_timing_policy']
             : $this->auditor->speechTimingPolicy($clipText);
-        $leadIn = (float) ($speechPolicy['opening_visual_beat_seconds'] ?? 0.2);
+        $leadIn = max((float) ($speechPolicy['opening_visual_beat_seconds'] ?? 0.2), (float) $rows[0]['start']);
         $gap = (float) ($speechPolicy['inter_line_pause_seconds'] ?? 0.2);
         $tail = (float) ($speechPolicy['ending_pause_seconds'] ?? 0.3);
-        $minimumTotal = $leadIn + array_sum(array_column($rows, 'minimum')) + ($gap * max(0, count($rows) - 1)) + $tail;
+        // Never compress an existing speech window to make a repair fit.
+        $preferredDurations = array_map(static fn (array $row): float => max($row['minimum'], $row['existing']), $rows);
+        $existingPauses = 0.0;
+        foreach ($rows as $index => &$row) {
+            $row['gap_before'] = $index === 0 ? 0.0 : max($gap, $row['start'] - $rows[$index - 1]['end']);
+            $existingPauses += $row['gap_before'];
+        }
+        unset($row);
+        $minimumTotal = $leadIn + array_sum($preferredDurations) + $existingPauses + $tail;
         if ($minimumTotal > $targetDuration) {
             if (! $aiSelected) {
                 return null;
@@ -654,15 +719,7 @@ class PromptRepairService
             return null;
         }
 
-        $preferredDurations = array_map(
-            static fn (array $row): float => max($row['minimum'], $row['existing']),
-            $rows,
-        );
-        $schedule = $this->speechSchedule($rows, $preferredDurations, $targetDuration, $gap, $leadIn, $tail, true);
-        if ($schedule === null) {
-            $minimumDurations = array_column($rows, 'minimum');
-            $schedule = $this->speechSchedule($rows, $minimumDurations, $targetDuration, $gap, $leadIn, $tail, false);
-        }
+        $schedule = $this->speechSchedule($rows, $preferredDurations, $targetDuration, $gap, $leadIn, $tail);
         if ($schedule === null) {
             return null;
         }
@@ -687,25 +744,21 @@ class PromptRepairService
     }
 
     /** @return array<int, array{0: float, 1: float}>|null */
-    private function speechSchedule(array $rows, array $durations, int $duration, float $gap, float $leadIn, float $tail, bool $preserveTiming): ?array
+    private function speechSchedule(array $rows, array $durations, int $duration, float $gap, float $leadIn, float $tail): ?array
     {
         $schedule = [];
         $cursor = null;
         foreach ($rows as $index => $row) {
             $start = $index === 0
-                ? ($preserveTiming ? max($leadIn, (float) $row['start']) : $leadIn)
-                : ($preserveTiming ? max((float) $row['start'], (float) $cursor + $gap) : (float) $cursor + $gap);
+                ? max($leadIn, (float) $row['start'])
+                : max((float) $row['start'], (float) $cursor + max($gap, $row['gap_before'] ?? $gap));
             $end = $start + $durations[$index];
             $schedule[] = [$start, $end];
             $cursor = $end;
         }
 
         if ($schedule !== [] && end($schedule)[1] + $tail > $duration + 0.0001) {
-            if (! $preserveTiming) {
-                return null;
-            }
-
-            return $this->speechSchedule($rows, $durations, $duration, $gap, $leadIn, $tail, false);
+            return null;
         }
 
         return $schedule;

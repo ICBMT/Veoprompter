@@ -108,7 +108,7 @@ class PromptOutputAuditorTest extends TestCase
         $review = $this->auditor->audit($clip, $this->input());
 
         $this->assertContains('speech_overrun', array_column($review['issues'], 'code'));
-        $this->assertStringContainsString('Shorten it', $this->issue($review, 'speech_overrun')['message']);
+        $this->assertStringContainsString('Preserve the exact words', $this->issue($review, 'speech_overrun')['message']);
     }
 
     public function test_ai_duration_above_ten_seconds_is_flagged_but_fixed_manual_duration_is_not_capped_at_ten(): void
@@ -142,6 +142,7 @@ class PromptOutputAuditorTest extends TestCase
         $state = 'cast=None; object=wooden bowl; stage=carved; environment=workshop';
         $content = "## PROJECT OVERVIEW\nAll clips must stay between 3 and 7 seconds.\nClip durations: 8 seconds\nApproximate total runtime: 8 seconds\n\n"
             .$this->clip(1, 'INITIAL CLIP — NO PREVIOUS HANDOFF', 'FINAL — NO NEXT HANDOFF', $state, $state);
+        $content = str_replace('CLIP DURATION: 4 seconds', 'CLIP DURATION: 8 seconds', $content);
         $aiReview = $this->auditor->audit($content, $this->input());
         $fixedReview = $this->auditor->audit($content, $this->input(['clip_duration' => 8]));
 

@@ -6,7 +6,9 @@ return [
     | These values do not validate actual voice performance or rendered video.
     */
     'speech' => [
-        'words_per_second' => 2.2,
+        'words_per_second' => 2.5,
+        'young_audience_words_per_second' => 2.2,
+        'technical_word_extra_seconds' => 0.15,
         'sentence_pause_min_seconds' => 0.12,
         'sentence_pause_per_sentence_seconds' => 0.12,
         'sentence_pause_max_seconds' => 0.45,
@@ -14,6 +16,6 @@ return [
         'inter_line_pause_seconds' => 0.2,
         'ending_pause_seconds' => 0.3,
         'handoff_closing_pause_seconds' => 0.3,
-        'timing_tolerance_seconds' => 0.05,
+        'timing_tolerance_seconds' => 0.0001,
     ],
 ];

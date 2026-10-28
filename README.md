@@ -152,3 +152,5 @@ The test suite covers the master prompt's synchronization with root `prompt.txt`
 Upload a finished MP4 at `/subtitles` for local Whisper transcription and animated, word-highlighted subtitles. Processing uses a dedicated background queue and private, owner-authorized preview/download routes; the original upload is not modified. See [Subtitle Studio setup, quality contract, tests, and deployment checklist](docs/subtitle-studio.md) before enabling the worker. Burning subtitles requires re-encoding: lossless H.264 is the default, not a claim of bit-identical output.
 
 See [continuity-first maximum-quality planning](docs/prompt-planning.md) for speech spillover, 2–3 second visual headroom, Type A preference, and server-side provider output budgets.
+
+See [speech timing and safe narration repair](docs/speech-timing.md) for opening/closing pads, breathing pauses, exact-dialogue protection and unresolved overflow handling.

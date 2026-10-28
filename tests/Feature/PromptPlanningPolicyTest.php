@@ -5,6 +5,10 @@ namespace Tests\Feature;
 use App\Models\AiSetting;
 use App\Services\PromptGenerationException;
 use App\Services\PromptGenerationService;
+use App\Services\PromptOutputAuditor;
+use App\Services\PromptRepairService;
+use Mockery;
+use Tests\Unit\SpeechTimingTest;
 use Illuminate\Http\Client\Factory;
 use Illuminate\Http\Client\Request;
 use Illuminate\Support\Facades\Http;
@@ -93,6 +97,42 @@ class PromptPlanningPolicyTest extends TestCase
                 $provider === 'gemini' ? 'generationConfig.maxOutputTokens' : 'max_tokens') === 40000);
             Http::assertSentCount(1);
         }
+    }
+
+    public function test_studio_rejects_a_shortened_ai_script_even_if_its_timing_would_pass(): void
+    {
+        $words = 'The tiny bee carries bright yellow pollen from this flower to another flower.';
+        $draft = SpeechTimingTest::fixture('COPY CLIP 1 PROMPT', [
+            '- 0.0–1.0s | VISIBLE ACTION: wheel turns | SPEAKER: Narrator | LINE: “'.$words.'”',
+        ]);
+        $rewritten = str_replace(['0.0–1.0s', $words], ['0.2–1.8s', 'It turns.'], $draft);
+        Http::fake(['*' => Http::sequence()
+            ->push(['candidates' => [['content' => ['parts' => [['text' => $draft]]]]]])
+            ->push(['candidates' => [['content' => ['parts' => [['text' => $rewritten]]]]]])]);
+        $settings = new AiSetting(['provider' => 'gemini', 'model' => 'test-model', 'api_key' => 'test-secret']);
+        $result = (new PromptGenerationService)->generateWithQualityReview($settings,
+            SpeechTimingTest::input('story', ['clip_duration' => '4']));
+        $this->assertSame($draft, $result['content']);
+        $this->assertSame('rejected_protected_speech_change', $result['quality_review']['repair_outcome']);
+        $this->assertSame('needs_review', $result['quality_review']['status']);
+        Http::assertSentCount(2);
+    }
+
+    public function test_contextual_overflow_proposal_is_not_misreported_as_a_completed_fix(): void
+    {
+        $settings = new AiSetting(['provider' => 'gemini', 'model' => 'test-model', 'api_key' => 'test-secret']);
+        $draft = SpeechTimingTest::fixture('COPY CLIP 1 PROMPT', [
+            '- 0.0–3.9s | VISIBLE ACTION: wheel turns | SPEAKER: Narrator | LINE: “'.str_repeat('word ', 40).'”',
+        ]);
+        $generation = Mockery::mock(PromptGenerationService::class);
+        $generation->shouldReceive('requestSpeechTimingProposal')->once()->with($settings, Mockery::type('string'))
+            ->andReturn('{"clips":[{"clip":1,"proposal":"SPLIT_REQUIRED"}]}');
+        $result = (new PromptRepairService(new PromptOutputAuditor, $generation))->repair($settings, $draft, SpeechTimingTest::input());
+        $this->assertSame($draft, $result['content']);
+        $this->assertSame([], $result['repair_report']['fixed']);
+        $this->assertNotEmpty($result['repair_report']['unresolved']);
+        $this->assertStringContainsString('No split was applied', implode(' ', $result['repair_report']['notes']));
+        $this->assertSame(2, PromptRepairService::MAX_MANUAL_ATTEMPTS);
     }
 
     public function test_truncated_provider_responses_are_never_accepted_as_complete_prompt_kits(): void

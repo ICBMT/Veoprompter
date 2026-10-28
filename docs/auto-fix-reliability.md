@@ -28,7 +28,7 @@ Defaults live in `config/prompt_qa.php` and are consumed by both QA and Auto-Fix
 
 | Setting | Default |
 | --- | ---: |
-| Speech estimate | 2.2 words/second |
+| Ordinary-English speech estimate | 2.5 words/second (2.2 for very young audiences) |
 | Sentence-pause minimum/per sentence/maximum | 0.12 / 0.12 / 0.45 seconds |
 | Opening visual lead-in | 0.20 seconds |
 | Inter-line breathing/reaction pause | 0.20 seconds |
@@ -115,3 +115,5 @@ Root `prompt.txt` was not edited. The change is limited to QA, repair, reporting
 3. Word-rate and pause assumptions are configurable estimates. They cannot prove voice timing, pronunciation, comprehension, audio/video synchronization, or edit feasibility.
 4. Type B/C checks use text evidence and limited state heuristics. They cannot validate real-world physics, actual transitions, or the rendered video.
 5. Native Laravel/PHPUnit and Vite checks remain outstanding in an environment with project dependencies installed.
+
+See [speech-timing policy and verification](speech-timing.md) for the current pads, complete speech budgets, protected-dialogue safeguards, non-compressing repairs, and advisory-only contextual overflow proposals.

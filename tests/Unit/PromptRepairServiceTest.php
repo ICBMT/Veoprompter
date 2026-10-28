@@ -31,7 +31,7 @@ class PromptRepairServiceTest extends TestCase
         $this->assertSame([1, 2, 3, 4, 5, 6], $beforePlan->clipOrder());
         $this->assertSame(5.0, $beforePlan->clips[0]['duration_seconds']);
         $this->assertSame(0.2, $beforePlan->clips[0]['speech_timing_policy']['opening_visual_beat_seconds']);
-        $this->assertGreaterThan(2.3, $beforePlan->clips[0]['speech_rows'][0]['minimum_seconds']);
+        $this->assertGreaterThan(2.0, $beforePlan->clips[0]['speech_rows'][0]['minimum_seconds']);
         $this->assertSame($input, $beforePlan->savedSettings);
         $this->assertCount(1, $beforePlan->overviewRuntimes);
         $this->assertSame(38.0, $beforePlan->overviewRuntimes[0]['seconds']);

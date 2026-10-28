@@ -340,7 +340,7 @@ test('accepts a physically matched Type A state chain and a naturally timed spok
         `OPENING PRESENTATION STATE: ${presentation}`,
         `ENDING PRESENTATION STATE: ${presentation}`,
         'SPEECH/VISUAL MAP:',
-        '- 0.0–2.2s | VISIBLE ACTION: pollen visibly sticks to the bee’s hind leg | SPEAKER: Narrator | LINE: “A bee carries pollen.”',
+        '- 0.2–2.2s | VISIBLE ACTION: pollen visibly sticks to the bee’s hind leg | SPEAKER: Narrator | LINE: “A bee carries pollen.”',
         'OUTGOING HANDOFF TYPE: TYPE A — DIRECT CONTINUATION',
         'COPY CLIP 2 PROMPT',
         'TRANSITION TYPE: TYPE A — DIRECT CONTINUATION',
@@ -515,4 +515,18 @@ test('checks a structured extension map without changing the copy-ready text', (
     assert.ok(parsed.handoffWarnings.some((warning) => /words in 1.0 seconds/.test(warning)));
     assert.match(parsed.chunks[0].text, /CLIP DURATION: 5 seconds/);
     assert.match(parsed.chunks[0].text, /LINE: “The light is waking\.”/);
+});
+
+
+test('speech timing warns about opening, breathing and closing pads in clip and extension formats', () => {
+    for (const heading of ['COPY CLIP 1 PROMPT', 'COPY EXTENSION VIDEO PROMPT']) {
+        const parsed = parsePrompt(`${heading}
+CLIP DURATION: 4 seconds
+SPEECH/VISUAL MAP:
+- 0.0–1.0s | VISIBLE ACTION: a wheel turns | SPEAKER: Narrator | LINE: “It turns.”
+- 1.1–3.9s | VISIBLE ACTION: the wheel slows | SPEAKER: Narrator | LINE: “It slows.”`);
+        assert.ok(parsed.handoffWarnings.some((warning) => /opening visual beat/.test(warning)));
+        assert.ok(parsed.handoffWarnings.some((warning) => /breathing pause/.test(warning)));
+        assert.ok(parsed.handoffWarnings.some((warning) => /after the final spoken line/.test(warning)));
+    }
 });
