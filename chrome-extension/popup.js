@@ -1,3 +1,4 @@
+import { copyableChunk } from './prompt-parser.js';
 import { armPasteOnNextField } from './field-paste.js';
 import { savedRunReviewLink } from './repair-link.js';
 
@@ -119,6 +120,9 @@ function renderPrompt(prompt) {
     if (savedRunUrl) repairLink.href = savedRunUrl;
     else repairLink.removeAttribute('href');
 
+    const notesWrap = document.querySelector('[data-continuity-notes]');
+    notesWrap.hidden = !prompt.continuityNotes;
+    notesWrap.querySelector('pre').textContent = prompt.continuityNotes || '';
     const chunks = Array.isArray(prompt.chunks) ? prompt.chunks : [];
     const total = chunks.length;
     const nextIndex = Math.min(Math.max(Number(prompt.nextIndex) || 0, 0), total);
@@ -337,7 +341,7 @@ async function clearPendingPaste(promptId, token, restoreIndex = null) {
 async function copyNextPart() {
     const prompt = popupState.activePrompt;
     const index = Number(prompt?.nextIndex);
-    const chunk = prompt?.chunks?.[index];
+    const chunk = copyableChunk(prompt?.chunks?.[index]);
     if (!chunk) return;
 
     let copiedToClipboard = false;
@@ -449,7 +453,7 @@ async function goBackOnePart() {
     if (!prompt || nextIndex <= 0) return;
 
     const targetIndex = Math.max(0, nextIndex - 1);
-    const chunk = prompt.chunks?.[targetIndex];
+    const chunk = copyableChunk(prompt.chunks?.[targetIndex]);
     await navigatePrompt(targetIndex, `Back to ${chunk?.label || 'the previous part'}. It is ready to copy again.`);
 }
 

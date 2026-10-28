@@ -41,8 +41,8 @@ foreach (array_keys(App\Support\ProjectSettings::videoTypes()) as $type) {
         $input = ['mode' => 'story', 'video_type' => $type, 'narration' => $audio,
             'clip_count' => 'quality', 'clip_duration' => 'auto'];
         $system = policy('systemInstructions', $input);
-        verify(substr_count($system, 'FIRST-PASS PRODUCTION CONTRACT — VERSION 1') === 1, 'Missing/duplicated final contract');
-        verify(strpos($system, 'FIRST-PASS PRODUCTION CONTRACT — VERSION 1') > strpos($system, 'MASTER SPECIFICATION'), 'Wrong contract precedence');
+        verify(substr_count($system, 'FIRST-PASS PRODUCTION CONTRACT — VERSION 2') === 1, 'Missing/duplicated final contract');
+        verify(strpos($system, 'FIRST-PASS PRODUCTION CONTRACT — VERSION 2') > strpos($system, 'MASTER SPECIFICATION'), 'Wrong contract precedence');
         verify(str_contains($system, 'words_per_second: 2.5'), 'Planning rate differs from QA');
         verify(str_contains($system, 'Copy strings, do not paraphrase them.'), 'Exact state-copy discipline absent');
         verify(! str_contains(policy('buildCreativeBrief', $input, false), '- 0.0–1.8s'), 'Zero-second speech example remains in request brief');

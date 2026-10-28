@@ -35,18 +35,29 @@ class PromptGenerationService
         $brief = $this->buildCreativeBrief($input, $referenceFrame !== null);
         $content = $this->requestText($settings, $systemInstructions, $brief, $referenceFrame, $this->outputTokenBudget($input));
         $auditor = new PromptOutputAuditor;
+        $serialization = (new PromptPlanSerializer($auditor))->serialize($content, $input);
+        $content = $serialization['content'];
         $qualityReview = $auditor->audit($content, $input);
-        // Capture the original response before either repair path changes it. Never confuse repaired QA with first-pass QA.
+        $initialReview = $qualityReview;
+        $rejectedCandidateIssues = [];
+        // Snapshot the serialized provider draft before repairs. The raw template is not the copy-ready product.
         $firstPass = [
             'scope' => 'automated_text_checks',
+            'stage' => 'serialized_provider_template_before_repair',
             'status' => $qualityReview['status'],
             'issue_count' => count($qualityReview['issues']),
+            'issue_keys' => array_map(PromptQaEvidence::issueKey(...), $qualityReview['issues']),
+            'finding_counts' => $qualityReview['finding_counts'],
             'issue_codes' => array_values(array_unique(array_column($qualityReview['issues'], 'code'))),
             'clip_count' => count($auditor->extractClips($content, $input)),
-            'contract_version' => 1,
+            'contract_version' => 2,
+            'was_clean' => $qualityReview['status'] === 'passed',
+            'issue_categories' => array_values(array_unique(array_column($qualityReview['issues'], 'category'))),
+            'serialization' => ['expanded' => $serialization['expanded'], 'template_sha256' => $serialization['template_sha256']],
         ];
         if (PromptRepairService::hasSupportedIssues($qualityReview)) {
             $timed = (new PromptRepairService($auditor, $this))->repair(null, $content, $input);
+            $rejectedCandidateIssues = $timed['repair_report']['rejected_candidate_issues'] ?? [];
             if ($timed['repair_report']['applied']) {
                 $content = $timed['content'];
                 $qualityReview = $timed['quality_review'];
@@ -74,6 +85,7 @@ class PromptGenerationService
                     $this->outputTokenBudget($input),
                 );
 
+                $corrected = (new PromptPlanSerializer($auditor))->serialize($corrected, $input)['content'];
                 if ($corrected !== $content) {
                     $correctedReview = $auditor->audit($corrected, $input);
                     $newIssues = $this->addedQualityIssues($qualityReview, $correctedReview);
@@ -96,6 +108,7 @@ class PromptGenerationService
                         $qualityReview['repair_outcome'] = $qualityReview['issues'] === [] ? 'corrected' : 'corrected_with_remaining_review';
                         $content = $corrected;
                     } else {
+                        $rejectedCandidateIssues = [...$rejectedCandidateIssues, ...$newIssues];
                         if (($qualityReview['repair_outcome'] ?? '') !== 'rejected_protected_speech_change') {
                             $qualityReview['repair_outcome'] = 'no_improvement';
                         }
@@ -112,7 +125,10 @@ class PromptGenerationService
             }
         }
 
+        $qualityReview['rejected_candidate_issues'] = $rejectedCandidateIssues;
         $qualityReview['first_pass'] = $firstPass;
+        $qualityReview['final_unresolved_count'] = count($qualityReview['issues']);
+        $qualityReview['new_issues'] = $this->addedQualityIssues($initialReview, $qualityReview);
 
         return [
             'content' => $content,
@@ -227,14 +243,7 @@ REPAIR_POLICY;
 
     private function qualityIssueKey(array $issue): string
     {
-        $key = json_encode([
-            'code' => (string) ($issue['code'] ?? ''),
-            'category' => (string) ($issue['category'] ?? ''),
-            'clip' => $issue['clip'] ?? null,
-            'message' => (string) ($issue['message'] ?? ''),
-        ], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE);
-
-        return $key === false ? serialize($issue) : $key;
+        return PromptQaEvidence::issueKey($issue);
     }
 
     private function systemInstructions(array $input): string
@@ -545,7 +554,7 @@ POLICY;
             throw new PromptGenerationException('The first-pass planning contract could not be loaded.');
         }
 
-        return "FIRST-PASS PRODUCTION CONTRACT — VERSION 1\nThese request-specific planning rules take precedence over generic examples/defaults in the master, including illustrative timestamps and speech rates; never override safety, protected dialogue, selected fixed settings, evidence limits or source honesty. Return the selected format, not a second diagnostic document.\n\nACTIVE QA SPEECH CONSTANTS — use these actual values, not a faster generic rate\n{$constants}\n\n{$contract}";
+        return "FIRST-PASS PRODUCTION CONTRACT — VERSION 2\nThese request-specific planning rules take precedence over generic examples/defaults in the master, including illustrative timestamps and speech rates; never override safety, protected dialogue, selected fixed settings, evidence limits or source honesty. Return the selected format, not a second diagnostic document.\n\nACTIVE QA SPEECH CONSTANTS — use these actual values, not a faster generic rate\n{$constants}\n\n{$contract}\n\n".file_get_contents(resource_path('prompts/serialization-contract.txt'));
     }
 
     private function clipCountBrief(mixed $clipCount): string

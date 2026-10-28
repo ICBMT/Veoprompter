@@ -34,7 +34,7 @@ const promptWithFourClips = [
     '- Chip remains white and cyan.',
 ].join('\n');
 
-test('separates Sections 1–7 and any number of clip prompts, appending handoff notes to the last clip', () => {
+test('separates Sections 1–7 and any number of clip prompts, retaining handoff notes separately from copyable clips', () => {
     const parsed = parsePrompt(promptWithFourClips);
 
     assert.equal(parsed.format, 'clip-sequence');
@@ -47,8 +47,8 @@ test('separates Sections 1–7 and any number of clip prompts, appending handoff
     assert.equal(parsed.chunks[2].text, 'Cinematic 3D animation, 8 seconds. Continue the same scene as Chip waters the seed.');
     assert.match(parsed.chunks[3].text, /A green shoot appears beside Chip\./);
     assert.match(parsed.chunks[4].text, /Chip finishes the scan and smiles at the camera\./);
-    assert.match(parsed.chunks[4].text, /SECTION 9 — EXACT HANDOFF SPECIFICATION/);
-    assert.match(parsed.chunks[4].text, /SECTION 10 — FINAL CONTINUITY AUDIT/);
+    assert.match(parsed.continuityNotes, /SECTION 9 — EXACT HANDOFF SPECIFICATION/);
+    assert.match(parsed.continuityNotes, /SECTION 10 — FINAL CONTINUITY AUDIT/);
     assert.match(parsed.notice, /4 clip prompts separated/);
 });
 
@@ -68,8 +68,8 @@ test('keeps variable clip counts in order for the extension', () => {
 
     assert.equal(parsed.format, 'clip-sequence');
     assert.deepEqual(parsed.chunks.slice(1).map((chunk) => chunk.clipNumber), [1, 2, 3, 4, 5, 6]);
-    assert.match(parsed.chunks[6].text, /SECTION 9 — EXACT HANDOFF SPECIFICATION/);
-    assert.match(parsed.chunks[6].text, /SECTION 10 — FINAL CONTINUITY AUDIT/);
+    assert.match(parsed.continuityNotes, /SECTION 9 — EXACT HANDOFF SPECIFICATION/);
+    assert.match(parsed.continuityNotes, /SECTION 10 — FINAL CONTINUITY AUDIT/);
 });
 
 test('splits section-per-clip v2 output and supports AI-selected counts above eight', () => {
@@ -108,8 +108,8 @@ test('splits section-per-clip v2 output and supports AI-selected counts above ei
     assert.match(parsed.chunks[10].text, /Clip 10: a self-contained prompt/);
     assert.equal(parsed.chunks[6].transitionType, 'C');
     assert.equal(parsed.chunks[6].label, 'Transition clip 6 · Type C');
-    assert.match(parsed.chunks[10].text, /SECTION 9\+ — FINAL CONTINUITY AUDIT/);
-    assert.match(parsed.chunks[10].text, /All ten handoffs are coherent/);
+    assert.match(parsed.continuityNotes, /SECTION 9\+ — FINAL CONTINUITY AUDIT/);
+    assert.match(parsed.continuityNotes, /All ten handoffs are coherent/);
     assert.match(parsed.notice, /10 clip prompts separated/);
 });
 
@@ -144,11 +144,11 @@ test('classifies Type A, Type B, and Type C clips for the extension handoff', ()
     assert.deepEqual(parsed.handoffWarnings, []);
     assert.equal(parsed.chunks[2].label, 'Clip 2 · Type A');
     assert.equal(parsed.chunks[3].label, 'Clip 3 · Type B');
-    assert.equal(parsed.chunks[4].label, 'Transition clip 4 · Type C · final handoff');
+    assert.equal(parsed.chunks[4].label, 'Transition clip 4 · Type C');
     assert.match(parsed.chunks[4].transitionLabel, /narrative \/ temporal transition/);
     assert.doesNotMatch(parsed.chunks[4].text, /Continue this exact scene/);
     assert.match(parsed.chunks[4].text, /Before: a young plant/);
-    assert.match(parsed.chunks[4].text, /SECTION 9 — EXACT HANDOFF SPECIFICATION/);
+    assert.match(parsed.continuityNotes, /SECTION 9 — EXACT HANDOFF SPECIFICATION/);
     assert.match(parsed.notice, /1 dedicated Type C transition clip identified/);
 });
 
@@ -228,9 +228,9 @@ test('keeps a one-clip result copy-ready and includes trailing continuity sectio
     ].join('\n'));
 
     assert.equal(parsed.chunks.length, 2);
-    assert.equal(parsed.chunks[1].label, 'Clip 1 · final handoff');
+    assert.equal(parsed.chunks[1].label, 'Clip 1');
     assert.match(parsed.chunks[1].text, /One complete prompt\./);
-    assert.match(parsed.chunks[1].text, /Final handoff details\./);
+    assert.match(parsed.continuityNotes, /Final handoff details\./);
 });
 
 test('preserves character-specific voice identities in each copied standalone clip prompt', () => {
@@ -529,4 +529,47 @@ SPEECH/VISUAL MAP:
         assert.ok(parsed.handoffWarnings.some((warning) => /breathing pause/.test(warning)));
         assert.ok(parsed.handoffWarnings.some((warning) => /after the final spoken line/.test(warning)));
     }
+});
+
+test('duplicate metadata is warned even when no other structured contract can be parsed', () => {
+    for (const heading of ['COPY CLIP 1 PROMPT', 'COPY EXTENSION VIDEO PROMPT']) {
+        const parsed = parsePrompt(`${heading}\nCLIP DURATION: 6 seconds\nCLIP DURATION: 9 seconds`);
+        assert.ok(parsed.handoffWarnings.some((warning) => /repeats CLIP DURATION/.test(warning)));
+        assert.match(parsed.chunks.at(-1).text, /9 seconds/); // Evidence is retained, never silently repaired.
+    }
+});
+
+test('duplicate incoming and outgoing metadata never supplies an authoritative type', () => {
+    const parsed = parsePrompt('COPY CLIP 1 PROMPT\nTRANSITION TYPE: TYPE A\nTRANSITION TYPE: TYPE C\nOUTGOING HANDOFF TYPE: TYPE B\nOUTGOING HANDOFF TYPE: FINAL');
+    const clip = parsed.chunks.at(-1);
+    assert.equal(clip.transitionType, null);
+    assert.equal(clip.outgoingTransitionType, null);
+    assert.ok(parsed.handoffWarnings.some((warning) => /repeats TRANSITION TYPE/.test(warning)));
+});
+
+test('malformed reserved references are warned but token-like exact spoken words are preserved', () => {
+    const valid = 'COPY CLIP 1 PROMPT\nCLIP DURATION: 6 seconds\nSPEECH/VISUAL MAP:\n- 0.2–4.0s | VISIBLE ACTION: a wheel turns | SPEAKER: Narrator | LINE: “Say {{VEO_TOTAL_SECONDS}} literally.”';
+    assert.ok(!parsePrompt(valid).handoffWarnings.some((warning) => /unresolved canonical/.test(warning)));
+    for (const token of ['{{VEO_UNKNOWN}}', '{{VEO_BAD:}}', '{{VEO_unfinished']) {
+        assert.ok(parsePrompt(valid + '\nOPENING CONTINUITY STATE: ' + token).handoffWarnings.some((warning) => /unresolved canonical/.test(warning)));
+    }
+});
+
+test('unparseable speech is not silently treated as an empty successful timing check', () => {
+    const parsed = parsePrompt('COPY CLIP 1 PROMPT\nCLIP DURATION: 6 seconds\nSPEECH/VISUAL MAP:\n- untimed | VISIBLE ACTION: a tray moves | SPEAKER: Narrator | LINE: “It moves.”');
+    assert.ok(parsed.handoffWarnings.some((warning) => /cannot be timing-checked|machine-readable|parsed|unparseable/i.test(warning)));
+});
+
+test('extension audit notes remain available but never enter a copy-ready fenced prompt', () => {
+    const parsed = parsePrompt('COPY EXTENSION VIDEO PROMPT\n```text\nA glass carafe rotates.\n```\nContinuity audit: check its rim.');
+    assert.equal(parsed.chunks[0].text, 'A glass carafe rotates.');
+    assert.match(parsed.continuityNotes, /check its rim/);
+});
+
+test('old stored video chunks are sanitized without modifying the original object or context chunks', async () => {
+    const { copyableChunk } = await import('../prompt-parser.js');
+    const old = { kind: 'clip', text: 'The seed tray advances.\n\nSECTION 9 — EXACT HANDOFF SPECIFICATION\nDo not paste this audit.' };
+    assert.equal(copyableChunk(old).text, 'The seed tray advances.');
+    assert.match(old.text, /Do not paste/);
+    assert.equal(copyableChunk({ ...old, kind: 'context' }).text, old.text);
 });

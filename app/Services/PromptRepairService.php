@@ -125,6 +125,10 @@ class PromptRepairService
             ], false);
         }
 
+        if (in_array('metadata_field_ambiguous', array_column($originalReview['issues'], 'code'), true)) {
+            return $this->result($content, $originalReview, 'no_safe_changes', false, [], $originalReview['issues'], [],
+                ['Repeated metadata has no authoritative value. Resolve the ambiguity before any automatic edit; the original prompt is unchanged.'], false);
+        }
         $notes = [];
         $retryable = false;
         $candidate = $this->applyDeterministicRepairs($content, $input, $originalReview, $notes);
@@ -1120,20 +1124,7 @@ class PromptRepairService
 
     private function issueKey(array $issue): string
     {
-        $code = (string) ($issue['code'] ?? 'unknown');
-        $key = $code.':'.(string) ($issue['clip'] ?? 'all');
-        $message = (string) ($issue['message'] ?? '');
-
-        if (in_array($code, ['speech_map_incomplete', 'speech_time_range_invalid', 'speech_exceeds_clip', 'speech_overrun', 'speech_inter_line_pause_missing'], true)
-            && preg_match('/\bspeech\s+row\s+(\d+)/i', $message, $match) === 1) {
-            return $key.':row:'.$match[1];
-        }
-
-        if ($code === 'required_field_missing' && preg_match('/required `([^`]+)`/i', $message, $match) === 1) {
-            return $key.':field:'.strtolower($match[1]);
-        }
-
-        return $key;
+        return PromptQaEvidence::issueKey($issue);
     }
 
     private function result(

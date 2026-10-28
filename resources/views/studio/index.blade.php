@@ -139,6 +139,7 @@
             <div class="history-result-notice" data-history-notice role="status" aria-live="polite" hidden></div>
             <section class="saved-quality-review quality-review-panel" data-quality-review hidden role="status" aria-live="polite" aria-label="Automated prompt quality review">
                 <div class="quality-review-heading"><div><span class="section-index">AUTOMATED TEXT QA · NOT A FACT CHECK</span><strong data-quality-review-title></strong></div><span class="quality-review-corrected" data-quality-review-corrected hidden>TARGETED CORRECTION APPLIED</span></div>
+                <x-qa-first-pass :review="[]" />
                 <ul class="quality-review-checks" data-quality-review-checks></ul>
                 <div class="quality-review-handoffs" data-quality-review-handoffs-wrap hidden><strong>Handoff state relationships</strong><ul data-quality-review-handoffs></ul></div>
                 <div class="quality-review-issues" data-quality-review-issues-wrap hidden><strong>Items to review</strong><ul data-quality-review-issues></ul></div>

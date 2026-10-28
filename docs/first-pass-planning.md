@@ -1,10 +1,10 @@
 # First-pass error prevention
 
-The goal is fewer errors in the **original provider response**, not merely a clean response after repair. Prompt instructions cannot guarantee error-free output or seamless rendered video. Final text QA and bounded repair remain independent safeguards.
+The goal is fewer errors in the **first copy-ready draft**, not merely a clean response after repair. Version 2 compiles reserved provider-template references before the first product audit; it does not label that compiled draft as raw provider output. Prompt instructions cannot guarantee error-free output or seamless rendered video. Final text QA and bounded repair remain independent safeguards.
 
 ## Generation changes
 
-`resources/prompts/first-pass-contract.txt` is appended as the final request-specific planning contract, after the protected master specification and format/speech/continuity addenda. It preserves that specification's output method, wizard, format-aware structure and Type A/B/C semantics. Root `prompt.txt` and its exact runtime master-spec copy are unchanged.
+`resources/prompts/first-pass-contract.txt` and the internal `serialization-contract.txt` are appended as the final request-specific planning/compilation contracts, after the protected master specification and format/speech/continuity addenda. It preserves that specification's output method, wizard, format-aware structure and Type A/B/C semantics. Root `prompt.txt` and the runtime `resources/prompts/master-spec.txt` are both unchanged. The root file contains a Python wrapper; its embedded specification still matches the plain-text runtime master after edge whitespace normalization. Neither protected file was rewritten.
 
 The contract asks for a complete internal planning/preflight pass, not private reasoning or a second diagnostic response:
 
@@ -24,13 +24,20 @@ These remain text estimates. Language-specific pronunciation, emphasis, physical
 
 ## Measure original quality separately
 
-Each generation returns/saves `quality_review.first_pass`, captured **before** deterministic or AI repair:
+Each generation returns/saves `quality_review.first_pass`, captured **after canonical reference compilation and before** deterministic or AI repair:
 
 - `scope`: `automated_text_checks`
 - `status`: `passed`, `needs_review` or `not_checked`
 - `issue_count` and unique `issue_codes`
 - parsed `clip_count`
-- `contract_version`: `1`
+- `contract_version`: `2`
+- `stage`: `serialized_provider_template_before_repair`
+- `was_clean`, finding kinds/counts, issue categories and stable finding keys
+- `serialization`: raw template SHA-256 and number of expanded references (not raw-template QA)
+
+The provider template itself is not independently audited as a finished product: unresolved references are intentionally not concrete output. Its hash identifies the input; its text is not duplicated in saved QA metadata. A v2 first-pass score must not be compared as a raw-provider score with v1 without accounting for this stage difference.
+
+`final_unresolved_count` and `new_issues` describe the accepted final package against the original first-pass keys; discarded candidate findings are separate `rejected_candidate_issues`. Manual repair/re-audit/restore retain the snapshot and recompute final metrics where that baseline exists; legacy records without keys do not acquire invented new-issue measurements.
 
 Final `quality_review.status` still describes the accepted final text. A repaired kit must not be counted as first-pass clean. An unparsed output is `not_checked`, not a successful first pass. No raw duplicate prompt, credentials or hidden reasoning is added to this metadata. Later manual repair, re-audit and restore preserve this original snapshot. Existing history records without the field remain valid and do not acquire fabricated first-pass measurements. No migration, extra provider call or extra repair attempt is introduced.
 
@@ -54,3 +61,7 @@ node --test chrome-extension/tests/*.test.js
 ```
 
 Added regression coverage checks dynamic constants and format coverage, original-vs-final QA metadata, unparsed outputs not being labeled clean, and no repair request for a clean original kit. Native Laravel/provider integration and actual rendered results remain unverified here.
+
+## Refinement inventory and reproducible checks
+
+See [refinement-reliability.md](refinement-reliability.md) and the machine-readable [64-code QA catalogue](../resources/prompts/qa-catalogue.json) for actual detection conditions, prevention boundaries, review classifications and regression coverage. Run `php scripts/check-refinement.php` and `node --test chrome-extension/tests/*.test.js` in addition to the policy smoke.

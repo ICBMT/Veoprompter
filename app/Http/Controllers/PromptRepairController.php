@@ -369,6 +369,11 @@ class PromptRepairController extends Controller
         $saved = $project->quality_review;
         if (is_array($saved) && is_array($saved['first_pass'] ?? null)) {
             $review['first_pass'] = $saved['first_pass'];
+            $review['final_unresolved_count'] = count($review['issues']);
+            if (is_array($saved['first_pass']['issue_keys'] ?? null)) {
+                $known = array_fill_keys($saved['first_pass']['issue_keys'], true);
+                $review['new_issues'] = array_values(array_filter($review['issues'], fn (array $issue): bool => ! isset($known[\App\Services\PromptQaEvidence::issueKey($issue)])));
+            }
         }
 
         return $review;

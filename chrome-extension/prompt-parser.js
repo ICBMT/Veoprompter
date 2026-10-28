@@ -86,15 +86,16 @@ function extensionPrompt(lines) {
     if (openingFence >= 0) {
         const closingFence = body.findIndex((line, index) => index > openingFence && /^\s*```\s*$/.test(line));
         if (closingFence > openingFence) {
-            return cleanCopyBlock(body.slice(openingFence + 1, closingFence));
+            return { text: cleanCopyBlock(body.slice(openingFence + 1, closingFence)), notes: cleanCopyBlock([...body.slice(closingFence + 1), ...lines.slice(end)]) };
         }
     }
 
     const stop = body.findIndex((line) => /^(?:#{1,6}\s*)?(?:CONTINUITY\s+(?:CHECK|AUDIT)|COPY\s+CHECKLIST)\b/i.test(decoratedHeading(line)));
-    return cleanCopyBlock(body.slice(0, stop < 0 ? body.length : stop));
+    return { text: cleanCopyBlock(body.slice(0, stop < 0 ? body.length : stop)), notes: cleanCopyBlock([...(stop < 0 ? [] : body.slice(stop)), ...lines.slice(end)]) };
 }
 
 function transitionType(text) {
+    if (metadataValues(text, 'TRANSITION TYPE').length + metadataValues(text, 'INCOMING TRANSITION TYPE').length > 1) return null;
     const incomingLines = text.split('\n').filter((line) => {
         const normalized = line.replace(/\*\*/g, '').replace(/__/g, '');
         return !/^\s*(?:[-*+]\s*)?OUTGOING\s+HANDOFF\s+TYPE\s*:/i.test(normalized);
@@ -111,27 +112,40 @@ function transitionType(text) {
 }
 
 function outgoingTransitionType(text) {
-    const lines = text.split('\n').map((line) => line.replace(/\*\*/g, '').replace(/__/g, ''));
-    const line = lines.find((candidate) => /^\s*(?:[-*+]\s*)?OUTGOING\s+HANDOFF\s+TYPE\s*:/i.test(candidate));
-    const marker = line?.match(/^\s*(?:[-*+]\s*)?OUTGOING\s+HANDOFF\s+TYPE\s*:\s*([^\r\n]+)/i);
+    const marker = metadataValue(text, 'OUTGOING HANDOFF TYPE');
     if (!marker) return null;
-
-    if (/\bFINAL\b/i.test(marker[1])) return 'FINAL';
-    const explicit = marker[1].match(/\bTYPE\s*([ABC])\b/i);
+    if (/\bFINAL\b/i.test(marker)) return 'FINAL';
+    const explicit = marker.match(/\bTYPE\s*([ABC])\b/i);
     return explicit ? explicit[1].toUpperCase() : null;
 }
 
-function metadataValue(text, label) {
+function metadataValues(text, label) {
     const target = `${label.toLowerCase()}:`;
-    const line = text.split('\n').find((candidate) => {
-        const normalized = candidate.replace(/\*\*/g, '').replace(/__/g, '').replace(/`/g, '').trim().replace(/^[-*+>]\s*/, '');
-        return normalized.toLowerCase().startsWith(target);
-    });
-    if (!line) return null;
+    return text.split('\n').map((candidate) => candidate.replace(/\*\*/g, '').replace(/__/g, '').replace(/`/g, '').trim().replace(/^[-*+>]\s*/, ''))
+        .filter((line) => line.toLowerCase().startsWith(target)).map((line) => line.slice(line.indexOf(':') + 1).trim());
+}
 
-    const normalized = line.replace(/\*\*/g, '').replace(/__/g, '').replace(/`/g, '');
-    const marker = normalized.match(/^\s*(?:[-*+>]\s*)?[^:]+:\s*(.*?)\s*$/);
-    return marker ? marker[1].trim() : null;
+function metadataValue(text, label) {
+    const values = metadataValues(text, label);
+    return values.length === 1 ? values[0] : null;
+}
+
+/** Old stored chunks are also filtered at copy/paste time without changing navigation or rawText. */
+export function copyableChunk(chunk) {
+    if (!chunk || !['clip', 'extension'].includes(chunk.kind)) return chunk;
+    const lines = chunk.text.split('\n');
+    const stop = lines.findIndex((line) => sectionNumber(line) !== null);
+    return { ...chunk, text: cleanCopyBlock(lines.slice(0, stop < 0 ? lines.length : stop)) };
+}
+
+function metadataWarnings(text, number) {
+    const warnings = [];
+    for (const field of ['CLIP DURATION', 'TRANSITION TYPE', 'OUTGOING HANDOFF TYPE', 'VISIBLE CHARACTER CAST', 'CHARACTER IDENTITY LOCK', 'PRIMARY IDEA', 'VISUAL REPRESENTATION', 'VISIBLE CAUSE → ACTION → RESULT', 'OPENING CONTINUITY STATE', 'ENDING CONTINUITY STATE', 'OPENING PRESENTATION STATE', 'ENDING PRESENTATION STATE', 'SPEECH/VISUAL MAP']) {
+        if (metadataValues(text, field).length > 1) warnings.push(`Clip ${number} repeats ${field}; no first/last value is assumed authoritative.`);
+    }
+    const nonSpeech = text.split('\n').map((line) => line.split(/\|\s*LINE\s*:/i)[0]).join('\n');
+    if (nonSpeech.includes('{{VEO_')) warnings.push(`Clip ${number} contains an unresolved canonical reference. Regenerate in VeoPrompter before using it.`);
+    return warnings;
 }
 
 function durationSeconds(text) {
@@ -142,7 +156,7 @@ function durationSeconds(text) {
 
 function speechMapRows(text) {
     const rows = [];
-    const pattern = /^\s*(?:[-*+•–]\s*)?(\d+(?:\.\d+)?)\s*(?:s)?\s*(?:–|—|-|to)\s*(\d+(?:\.\d+)?)\s*s\s*\|\s*VISIBLE ACTION:\s*(.*?)\s*\|\s*SPEAKER:\s*(.*?)\s*\|\s*LINE:\s*(.+?)\s*$/iu;
+    const pattern = /^\s*(?:[-*+•–]\s*)?(-?\d+(?:\.\d+)?)\s*(?:s)?\s*(?:–|—|-|to)\s*(-?\d+(?:\.\d+)?)\s*s\s*\|\s*VISIBLE ACTION:\s*(.*?)\s*\|\s*SPEAKER:\s*(.*?)\s*\|\s*LINE:\s*(.+?)\s*$/iu;
 
     text.split('\n').forEach((line) => {
         const normalized = line.replace(/\*\*/g, '').replace(/__/g, '').replace(/`/g, '');
@@ -159,7 +173,7 @@ function estimateWords(line) {
 }
 
 function structuredSpeechWarnings(chunk, duration) {
-    const warnings = [];
+    const warnings = metadataWarnings(chunk.text, chunk.clipNumber || 1);
     const mapValue = metadataValue(chunk.text, 'SPEECH/VISUAL MAP');
     const rows = speechMapRows(chunk.text);
     const number = chunk.clipNumber || 1;
@@ -171,6 +185,8 @@ function structuredSpeechWarnings(chunk, duration) {
         warnings.push(`Clip ${number} is missing SPEECH/VISUAL MAP metadata.`);
     }
 
+    const markerCount = (chunk.text.match(/\bLINE\s*:/giu) || []).length;
+    if (markerCount !== rows.length) warnings.push(`Clip ${number} has unparseable spoken lines; timing remains unverified.`);
     if (rows.length === 0) {
         const explicitSilence = mapValue && /\bnone\b/i.test(mapValue)
             && (/\bintentionally\b|spoken audio is off/i.test(mapValue));
@@ -232,9 +248,8 @@ function handoffWarnings(chunks) {
         || metadataValue(chunk.text, 'ENDING CONTINUITY STATE') !== null);
     const hasTimingContract = clips.some((chunk) => durationSeconds(chunk.text) !== null
         || speechMapRows(chunk.text).length > 0);
-    if (!hasTypeContract && !hasStateContract && !hasTimingContract) return [];
-
-    const warnings = [];
+    const warnings = clips.flatMap((clip) => metadataWarnings(clip.text, clip.clipNumber));
+    if (!hasTypeContract && !hasStateContract && !hasTimingContract) return capWarnings(warnings);
     if (hasTypeContract) {
         const firstClip = clips[0];
         const hasInitialMarker = firstClip?.text.split('\n').some((line) => {
@@ -308,7 +323,7 @@ function extensionQualityWarnings(text) {
     const hasTiming = durationSeconds(text) !== null || speechMapRows(text).length > 0;
     const hasState = metadataValue(text, 'OPENING CONTINUITY STATE') !== null
         || metadataValue(text, 'ENDING CONTINUITY STATE') !== null;
-    if (!hasTiming && !hasState) return [];
+    if (!hasTiming && !hasState) return capWarnings(metadataWarnings(text, 1));
 
     const warnings = structuredSpeechWarnings({ text, clipNumber: 1 }, durationSeconds(text));
     ['OPENING CONTINUITY STATE', 'ENDING CONTINUITY STATE', 'OPENING PRESENTATION STATE', 'ENDING PRESENTATION STATE'].forEach((field) => {
@@ -350,7 +365,7 @@ function fallback(raw, reason) {
  * Split either the app's Section 8 clip list or a section-per-clip v2 response
  * into context and individually copy-ready prompts. Incoming and outgoing
  * Type A/B/C handoffs are labeled and cross-checked; continuity/audit sections
- * after the final clip are attached to that final handoff.
+ * after the final clip are retained as review notes, never pasted into video prompts.
  *
  * @param {string} raw
  * @returns {{format: string, chunks: Array<{kind: string, label: string, text: string, visibleCast?: string|null, clipNumber?: number, transitionType?: string|null, transitionLabel?: string|null, outgoingTransitionType?: string|null}>, notice: string, handoffWarnings: string[]}}
@@ -382,9 +397,10 @@ export function parsePrompt(raw) {
         if (copyPrompt) {
             return {
                 format: 'extension-prompt',
-                chunks: [{ kind: 'extension', label: 'Extension prompt', text: copyPrompt, visibleCast: visibleCharacterCast(copyPrompt) }],
+                continuityNotes: copyPrompt.notes,
+                chunks: [{ kind: 'extension', label: 'Extension prompt', text: copyPrompt.text, visibleCast: visibleCharacterCast(copyPrompt.text) }],
                 notice: 'A single copy-ready extension prompt was found.',
-                handoffWarnings: extensionQualityWarnings(copyPrompt),
+                handoffWarnings: extensionQualityWarnings(copyPrompt.text),
             };
         }
 
@@ -419,13 +435,11 @@ export function parsePrompt(raw) {
         const clipLines = [];
         if (clip.inlineText) clipLines.push(clip.inlineText);
         clipLines.push(...lines.slice(clip.line + 1, Math.max(clip.line + 1, bodyEnd)));
-        let clipText = cleanCopyBlock(clipLines);
+        const openingFence = clipLines.findIndex((line) => /^\s*```[^`]*$/.test(line));
+        const closingFence = openingFence < 0 ? -1 : clipLines.findIndex((line, i) => i > openingFence && /^\s*```\s*$/.test(line));
+        let clipText = cleanCopyBlock(closingFence < 0 ? clipLines : clipLines.slice(openingFence + 1, closingFence));
         const hasHandoff = index === clipHeadings.length - 1 && trailerStart < lines.length;
 
-        if (hasHandoff) {
-            const handoff = cleanCopyBlock(lines.slice(trailerStart));
-            if (handoff) clipText = [clipText, handoff].filter(Boolean).join('\n\n');
-        }
 
         if (clipText) {
             const transition = transitionType(clipText) ?? (clip.transitionHeading ? 'C' : null);
@@ -441,7 +455,7 @@ export function parsePrompt(raw) {
                 transitionType: transition,
                 transitionLabel: transition ? TRANSITION_LABELS[transition] : null,
                 outgoingTransitionType: outgoingTransitionType(clipText),
-                label: `${label}${hasHandoff ? ' · final handoff' : ''}`,
+                label,
                 text: clipText,
                 visibleCast: visibleCharacterCast(clipText),
             });
@@ -459,10 +473,11 @@ export function parsePrompt(raw) {
         ? `; ${transitionCount} dedicated Type C transition clip${transitionCount === 1 ? '' : 's'} identified`
         : '';
     const warnings = handoffWarnings(chunks);
-    const notice = `${clipCount} clip prompt${clipCount === 1 ? '' : 's'} separated${hasHandoff ? '; the closing handoff and continuity sections are attached to the final clip' : ''}${transitionNotice}.`;
+    const notice = `${clipCount} clip prompt${clipCount === 1 ? '' : 's'} separated${hasHandoff ? '; closing handoff/audit notes are retained separately and not pasted' : ''}${transitionNotice}.`;
 
     return {
         format: 'clip-sequence',
+        continuityNotes: trailerStart < lines.length ? cleanCopyBlock(lines.slice(trailerStart)) : '',
         chunks,
         notice,
         handoffWarnings: warnings,

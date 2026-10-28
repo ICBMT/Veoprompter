@@ -1,0 +1,578 @@
+{
+  "ai_duration_over_limit": {
+    "category": "duration",
+    "kind": "contract_violation",
+    "defect_condition": "AI-selected duration exceeds ten seconds.",
+    "earliest_stage": "canonical timing allocation/serialization",
+    "invariant": "Allocate legal canonical clip durations once; derive all point views and totals from that allocation without changing hard limits.",
+    "independent_check": "PromptOutputAuditor::audit on the exact serialized package (not a plan-only pass)",
+    "regression_case": "ai_duration_over_limit"
+  },
+  "canonical_identity_ambiguous": {
+    "category": "identity",
+    "kind": "contract_violation",
+    "defect_condition": "Duplicate canonical identity definitions or duplicate closed-roster records.",
+    "earliest_stage": "closed identity roster and anchor expansion",
+    "invariant": "Define unique literal anchors for declared IDs, expand them into applicable clips, enforce explicit counts and do not infer missing identities.",
+    "independent_check": "PromptOutputAuditor::audit on the exact serialized package (not a plan-only pass)",
+    "regression_case": "canonical_identity_ambiguous"
+  },
+  "canonical_identity_missing": {
+    "category": "identity",
+    "kind": "contract_violation",
+    "defect_condition": "An explicitly declared character or visible subject lacks a literal canonical identity anchor.",
+    "earliest_stage": "closed identity roster and anchor expansion",
+    "invariant": "Define unique literal anchors for declared IDs, expand them into applicable clips, enforce explicit counts and do not infer missing identities.",
+    "independent_check": "PromptOutputAuditor::audit on the exact serialized package (not a plan-only pass)",
+    "regression_case": "canonical_identity_missing"
+  },
+  "canonical_roster_unparseable": {
+    "category": "identity",
+    "kind": "review",
+    "defect_condition": "An explicit roster is neither None nor parseable IDs; legacy free prose is not silently interpreted.",
+    "earliest_stage": "closed identity roster and anchor expansion",
+    "invariant": "Define unique literal anchors for declared IDs, expand them into applicable clips, enforce explicit counts and do not infer missing identities.",
+    "independent_check": "PromptOutputAuditor::audit on the exact serialized package (not a plan-only pass)",
+    "regression_case": "canonical_roster_unparseable"
+  },
+  "cast_count_mismatch": {
+    "category": "identity",
+    "kind": "contract_violation",
+    "defect_condition": "Explicit visible count conflicts with the explicit roster group count (default one individual per ID).",
+    "earliest_stage": "closed identity roster and anchor expansion",
+    "invariant": "Define unique literal anchors for declared IDs, expand them into applicable clips, enforce explicit counts and do not infer missing identities.",
+    "independent_check": "PromptOutputAuditor::audit on the exact serialized package (not a plan-only pass)",
+    "regression_case": "cast_count_mismatch"
+  },
+  "cast_state_conflict": {
+    "category": "identity",
+    "kind": "contract_violation",
+    "defect_condition": "Under an explicit roster, visible cast None contradicts a non-None structured scene cast.",
+    "earliest_stage": "closed identity roster and anchor expansion",
+    "invariant": "Define unique literal anchors for declared IDs, expand them into applicable clips, enforce explicit counts and do not infer missing identities.",
+    "independent_check": "PromptOutputAuditor::audit on the exact serialized package (not a plan-only pass)",
+    "regression_case": "cast_state_conflict"
+  },
+  "clip_count_mismatch": {
+    "category": "structure",
+    "kind": "contract_violation",
+    "defect_condition": "Parsed block count differs from a fixed manual count.",
+    "earliest_stage": "parse/serialize",
+    "invariant": "Emit one unambiguous required record per field and preserve all numbered copy-ready blocks.",
+    "independent_check": "PromptOutputAuditor::audit on the exact serialized package (not a plan-only pass)",
+    "regression_case": "clip_count_mismatch"
+  },
+  "clip_duration_invalid": {
+    "category": "duration",
+    "kind": "contract_violation",
+    "defect_condition": "Duration is nonpositive or fractional.",
+    "earliest_stage": "canonical timing allocation/serialization",
+    "invariant": "Allocate legal canonical clip durations once; derive all point views and totals from that allocation without changing hard limits.",
+    "independent_check": "PromptOutputAuditor::audit on the exact serialized package (not a plan-only pass)",
+    "regression_case": "clip_duration_invalid"
+  },
+  "clip_duration_missing": {
+    "category": "duration",
+    "kind": "contract_violation",
+    "defect_condition": "No unique parseable exact duration in a copy block.",
+    "earliest_stage": "canonical timing allocation/serialization",
+    "invariant": "Allocate legal canonical clip durations once; derive all point views and totals from that allocation without changing hard limits.",
+    "independent_check": "PromptOutputAuditor::audit on the exact serialized package (not a plan-only pass)",
+    "regression_case": "clip_duration_missing"
+  },
+  "clip_numbering": {
+    "category": "structure",
+    "kind": "contract_violation",
+    "defect_condition": "Block numbers are not consecutively 1..N.",
+    "earliest_stage": "parse/serialize",
+    "invariant": "Emit one unambiguous required record per field and preserve all numbered copy-ready blocks.",
+    "independent_check": "PromptOutputAuditor::audit on the exact serialized package (not a plan-only pass)",
+    "regression_case": "clip_numbering"
+  },
+  "clip_plan_duration_mismatch": {
+    "category": "duration",
+    "kind": "contract_violation",
+    "defect_condition": "Clip plan/shot list point duration differs from canonical duration.",
+    "earliest_stage": "canonical timing allocation/serialization",
+    "invariant": "Allocate legal canonical clip durations once; derive all point views and totals from that allocation without changing hard limits.",
+    "independent_check": "PromptOutputAuditor::audit on the exact serialized package (not a plan-only pass)",
+    "regression_case": "clip_plan_duration_mismatch"
+  },
+  "clip_plan_duration_missing": {
+    "category": "duration",
+    "kind": "contract_violation",
+    "defect_condition": "Existing clip plan/shot list omits a parseable point duration for a canonical clip.",
+    "earliest_stage": "canonical timing allocation/serialization",
+    "invariant": "Allocate legal canonical clip durations once; derive all point views and totals from that allocation without changing hard limits.",
+    "independent_check": "PromptOutputAuditor::audit on the exact serialized package (not a plan-only pass)",
+    "regression_case": "clip_plan_duration_missing"
+  },
+  "clip_plan_duration_unknown": {
+    "category": "duration",
+    "kind": "contract_violation",
+    "defect_condition": "Clip plan/shot list contains a duration for a nonexistent clip.",
+    "earliest_stage": "canonical timing allocation/serialization",
+    "invariant": "Allocate legal canonical clip durations once; derive all point views and totals from that allocation without changing hard limits.",
+    "independent_check": "PromptOutputAuditor::audit on the exact serialized package (not a plan-only pass)",
+    "regression_case": "clip_plan_duration_unknown"
+  },
+  "continuity_audit_overclaim": {
+    "category": "continuity",
+    "kind": "contract_violation",
+    "defect_condition": "Final audit claims exact/universal/physically verified continuity without complete supporting checks.",
+    "earliest_stage": "canonical scene-state ledger",
+    "invariant": "Copy prior ending state into the next opening; represent needed changes inside the destination clip and retain uncertainty when only prose heuristics are available.",
+    "independent_check": "PromptOutputAuditor::audit on the exact serialized package (not a plan-only pass)",
+    "regression_case": "continuity_audit_overclaim"
+  },
+  "continuity_prose_state_mismatch": {
+    "category": "continuity",
+    "kind": "review",
+    "defect_condition": "Exact opening/ending prose contains lexical opposition to its structured state; contextual heuristic, not physical proof.",
+    "earliest_stage": "canonical scene-state ledger",
+    "invariant": "Copy prior ending state into the next opening; represent needed changes inside the destination clip and retain uncertainty when only prose heuristics are available.",
+    "independent_check": "PromptOutputAuditor::audit on the exact serialized package (not a plan-only pass)",
+    "regression_case": "continuity_prose_state_mismatch"
+  },
+  "continuity_prose_state_unverified": {
+    "category": "continuity",
+    "kind": "review",
+    "defect_condition": "Structured state and exact-frame prose have insufficient shared explicit evidence.",
+    "earliest_stage": "canonical scene-state ledger",
+    "invariant": "Copy prior ending state into the next opening; represent needed changes inside the destination clip and retain uncertainty when only prose heuristics are available.",
+    "independent_check": "PromptOutputAuditor::audit on the exact serialized package (not a plan-only pass)",
+    "regression_case": "continuity_prose_state_unverified"
+  },
+  "continuity_state_mismatch": {
+    "category": "continuity",
+    "kind": "contract_violation",
+    "defect_condition": "Adjacent required state strings are not exact under the handoff contract; no claim of physical impossibility is inferred.",
+    "earliest_stage": "canonical scene-state ledger",
+    "invariant": "Copy prior ending state into the next opening; represent needed changes inside the destination clip and retain uncertainty when only prose heuristics are available.",
+    "independent_check": "PromptOutputAuditor::audit on the exact serialized package (not a plan-only pass)",
+    "regression_case": "continuity_state_mismatch"
+  },
+  "declared_duration_constraint_violation": {
+    "category": "duration",
+    "kind": "contract_violation",
+    "defect_condition": "Duration lies outside an explicit project-declared per-clip range.",
+    "earliest_stage": "canonical timing allocation/serialization",
+    "invariant": "Allocate legal canonical clip durations once; derive all point views and totals from that allocation without changing hard limits.",
+    "independent_check": "PromptOutputAuditor::audit on the exact serialized package (not a plan-only pass)",
+    "regression_case": "declared_duration_constraint_violation"
+  },
+  "duration_constraint_conflict": {
+    "category": "duration",
+    "kind": "contract_violation",
+    "defect_condition": "Saved/manual and explicit per-clip duration ranges have empty intersection.",
+    "earliest_stage": "canonical timing allocation/serialization",
+    "invariant": "Allocate legal canonical clip durations once; derive all point views and totals from that allocation without changing hard limits.",
+    "independent_check": "PromptOutputAuditor::audit on the exact serialized package (not a plan-only pass)",
+    "regression_case": "duration_constraint_conflict"
+  },
+  "final_handoff_marker_missing": {
+    "category": "handoff",
+    "kind": "contract_violation",
+    "defect_condition": "Last clip lacks FINAL outgoing marker.",
+    "earliest_stage": "single outgoing handoff allocation/serialization",
+    "invariant": "Classify each outgoing handoff once; derive the next incoming marker and prohibit Type C seamless claims.",
+    "independent_check": "PromptOutputAuditor::audit on the exact serialized package (not a plan-only pass)",
+    "regression_case": "final_handoff_marker_missing"
+  },
+  "first_clip_transition": {
+    "category": "handoff",
+    "kind": "contract_violation",
+    "defect_condition": "The first incoming marker is not INITIAL.",
+    "earliest_stage": "single outgoing handoff allocation/serialization",
+    "invariant": "Classify each outgoing handoff once; derive the next incoming marker and prohibit Type C seamless claims.",
+    "independent_check": "PromptOutputAuditor::audit on the exact serialized package (not a plan-only pass)",
+    "regression_case": "first_clip_transition"
+  },
+  "handoff_label_description_mismatch": {
+    "category": "handoff",
+    "kind": "contract_violation",
+    "defect_condition": "Explicit transition type letter contradicts a recognized canonical description on the same field.",
+    "earliest_stage": "single outgoing handoff allocation/serialization",
+    "invariant": "Classify each outgoing handoff once; derive the next incoming marker and prohibit Type C seamless claims.",
+    "independent_check": "PromptOutputAuditor::audit on the exact serialized package (not a plan-only pass)",
+    "regression_case": "handoff_label_description_mismatch"
+  },
+  "handoff_opening_prose_mismatch": {
+    "category": "continuity",
+    "kind": "review",
+    "defect_condition": "Destination exact-opening prose contradicts prior structured ending under lexical checks.",
+    "earliest_stage": "canonical scene-state ledger",
+    "invariant": "Copy prior ending state into the next opening; represent needed changes inside the destination clip and retain uncertainty when only prose heuristics are available.",
+    "independent_check": "PromptOutputAuditor::audit on the exact serialized package (not a plan-only pass)",
+    "regression_case": "handoff_opening_prose_mismatch"
+  },
+  "handoff_opening_prose_unverified": {
+    "category": "continuity",
+    "kind": "review",
+    "defect_condition": "Destination exact-opening prose cannot be verified against prior ending.",
+    "earliest_stage": "canonical scene-state ledger",
+    "invariant": "Copy prior ending state into the next opening; represent needed changes inside the destination clip and retain uncertainty when only prose heuristics are available.",
+    "independent_check": "PromptOutputAuditor::audit on the exact serialized package (not a plan-only pass)",
+    "regression_case": "handoff_opening_prose_unverified"
+  },
+  "handoff_prose_state_mismatch": {
+    "category": "continuity",
+    "kind": "review",
+    "defect_condition": "Adjacent written ending/opening prose has explicit opposing terms.",
+    "earliest_stage": "canonical scene-state ledger",
+    "invariant": "Copy prior ending state into the next opening; represent needed changes inside the destination clip and retain uncertainty when only prose heuristics are available.",
+    "independent_check": "PromptOutputAuditor::audit on the exact serialized package (not a plan-only pass)",
+    "regression_case": "handoff_prose_state_mismatch"
+  },
+  "handoff_prose_state_unverified": {
+    "category": "continuity",
+    "kind": "review",
+    "defect_condition": "Adjacent written prose lacks sufficient shared evidence for the handoff.",
+    "earliest_stage": "canonical scene-state ledger",
+    "invariant": "Copy prior ending state into the next opening; represent needed changes inside the destination clip and retain uncertainty when only prose heuristics are available.",
+    "independent_check": "PromptOutputAuditor::audit on the exact serialized package (not a plan-only pass)",
+    "regression_case": "handoff_prose_state_unverified"
+  },
+  "handoff_summary_mismatch": {
+    "category": "handoff",
+    "kind": "contract_violation",
+    "defect_condition": "Explicit HANDOFF N -> N+1 summary outside copy blocks disagrees with the canonical outgoing label or references a nonexistent adjacent pair.",
+    "earliest_stage": "single outgoing handoff allocation/serialization",
+    "invariant": "Classify each outgoing handoff once; derive the next incoming marker and prohibit Type C seamless claims.",
+    "independent_check": "PromptOutputAuditor::audit on the exact serialized package (not a plan-only pass)",
+    "regression_case": "handoff_summary_mismatch"
+  },
+  "handoff_type_mismatch": {
+    "category": "handoff",
+    "kind": "contract_violation",
+    "defect_condition": "Prior outgoing and next incoming literal classifications disagree.",
+    "earliest_stage": "single outgoing handoff allocation/serialization",
+    "invariant": "Classify each outgoing handoff once; derive the next incoming marker and prohibit Type C seamless claims.",
+    "independent_check": "PromptOutputAuditor::audit on the exact serialized package (not a plan-only pass)",
+    "regression_case": "handoff_type_mismatch"
+  },
+  "identity_anchor_unverified": {
+    "category": "identity",
+    "kind": "review",
+    "defect_condition": "Clip identity anchor is not repeated verbatim; a paraphrase alone does not prove a redesign.",
+    "earliest_stage": "closed identity roster and anchor expansion",
+    "invariant": "Define unique literal anchors for declared IDs, expand them into applicable clips, enforce explicit counts and do not infer missing identities.",
+    "independent_check": "PromptOutputAuditor::audit on the exact serialized package (not a plan-only pass)",
+    "regression_case": "identity_anchor_unverified"
+  },
+  "incoming_handoff_missing": {
+    "category": "handoff",
+    "kind": "contract_violation",
+    "defect_condition": "A later clip lacks a recognized incoming A/B/C type.",
+    "earliest_stage": "single outgoing handoff allocation/serialization",
+    "invariant": "Classify each outgoing handoff once; derive the next incoming marker and prohibit Type C seamless claims.",
+    "independent_check": "PromptOutputAuditor::audit on the exact serialized package (not a plan-only pass)",
+    "regression_case": "incoming_handoff_missing"
+  },
+  "manual_duration_mismatch": {
+    "category": "duration",
+    "kind": "contract_violation",
+    "defect_condition": "Standalone duration differs from selected fixed duration.",
+    "earliest_stage": "canonical timing allocation/serialization",
+    "invariant": "Allocate legal canonical clip durations once; derive all point views and totals from that allocation without changing hard limits.",
+    "independent_check": "PromptOutputAuditor::audit on the exact serialized package (not a plan-only pass)",
+    "regression_case": "manual_duration_mismatch"
+  },
+  "metadata_field_ambiguous": {
+    "category": "structure",
+    "kind": "contract_violation",
+    "defect_condition": "A critical field occurs more than once; the parser must not select one value.",
+    "earliest_stage": "parse/serialize",
+    "invariant": "Emit one unambiguous required record per field and preserve all numbered copy-ready blocks.",
+    "independent_check": "PromptOutputAuditor::audit on the exact serialized package (not a plan-only pass)",
+    "regression_case": "metadata_field_ambiguous"
+  },
+  "outgoing_handoff_missing": {
+    "category": "handoff",
+    "kind": "contract_violation",
+    "defect_condition": "A non-final clip lacks outgoing A/B/C.",
+    "earliest_stage": "single outgoing handoff allocation/serialization",
+    "invariant": "Classify each outgoing handoff once; derive the next incoming marker and prohibit Type C seamless claims.",
+    "independent_check": "PromptOutputAuditor::audit on the exact serialized package (not a plan-only pass)",
+    "regression_case": "outgoing_handoff_missing"
+  },
+  "overview_clip_duration_mismatch": {
+    "category": "duration",
+    "kind": "contract_violation",
+    "defect_condition": "Overview point duration differs from its canonical copy-ready clip.",
+    "earliest_stage": "canonical timing allocation/serialization",
+    "invariant": "Allocate legal canonical clip durations once; derive all point views and totals from that allocation without changing hard limits.",
+    "independent_check": "PromptOutputAuditor::audit on the exact serialized package (not a plan-only pass)",
+    "regression_case": "overview_clip_duration_mismatch"
+  },
+  "overview_clip_duration_missing": {
+    "category": "duration",
+    "kind": "contract_violation",
+    "defect_condition": "Existing overview omits a point-duration reference for a canonical clip.",
+    "earliest_stage": "canonical timing allocation/serialization",
+    "invariant": "Allocate legal canonical clip durations once; derive all point views and totals from that allocation without changing hard limits.",
+    "independent_check": "PromptOutputAuditor::audit on the exact serialized package (not a plan-only pass)",
+    "regression_case": "overview_clip_duration_missing"
+  },
+  "overview_clip_duration_unknown": {
+    "category": "duration",
+    "kind": "contract_violation",
+    "defect_condition": "Overview contains a point duration for a nonexistent canonical clip.",
+    "earliest_stage": "canonical timing allocation/serialization",
+    "invariant": "Allocate legal canonical clip durations once; derive all point views and totals from that allocation without changing hard limits.",
+    "independent_check": "PromptOutputAuditor::audit on the exact serialized package (not a plan-only pass)",
+    "regression_case": "overview_clip_duration_unknown"
+  },
+  "overview_clip_durations_unverifiable": {
+    "category": "duration",
+    "kind": "contract_violation",
+    "defect_condition": "An existing overview has no parseable per-clip point-duration references.",
+    "earliest_stage": "canonical timing allocation/serialization",
+    "invariant": "Allocate legal canonical clip durations once; derive all point views and totals from that allocation without changing hard limits.",
+    "independent_check": "PromptOutputAuditor::audit on the exact serialized package (not a plan-only pass)",
+    "regression_case": "overview_clip_durations_unverifiable"
+  },
+  "overview_total_runtime_mismatch": {
+    "category": "duration",
+    "kind": "contract_violation",
+    "defect_condition": "Overview descriptive total differs from sum of canonical clip durations.",
+    "earliest_stage": "canonical timing allocation/serialization",
+    "invariant": "Allocate legal canonical clip durations once; derive all point views and totals from that allocation without changing hard limits.",
+    "independent_check": "PromptOutputAuditor::audit on the exact serialized package (not a plan-only pass)",
+    "regression_case": "overview_total_runtime_mismatch"
+  },
+  "overview_total_runtime_missing": {
+    "category": "duration",
+    "kind": "contract_violation",
+    "defect_condition": "An existing overview has no parseable descriptive total runtime.",
+    "earliest_stage": "canonical timing allocation/serialization",
+    "invariant": "Allocate legal canonical clip durations once; derive all point views and totals from that allocation without changing hard limits.",
+    "independent_check": "PromptOutputAuditor::audit on the exact serialized package (not a plan-only pass)",
+    "regression_case": "overview_total_runtime_missing"
+  },
+  "presentation_state_mismatch": {
+    "category": "continuity",
+    "kind": "contract_violation",
+    "defect_condition": "A/B adjacent camera/light/audio presentation strings disagree.",
+    "earliest_stage": "canonical scene-state ledger",
+    "invariant": "Copy prior ending state into the next opening; represent needed changes inside the destination clip and retain uncertainty when only prose heuristics are available.",
+    "independent_check": "PromptOutputAuditor::audit on the exact serialized package (not a plan-only pass)",
+    "regression_case": "presentation_state_mismatch"
+  },
+  "project_runtime_constraint_conflict": {
+    "category": "duration",
+    "kind": "contract_violation",
+    "defect_condition": "Project runtime minimum exceeds maximum.",
+    "earliest_stage": "canonical timing allocation/serialization",
+    "invariant": "Allocate legal canonical clip durations once; derive all point views and totals from that allocation without changing hard limits.",
+    "independent_check": "PromptOutputAuditor::audit on the exact serialized package (not a plan-only pass)",
+    "regression_case": "project_runtime_constraint_conflict"
+  },
+  "project_runtime_constraint_violation": {
+    "category": "duration",
+    "kind": "contract_violation",
+    "defect_condition": "Sum of canonical durations is outside the declared project runtime range.",
+    "earliest_stage": "canonical timing allocation/serialization",
+    "invariant": "Allocate legal canonical clip durations once; derive all point views and totals from that allocation without changing hard limits.",
+    "independent_check": "PromptOutputAuditor::audit on the exact serialized package (not a plan-only pass)",
+    "regression_case": "project_runtime_constraint_violation"
+  },
+  "prompt_structure_missing": {
+    "category": "structure",
+    "kind": "review",
+    "defect_condition": "No recognized copy-ready clip/extension blocks; checks did not run, not a clean pass.",
+    "earliest_stage": "parse/serialize",
+    "invariant": "Emit one unambiguous required record per field and preserve all numbered copy-ready blocks.",
+    "independent_check": "PromptOutputAuditor::audit on the exact serialized package (not a plan-only pass)",
+    "regression_case": "prompt_structure_missing"
+  },
+  "required_field_missing": {
+    "category": "mixed",
+    "kind": "contract_violation",
+    "defect_condition": "A required one-line metadata field is absent/empty, excluding valid silent-map/identity markers.",
+    "earliest_stage": "required-field schema/serialization",
+    "invariant": "Emit each required metadata field exactly once; do not choose among duplicates.",
+    "independent_check": "PromptOutputAuditor::audit on the exact serialized package (not a plan-only pass)",
+    "regression_case": "required_field_missing"
+  },
+  "speech_budget_exceeded": {
+    "category": "narration",
+    "kind": "contract_violation",
+    "defect_condition": "Aggregate estimated speech exceeds available duration after opening/tail/gaps.",
+    "earliest_stage": "speech allocation before count/serialization",
+    "invariant": "Preserve exact words and speaker order; budget speech plus configured pads/gaps before serialization and retain unresolved overflow.",
+    "independent_check": "PromptOutputAuditor::audit on the exact serialized package (not a plan-only pass)",
+    "regression_case": "speech_budget_exceeded"
+  },
+  "speech_exceeds_clip": {
+    "category": "narration",
+    "kind": "contract_violation",
+    "defect_condition": "A row ends after the canonical clip window.",
+    "earliest_stage": "speech allocation before count/serialization",
+    "invariant": "Preserve exact words and speaker order; budget speech plus configured pads/gaps before serialization and retain unresolved overflow.",
+    "independent_check": "PromptOutputAuditor::audit on the exact serialized package (not a plan-only pass)",
+    "regression_case": "speech_exceeds_clip"
+  },
+  "speech_inter_line_pause_missing": {
+    "category": "narration",
+    "kind": "contract_violation",
+    "defect_condition": "Separated rows leave less than configured minimum breathing gap (apart from floating-point epsilon).",
+    "earliest_stage": "speech allocation before count/serialization",
+    "invariant": "Preserve exact words and speaker order; budget speech plus configured pads/gaps before serialization and retain unresolved overflow.",
+    "independent_check": "PromptOutputAuditor::audit on the exact serialized package (not a plan-only pass)",
+    "regression_case": "speech_inter_line_pause_missing"
+  },
+  "speech_leaves_no_visual_tail": {
+    "category": "narration",
+    "kind": "contract_violation",
+    "defect_condition": "Latest audible end leaves less than configured final pad.",
+    "earliest_stage": "speech allocation before count/serialization",
+    "invariant": "Preserve exact words and speaker order; budget speech plus configured pads/gaps before serialization and retain unresolved overflow.",
+    "independent_check": "PromptOutputAuditor::audit on the exact serialized package (not a plan-only pass)",
+    "regression_case": "speech_leaves_no_visual_tail"
+  },
+  "speech_map_empty_unmarked": {
+    "category": "narration",
+    "kind": "contract_violation",
+    "defect_condition": "No speech rows and no explicit intentional-silence/off marker.",
+    "earliest_stage": "speech allocation before count/serialization",
+    "invariant": "Preserve exact words and speaker order; budget speech plus configured pads/gaps before serialization and retain unresolved overflow.",
+    "independent_check": "PromptOutputAuditor::audit on the exact serialized package (not a plan-only pass)",
+    "regression_case": "speech_map_empty_unmarked"
+  },
+  "speech_map_incomplete": {
+    "category": "narration",
+    "kind": "contract_violation",
+    "defect_condition": "Timed row has empty action, speaker or exact words.",
+    "earliest_stage": "speech allocation before count/serialization",
+    "invariant": "Preserve exact words and speaker order; budget speech plus configured pads/gaps before serialization and retain unresolved overflow.",
+    "independent_check": "PromptOutputAuditor::audit on the exact serialized package (not a plan-only pass)",
+    "regression_case": "speech_map_incomplete"
+  },
+  "speech_map_unparseable": {
+    "category": "narration",
+    "kind": "contract_violation",
+    "defect_condition": "Count of literal LINE markers differs from parsed timed rows; no schedule is certified.",
+    "earliest_stage": "speech allocation before count/serialization",
+    "invariant": "Preserve exact words and speaker order; budget speech plus configured pads/gaps before serialization and retain unresolved overflow.",
+    "independent_check": "PromptOutputAuditor::audit on the exact serialized package (not a plan-only pass)",
+    "regression_case": "speech_map_unparseable"
+  },
+  "speech_off_marker_mismatch": {
+    "category": "narration",
+    "kind": "contract_violation",
+    "defect_condition": "Silent-map wording contradicts saved audio on/off setting.",
+    "earliest_stage": "speech allocation before count/serialization",
+    "invariant": "Preserve exact words and speaker order; budget speech plus configured pads/gaps before serialization and retain unresolved overflow.",
+    "independent_check": "PromptOutputAuditor::audit on the exact serialized package (not a plan-only pass)",
+    "regression_case": "speech_off_marker_mismatch"
+  },
+  "speech_opening_visual_beat_missing": {
+    "category": "narration",
+    "kind": "contract_violation",
+    "defect_condition": "First printed speech row starts before configured opening pad.",
+    "earliest_stage": "speech allocation before count/serialization",
+    "invariant": "Preserve exact words and speaker order; budget speech plus configured pads/gaps before serialization and retain unresolved overflow.",
+    "independent_check": "PromptOutputAuditor::audit on the exact serialized package (not a plan-only pass)",
+    "regression_case": "speech_opening_visual_beat_missing"
+  },
+  "speech_overrun": {
+    "category": "narration",
+    "kind": "contract_violation",
+    "defect_condition": "Individual row is too short for the conservative language/audience word-time estimate.",
+    "earliest_stage": "speech allocation before count/serialization",
+    "invariant": "Preserve exact words and speaker order; budget speech plus configured pads/gaps before serialization and retain unresolved overflow.",
+    "independent_check": "PromptOutputAuditor::audit on the exact serialized package (not a plan-only pass)",
+    "regression_case": "speech_overrun"
+  },
+  "speech_pacing_overclaim": {
+    "category": "narration",
+    "kind": "contract_violation",
+    "defect_condition": "Final audit asserts universal natural speech without complete passing parsed timing evidence.",
+    "earliest_stage": "speech allocation before count/serialization",
+    "invariant": "Preserve exact words and speaker order; budget speech plus configured pads/gaps before serialization and retain unresolved overflow.",
+    "independent_check": "PromptOutputAuditor::audit on the exact serialized package (not a plan-only pass)",
+    "regression_case": "speech_pacing_overclaim"
+  },
+  "speech_rows_overlap": {
+    "category": "narration",
+    "kind": "contract_violation",
+    "defect_condition": "A row starts before a previous row ends.",
+    "earliest_stage": "speech allocation before count/serialization",
+    "invariant": "Preserve exact words and speaker order; budget speech plus configured pads/gaps before serialization and retain unresolved overflow.",
+    "independent_check": "PromptOutputAuditor::audit on the exact serialized package (not a plan-only pass)",
+    "regression_case": "speech_rows_overlap"
+  },
+  "speech_time_range_invalid": {
+    "category": "narration",
+    "kind": "contract_violation",
+    "defect_condition": "Row start is negative or end is not after start.",
+    "earliest_stage": "speech allocation before count/serialization",
+    "invariant": "Preserve exact words and speaker order; budget speech plus configured pads/gaps before serialization and retain unresolved overflow.",
+    "independent_check": "PromptOutputAuditor::audit on the exact serialized package (not a plan-only pass)",
+    "regression_case": "speech_time_range_invalid"
+  },
+  "speech_when_disabled": {
+    "category": "narration",
+    "kind": "contract_violation",
+    "defect_condition": "Timed speech exists while saved spoken audio is off.",
+    "earliest_stage": "speech allocation before count/serialization",
+    "invariant": "Preserve exact words and speaker order; budget speech plus configured pads/gaps before serialization and retain unresolved overflow.",
+    "independent_check": "PromptOutputAuditor::audit on the exact serialized package (not a plan-only pass)",
+    "regression_case": "speech_when_disabled"
+  },
+  "timing_audit_overclaim": {
+    "category": "duration",
+    "kind": "contract_violation",
+    "defect_condition": "Final audit asserts synchronized timing without complete passing overview/plan/clip evidence.",
+    "earliest_stage": "canonical timing allocation/serialization",
+    "invariant": "Allocate legal canonical clip durations once; derive all point views and totals from that allocation without changing hard limits.",
+    "independent_check": "PromptOutputAuditor::audit on the exact serialized package (not a plan-only pass)",
+    "regression_case": "timing_audit_overclaim"
+  },
+  "type_b_transition_action_unverified": {
+    "category": "continuity",
+    "kind": "review",
+    "defect_condition": "Destination matched opening and trigger-to-result bridge cannot both be established by the lexical evidence heuristic.",
+    "earliest_stage": "canonical scene-state ledger",
+    "invariant": "Copy prior ending state into the next opening; represent needed changes inside the destination clip and retain uncertainty when only prose heuristics are available.",
+    "independent_check": "PromptOutputAuditor::audit on the exact serialized package (not a plan-only pass)",
+    "regression_case": "type_b_transition_action_unverified"
+  },
+  "type_c_seamless_claim": {
+    "category": "handoff",
+    "kind": "contract_violation",
+    "defect_condition": "An incoming Type C clip asserts seamless/uninterrupted continuation rather than intentional progression.",
+    "earliest_stage": "single outgoing handoff allocation/serialization",
+    "invariant": "Classify each outgoing handoff once; derive the next incoming marker and prohibit Type C seamless claims.",
+    "independent_check": "PromptOutputAuditor::audit on the exact serialized package (not a plan-only pass)",
+    "regression_case": "type_c_seamless_claim"
+  },
+  "type_c_transition_undocumented": {
+    "category": "continuity",
+    "kind": "review",
+    "defect_condition": "Type C lacks matched before state and/or explicit before/transition/after evidence under text heuristics.",
+    "earliest_stage": "canonical scene-state ledger",
+    "invariant": "Copy prior ending state into the next opening; represent needed changes inside the destination clip and retain uncertainty when only prose heuristics are available.",
+    "independent_check": "PromptOutputAuditor::audit on the exact serialized package (not a plan-only pass)",
+    "regression_case": "type_c_transition_undocumented"
+  },
+  "undeclared_character": {
+    "category": "identity",
+    "kind": "contract_violation",
+    "defect_condition": "Explicit clip cast contains undeclared IDs or names not resolvable under an active closed ID roster.",
+    "earliest_stage": "closed identity roster and anchor expansion",
+    "invariant": "Define unique literal anchors for declared IDs, expand them into applicable clips, enforce explicit counts and do not infer missing identities.",
+    "independent_check": "PromptOutputAuditor::audit on the exact serialized package (not a plan-only pass)",
+    "regression_case": "undeclared_character"
+  },
+  "visual_representation_unclear": {
+    "category": "visual",
+    "kind": "contract_violation",
+    "defect_condition": "Representation is not identified as literal, cutaway, diagram, overlay, metaphor or illustrative.",
+    "earliest_stage": "beat/representation planning",
+    "invariant": "Give each beat one primary idea, an explicit permitted literal/cutaway/diagram/overlay/metaphor/illustrative representation and visible cause/action/result.",
+    "independent_check": "PromptOutputAuditor::audit on the exact serialized package (not a plan-only pass)",
+    "regression_case": "visual_representation_unclear"
+  }
+}

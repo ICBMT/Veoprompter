@@ -78,6 +78,8 @@ class PromptOutputAuditor
             );
         }
 
+        $identityChecked = $this->auditIdentities($content, $clips, $issues);
+
         if (! $isExtension) {
             $expectedClipCount = $input['clip_count'] ?? ProjectSettings::AI_CHOICE;
             if (! ProjectSettings::isAiClipCountChoice($expectedClipCount) && is_numeric($expectedClipCount)) {
@@ -116,8 +118,10 @@ class PromptOutputAuditor
                 $incoming = $details[$index]['incoming_type'];
                 $outgoing = $details[$index]['outgoing_type'];
                 $clipNumber = $clip['number'];
+                $incomingAmbiguous = count($this->fieldValues($clip['text'], 'TRANSITION TYPE')) > 1;
+                $outgoingAmbiguous = count($this->fieldValues($clip['text'], 'OUTGOING HANDOFF TYPE')) > 1;
 
-                if ($index === 0 && $incoming !== 'INITIAL') {
+                if ($index === 0 && $incoming !== 'INITIAL' && ! $incomingAmbiguous) {
                     $this->addIssue(
                         $issues,
                         'first_clip_transition',
@@ -125,7 +129,7 @@ class PromptOutputAuditor
                         $clipNumber,
                         'Clip 1 must use TRANSITION TYPE: INITIAL CLIP — NO PREVIOUS HANDOFF.',
                     );
-                } elseif ($index > 0 && ! in_array($incoming, ['A', 'B', 'C'], true)) {
+                } elseif ($index > 0 && ! in_array($incoming, ['A', 'B', 'C'], true) && ! $incomingAmbiguous) {
                     $this->addIssue(
                         $issues,
                         'incoming_handoff_missing',
@@ -139,7 +143,7 @@ class PromptOutputAuditor
                     $next = $details[$index + 1];
                     $nextClipNumber = $clips[$index + 1]['number'];
 
-                    if (! in_array($outgoing, ['A', 'B', 'C'], true)) {
+                    if (! in_array($outgoing, ['A', 'B', 'C'], true) && ! $outgoingAmbiguous) {
                         $this->addIssue(
                             $issues,
                             'outgoing_handoff_missing',
@@ -321,7 +325,7 @@ class PromptOutputAuditor
                         'overall_relation' => $overallRelation,
                         'exact_copy' => $overallRelation === 'exact',
                     ];
-                } elseif ($outgoing !== 'FINAL') {
+                } elseif ($outgoing !== 'FINAL' && ! $outgoingAmbiguous) {
                     $this->addIssue(
                         $issues,
                         'final_handoff_marker_missing',
@@ -332,13 +336,14 @@ class PromptOutputAuditor
                 }
             }
 
+            $this->auditHandoffSummaries($content, $clips, $issues);
             $this->auditProjectOverview($content, $clips, $details, $issues, $plan);
             $this->auditClipPlanDurations($content, $clips, $details, $issues, $plan);
             $this->auditProjectRuntimeConstraints($plan, $issues);
             $this->auditFinalContinuityClaims($content, $handoffs, $clips, $input, $issues, $plan);
         }
 
-        return $this->buildReview($issues, $input, true, $isExtension, $handoffs);
+        return $this->buildReview($issues, $input, true, $isExtension, $handoffs, $identityChecked);
     }
 
     /**
@@ -406,23 +411,119 @@ class PromptOutputAuditor
         );
     }
 
-    /** @return array<int, array{number: int, text: string, start_line: int, end_line: int}> */
+    /** Check only explicitly formatted summaries; arbitrary prose is not silently parsed as a plan. */
+    private function auditHandoffSummaries(string $content, array $clips, array &$issues): void
+    {
+        $lines = preg_split('/\R/u', $content) ?: [];
+        foreach ($lines as $index => $line) {
+            if (array_filter($clips, fn (array $clip): bool => $index >= $clip['start_line'] && $index < $clip['end_line'])) {
+                continue;
+            }
+            if (preg_match('/^\s*(?:[-*+>]\s*)?HANDOFF\s+(\d+)\s*(?:→|->|to)\s*(\d+)\s*:\s*TYPE\s*([ABC])\b/iu', str_replace(['**', '__', '`'], '', $line), $match)) {
+                $from = (int) $match[1];
+                $to = (int) $match[2];
+                $source = array_values(array_filter($clips, fn (array $clip): bool => $clip['number'] === $from));
+                if (count($source) === 1 && ($source[0]['outgoing_type'] === null || count($this->fieldValues($source[0]['text'], 'OUTGOING HANDOFF TYPE')) > 1)) { continue; }
+                if (count($source) !== 1 || $to !== $from + 1 || ! in_array($to, array_column($clips, 'number'), true) || $source[0]['outgoing_type'] !== strtoupper($match[3])) {
+                    $this->addIssue($issues, 'handoff_summary_mismatch', 'handoff', $from, 'The explicit cross-section handoff summary disagrees with its canonical adjacent outgoing classification.', false);
+                }
+            }
+        }
+    }
+
+    /** Literal, opt-in identity anchors; absence is not invented evidence about a legacy roster. */
+    private function auditIdentities(string $content, array $clips, array &$issues): bool
+    {
+        $prefix = implode("\n", array_slice(preg_split('/\R/u', $content) ?: [], 0, $clips[0]['heading_line'] ?? $clips[0]['start_line'] ?? 0));
+        $rosters = $this->fieldValues($prefix, 'CANONICAL CHARACTER ROSTER');
+        preg_match_all('/^\s*(?:[-*+>]\s*)?CANONICAL IDENTITY ([A-Za-z]+-\d+)\s*:\s*(.*)$/imu', str_replace(['**', '__', '`'], '', $prefix), $matches, PREG_SET_ORDER);
+        $anchors = [];
+        foreach ($matches as $match) {
+            $id = strtoupper($match[1]);
+            if (isset($anchors[$id])) {
+                $this->addIssue($issues, 'canonical_identity_ambiguous', 'identity', null, 'Canonical identity '.$id.' is defined more than once.', false);
+            }
+            $anchors[$id] = trim($match[2]);
+        }
+        if (count($rosters) > 1) {
+            $this->addIssue($issues, 'canonical_identity_ambiguous', 'identity', null, 'The canonical character roster is repeated; no authoritative roster is selected.', false);
+            return true;
+        }
+        $active = count($rosters) === 1;
+        $roster = $active ? $rosters[0] : '';
+        preg_match_all('/\b[A-Za-z]+-\d+\b/', $roster, $ids);
+        $declared = array_map('strtoupper', $ids[0]);
+        if ($active && $declared === [] && ! preg_match('/^None\b/i', $roster)) {
+            $this->addIssue($issues, 'canonical_roster_unparseable', 'identity', null, 'The explicit roster has no parseable canonical IDs or None marker; identity checks need review.', false);
+            $active = false;
+        }
+        foreach ($declared as $id) {
+            if (empty($anchors[$id])) {
+                $this->addIssue($issues, 'canonical_identity_missing', 'identity', null, 'Declared character '.$id.' has no literal CANONICAL IDENTITY definition.', false);
+            }
+        }
+        foreach ($clips as $clip) {
+            $cast = $clip['visible_character_cast'] ?? '';
+            preg_match_all('/\b[A-Za-z]+-\d+\b/', $cast, $castIds);
+            if ($active && ! preg_match('/^None\b/i', $cast) && ($castIds[0] === [] || array_diff(array_map('strtoupper', $castIds[0]), $declared) !== [])) {
+                $this->addIssue($issues, 'undeclared_character', 'identity', $clip['number'], 'Visible cast is outside the explicit canonical roster or lacks its declared IDs; no extra character is assumed authorized.', false);
+            }
+            foreach ($castIds[0] as $id) {
+                $id = strtoupper($id);
+                if (isset($anchors[$id]) && $anchors[$id] !== '' && ! str_contains($this->normalizeState($clip['character_identity_lock'] ?? ''), $this->normalizeState($anchors[$id]))) {
+                    $this->addIssue($issues, 'identity_anchor_unverified', 'identity', $clip['number'], 'The identity lock does not repeat canonical anchor '.$id.' verbatim; a paraphrase is not proof of a redesign, but needs review.', false);
+                }
+                $pattern = '/'.preg_quote($id, '/').'\)?\s*(?:×|x)\s*(\d+)/iu';
+                preg_match($pattern, $roster, $allowed);
+                preg_match($pattern, $cast, $seen);
+                if ($active && isset($seen[1]) && (int) $seen[1] !== (int) ($allowed[1] ?? 1)) {
+                    $this->addIssue($issues, 'cast_count_mismatch', 'identity', $clip['number'], 'Visible count for '.$id.' conflicts with its explicit roster count.', false);
+                }
+            }
+            if ($active && preg_match('/^None\b/i', $cast)) {
+                foreach (['opening_continuity_state', 'ending_continuity_state'] as $key) {
+                    $map = $this->stateMap($clip[$key] ?? '');
+                    if (isset($map['cast']) && ! preg_match('/^None\b/i', $map['cast'])) {
+                        $this->addIssue($issues, 'cast_state_conflict', 'identity', $clip['number'], 'VISIBLE CHARACTER CAST is None but a structured scene-state cast is not None.', false);
+                    }
+                }
+            }
+            $subjects = $this->fieldValue($clip['text'], 'VISIBLE SUBJECT IDS');
+            preg_match_all('/\b[A-Za-z]+-\d+\b/', $subjects ?? '', $subjectIds);
+            $subjectLock = $this->fieldValue($clip['text'], 'SUBJECT IDENTITY LOCK') ?? '';
+            foreach ($subjectIds[0] as $id) {
+                $id = strtoupper($id);
+                if (empty($anchors[$id])) {
+                    $this->addIssue($issues, 'canonical_identity_missing', 'identity', $clip['number'], 'Visible subject '.$id.' has no literal canonical identity definition.', false);
+                } elseif (! str_contains($this->normalizeState($subjectLock), $this->normalizeState($anchors[$id]))) {
+                    $this->addIssue($issues, 'identity_anchor_unverified', 'identity', $clip['number'], 'Subject identity anchor '.$id.' is not repeated verbatim in this clip; needs review.', false);
+                }
+            }
+        }
+        return $active || $anchors !== [];
+    }
+
+    private function clipHeading(string $line): ?array
+    {
+        $normalized = $this->normalizeHeading(html_entity_decode($line, ENT_QUOTES | ENT_HTML5, 'UTF-8'));
+        $normalized = preg_replace('/^SECTION\s+\d+\+?(?:\s*[—–:-]\s*|\s+)(?=(?:COPY\s+)?(?:TRANSITION\s+)?CLIP\b)/iu', '', $normalized) ?? $normalized;
+        if (preg_match('/^(?:COPY\s+)?(?:TRANSITION\s+)?CLIP\s+(\d+)(?:\s+TRANSITION)?\s*(?:[—–:-]\s*)?(?:COPY[- ]AND[- ]PASTE\s+)?(?:VIDEO\s+)?PROMPT\b\s*(?:>|:|—|–|-)?\s*(.*)$/iu', $normalized, $match) !== 1) {
+            return null;
+        }
+
+        return ['number' => (int) $match[1], 'inline' => trim($match[2])];
+    }
+
     private function extractStoryClips(string $content): array
     {
         $lines = preg_split('/\R/u', str_replace("\r", '', $content)) ?: [];
         $headings = [];
 
         foreach ($lines as $index => $line) {
-            $normalized = $this->normalizeHeading($line);
-            if (preg_match('/^(?:COPY\s+)?(?:TRANSITION\s+)?CLIP\s+(\d+)(?:\s+TRANSITION)?\s+(?:COPY[- ]AND[- ]PASTE\s+)?(?:VIDEO\s+)?PROMPT\b\s*(?:>|:|—|–|-)?\s*(.*)$/iu', $normalized, $match) !== 1) {
-                continue;
+            $heading = $this->clipHeading($line);
+            if ($heading !== null) {
+                $headings[] = [...$heading, 'line' => $index];
             }
-
-            $headings[] = [
-                'number' => (int) $match[1],
-                'line' => $index,
-                'inline' => trim($match[2] ?? ''),
-            ];
         }
 
         $blocks = [];
@@ -430,7 +531,7 @@ class PromptOutputAuditor
             $end = count($lines);
             for ($cursor = $heading['line'] + 1; $cursor < count($lines); $cursor++) {
                 $nextIsClip = isset($headings[$index + 1]) && $cursor === $headings[$index + 1]['line'];
-                if ($nextIsClip || preg_match('/^\s*(?:#{1,6}\s*)?(?:\*\*)?SECTION\s+9(?:\+|\b)/iu', $lines[$cursor]) === 1) {
+                if ($nextIsClip || (preg_match('/^SECTION\s+\d+(?:\+|\b)/iu', $this->normalizeHeading($lines[$cursor])) === 1 && $this->clipHeading($lines[$cursor]) === null)) {
                     $end = $cursor;
                     break;
                 }
@@ -441,15 +542,31 @@ class PromptOutputAuditor
                 $body[] = $heading['inline'];
             }
             $body = [...$body, ...array_slice($lines, $heading['line'] + 1, $end - $heading['line'] - 1)];
+            $bounded = $this->copyBody($body, $heading['line'] + ($heading['inline'] !== '' ? 0 : 1), $end);
             $blocks[] = [
                 'number' => $heading['number'],
-                'text' => implode("\n", $body),
-                'start_line' => $heading['line'] + ($heading['inline'] !== '' ? 0 : 1),
-                'end_line' => $end,
+                ...$bounded,
+                'heading_line' => $heading['line'],
             ];
         }
 
         return $blocks;
+    }
+
+    /** Match the extension's fence semantics; offsets always address the original package. */
+    private function copyBody(array $body, int $start, int $end): array
+    {
+        $fence = array_search(true, array_map(fn (string $line): bool => preg_match('/^\s*```[^`]*$/', $line) === 1, $body), true);
+        if ($fence !== false) {
+            for ($i = $fence + 1; $i < count($body); $i++) {
+                if (preg_match('/^\s*```\s*$/', $body[$i])) {
+                    return ['text' => implode("\n", array_slice($body, $fence + 1, $i - $fence - 1)),
+                        'start_line' => $start + $fence + 1, 'end_line' => $start + $i];
+                }
+            }
+        }
+
+        return ['text' => implode("\n", $body), 'start_line' => $start, 'end_line' => $end];
     }
 
     /** @return array<int, array{number: int, text: string, start_line: int, end_line: int}> */
@@ -479,9 +596,8 @@ class PromptOutputAuditor
 
             return [[
                 'number' => 1,
-                'text' => implode("\n", $body),
-                'start_line' => $index + (trim($match[1] ?? '') !== '' ? 0 : 1),
-                'end_line' => $end,
+                ...$this->copyBody($body, $index + (trim($match[1] ?? '') !== '' ? 0 : 1), $end),
+                'heading_line' => $index,
             ]];
         }
 
@@ -497,7 +613,7 @@ class PromptOutputAuditor
             ? (float) $clip['duration_seconds']
             : $this->durationSeconds($text);
 
-        if ($duration === null) {
+        if ($duration === null && count($this->fieldValues($text, 'CLIP DURATION')) < 2) {
             $this->addIssue(
                 $issues,
                 'clip_duration_missing',
@@ -505,7 +621,7 @@ class PromptOutputAuditor
                 $number,
                 'Clip '.$number.' is missing the exact `CLIP DURATION: N seconds` field, so its timing cannot be verified.',
             );
-        } else {
+        } elseif ($duration !== null) {
             if ($duration <= 0 || floor($duration) !== $duration) {
                 $this->addIssue(
                     $issues,
@@ -553,6 +669,17 @@ class PromptOutputAuditor
             );
         }
 
+        foreach (['TRANSITION TYPE', 'OUTGOING HANDOFF TYPE'] as $labelField) {
+            $label = $this->fieldValue($text, $labelField) ?? '';
+            if (preg_match('/\bTYPE\s*([ABC])\b/iu', $label, $type)) {
+                foreach (['A' => 'DIRECT CONTINUATION', 'B' => 'NATURAL ACTION TRANSITION', 'C' => 'NARRATIVE / TEMPORAL TRANSITION'] as $letter => $name) {
+                    if ($letter !== strtoupper($type[1]) && str_contains(strtoupper($label), $name)) {
+                        $this->addIssue($issues, 'handoff_label_description_mismatch', 'handoff', $number, 'The explicit `'.$labelField.':` type letter contradicts its transition description.', false);
+                    }
+                }
+            }
+        }
+
         $requiredFields = [
             'VISIBLE CHARACTER CAST' => 'structure',
             'CHARACTER IDENTITY LOCK' => 'structure',
@@ -576,6 +703,12 @@ class PromptOutputAuditor
             'OPENING PRESENTATION STATE' => 'opening_presentation_state',
             'ENDING PRESENTATION STATE' => 'ending_presentation_state',
         ];
+        foreach (['CLIP DURATION', 'TRANSITION TYPE', 'OUTGOING HANDOFF TYPE', 'EXACT OPENING FRAME', 'EXACT ENDING STATE', 'SUBJECT IDENTITY LOCK', 'VISIBLE SUBJECT IDS', ...array_keys($requiredFields)] as $field) {
+            if (count($this->fieldValues($text, $field)) > 1) {
+                $this->addIssue($issues, 'metadata_field_ambiguous', 'structure', $number,
+                    'Clip '.$number.' repeats `'.$field.':`; no first/last value is assumed authoritative.', false);
+            }
+        }
         $values = [];
         foreach ($requiredFields as $field => $category) {
             $planKey = $canonicalFields[$field] ?? null;
@@ -585,7 +718,7 @@ class PromptOutputAuditor
             $missingValue = in_array($field, ['SPEECH/VISUAL MAP', 'CHARACTER IDENTITY LOCK'], true)
                 ? $values[$field] === null
                 : ($values[$field] === null || trim($values[$field]) === '');
-            if ($missingValue) {
+            if ($missingValue && count($this->fieldValues($text, $field)) < 2) {
                 $this->addIssue(
                     $issues,
                     'required_field_missing',
@@ -656,6 +789,12 @@ class PromptOutputAuditor
 
         $incomingType = $isExtension ? null : ($clip['incoming_type'] ?? $this->incomingType($text));
         $outgoingType = $isExtension ? null : ($clip['outgoing_type'] ?? $this->outgoingType($text));
+        if ($incomingType === 'C') {
+            if ($this->claimsSeamlessContinuation($text)) {
+                $this->addIssue($issues, 'type_c_seamless_claim', 'handoff', $number, 'A Type C prompt asserts seamless/uninterrupted continuation despite its intentional narrative/temporal transition.', false);
+            }
+        }
+
         $mapMarker = $values['SPEECH/VISUAL MAP'] ?? null;
         $speechRows = is_array($clip['speech_rows'] ?? null) ? $clip['speech_rows'] : $this->speechRows($text);
         preg_match_all('/\\bLINE\\s*:/iu', $text, $rawSpeechLines);
@@ -740,7 +879,7 @@ class PromptOutputAuditor
                         'speech_rows_overlap',
                         'narration',
                         $number,
-                        'Clip '.$number.' has overlapping timed speech rows; leave room for natural pauses rather than layering or rushing lines.',
+                        'Clip '.$number.' speech row '.($rowIndex + 1).' overlaps a preceding timed speech row; leave room for natural pauses rather than layering or rushing lines.',
                     );
                 } elseif ($previousEnd !== null && $row['start'] - $previousEnd + $timingTolerance < $requiredInterLinePause) {
                     $this->addIssue(
@@ -1275,6 +1414,11 @@ class PromptOutputAuditor
             }
 
             $lineReferences = [];
+            // Common point rows are authoritative values too; never mistake a range for a point.
+            if (preg_match('/^\s*(?:[-*+>]\s*)?(?:#{1,6}\s*)?(?:\*\*|__)?(?:CLIP|SHOT)\s*#?\s*(\d+)\s*[—–:-]\s*(\d+(?:\.\d+)?)\s*(seconds?|secs?|s|minutes?|mins?|m)(?:\*\*|__)?\s*$/iu', $line, $point, PREG_OFFSET_CAPTURE)) {
+                $lineReferences[] = ['clip' => (int) $point[1][0], 'value' => $point[2][0],
+                    'unit' => strtolower($point[3][0]), 'offset' => $point[2][1]];
+            }
             preg_match_all(
                 '/\\bCLIP\\s*#?\\s*(\\d+)\\b[^\\r\\n]{0,100}?\\b(?:(?:exact|planned|target|approx(?:imate)?)\\s+)?DURATION\\b[^\\r\\n]{0,50}?(\\d+(?:\\.\\d+)?)\\s*(seconds?|secs?|s|minutes?|mins?|m)\\b/iu',
                 $line,
@@ -1443,6 +1587,7 @@ class PromptOutputAuditor
 
     private function incomingType(string $text): ?string
     {
+        if (count($this->fieldValues($text, 'TRANSITION TYPE')) + count($this->fieldValues($text, 'INCOMING TRANSITION TYPE')) > 1) { return null; }
         $lines = preg_split('/\R/u', $text) ?: [];
         foreach ($lines as $line) {
             $line = str_replace(['**', '__', '`'], '', $line);
@@ -1462,6 +1607,7 @@ class PromptOutputAuditor
 
     private function outgoingType(string $text): ?string
     {
+        if (count($this->fieldValues($text, 'OUTGOING HANDOFF TYPE')) > 1) { return null; }
         $lines = preg_split('/\R/u', $text) ?: [];
         foreach ($lines as $line) {
             $line = str_replace(['**', '__', '`'], '', $line);
@@ -1479,16 +1625,24 @@ class PromptOutputAuditor
         return null;
     }
 
-    public function fieldValue(string $text, string $field): ?string
+    public function fieldValues(string $text, string $field): array
     {
+        $values = [];
         foreach (preg_split('/\R/u', $text) ?: [] as $line) {
             $line = str_replace(['**', '__', '`'], '', $line);
             if (preg_match('/^\s*(?:[-*+>]\s*)?'.preg_quote($field, '/').'\s*:\s*(.*?)\s*$/iu', $line, $match) === 1) {
-                return trim($match[1]);
+                $values[] = trim($match[1]);
             }
         }
 
-        return null;
+        return $values;
+    }
+
+    public function fieldValue(string $text, string $field): ?string
+    {
+        $values = $this->fieldValues($text, $field);
+
+        return count($values) === 1 ? $values[0] : null;
     }
 
     /** @param array<int, array{number: int}> $clips @param array<int, array<string, mixed>> $details @param array<int, array<string, mixed>> $issues */
@@ -2052,6 +2206,23 @@ class PromptOutputAuditor
         return preg_match('/\\b(?:exact|verbatim)\\s+(?:(?:state|opening|ending)\\s+)?cop(?:y|ies)\\b|\\b(?:exact|verbatim)\\s+(?:(?:state|opening|ending)\\s+)?match(?:es)?\\b|\\b(?:cop(?:y|ies|ied)|match(?:es|ed)?)\\s+exactly\\b|\\bexactly\\s+(?:cop(?:y|ies|ied)|match(?:es|ed)?)\\b/iu', $line) === 1;
     }
 
+    private function claimsSeamlessContinuation(string $text): bool
+    {
+        foreach (preg_split('/[.!?;\r\n]+/u', $text) ?: [] as $clause) {
+            $clause = preg_split('/\|\s*LINE\s*:/iu', $clause, 2)[0];
+            if (! preg_match_all('/\b(?:seamless (?:continuation|transition)|uninterrupted (?:take|continuation)|as if (?:the )?recording never stopped)\b/iu', $clause, $claims, PREG_OFFSET_CAPTURE)) { continue; }
+            foreach ($claims[0] as [$claim, $offset]) {
+                $before = substr($clause, 0, $offset);
+                $after = substr($clause, $offset + strlen($claim));
+                if (preg_match('/(?:\b(?:not|never|no|avoid|without|cannot|don[’\x27]t)\b.{0,80}|non[- ])$/iu', $before)
+                    || preg_match('/^\s*(?:(?:is|are)\s+)?(?:not|never|forbidden|prohibited|unsupported)\b/iu', $after)) { continue; }
+                return true;
+            }
+        }
+
+        return false;
+    }
+
     private function transitionActionConnectsStates(?string $beforeState, ?string $afterState, string $action, bool $requireTemporalSequence): bool
     {
         if ($this->normalizeState($beforeState) === '' || $this->normalizeState($afterState) === '' || trim($action) === '') {
@@ -2155,6 +2326,14 @@ class PromptOutputAuditor
 
     private function stateTextsAreCompatible(string $left, string $right, bool $checkOpposites = true): bool
     {
+        preg_match_all('/\b[A-Za-z]+-\d+\b/u', $left, $leftIds);
+        preg_match_all('/\b[A-Za-z]+-\d+\b/u', $right, $rightIds);
+        if ($leftIds[0] !== [] && $rightIds[0] !== []) {
+            $l = array_unique(array_map('strtoupper', $leftIds[0]));
+            $r = array_unique(array_map('strtoupper', $rightIds[0]));
+            sort($l); sort($r);
+            if ($l !== $r) { return false; }
+        }
         if ($this->normalizeState($left) === $this->normalizeState($right)) {
             return true;
         }
@@ -2435,8 +2614,12 @@ class PromptOutputAuditor
     }
 
     /** @param array<int, array<string, mixed>> $issues */
-    private function buildReview(array $issues, array $input, bool $hasStructuredPrompts, bool $isExtension, array $handoffs = []): array
+    private function buildReview(array $issues, array $input, bool $hasStructuredPrompts, bool $isExtension, array $handoffs = [], bool $identityChecked = false): array
     {
+        foreach ($issues as &$issue) {
+            $issue['kind'] = PromptQaCatalogue::kind($issue['code']);
+        }
+        unset($issue);
         $issueCategories = [];
         foreach ($issues as $issue) {
             $issueCategories[$issue['category']] = true;
@@ -2458,6 +2641,7 @@ class PromptOutputAuditor
         };
 
         $checks = [
+            $check('identity', 'Explicit identity-anchor contracts', 'identity', 'Only declared roster/identity anchors and counts are checked. Legacy prose, anatomy, unnamed extras and rendered identity require human review.'),
             $check('structure', 'Prompt structure and selected settings', 'structure', $isExtension
                 ? 'One copy-ready extension prompt is parsed; clip-count checks do not apply.'
                 : 'Clip blocks, numbering, and any fixed manual clip count were checked.'),
@@ -2471,6 +2655,11 @@ class PromptOutputAuditor
                 ? 'Clip-relative ranges, overlaps, duration bounds, and conservative word-time estimates are checked.'
                 : 'Spoken audio is off; the explicit no-speech map is checked.'),
         ];
+
+        if (! $identityChecked) {
+            $checks[0]['status'] = 'not_run';
+            $checks[0]['detail'] = 'No explicit canonical roster/identity anchors were available. Legacy prose and rendered identities require human review.';
+        }
 
         $factSensitive = in_array((string) ($input['video_type'] ?? 'educational'), ['educational', 'documentary'], true);
         $checks[] = [
@@ -2500,6 +2689,10 @@ class PromptOutputAuditor
             'repair_attempted' => false,
             'checks' => $checks,
             'issues' => array_values($issues),
+            'finding_counts' => [
+                'contract_violations' => count(array_filter($issues, fn (array $issue): bool => $issue['kind'] === 'contract_violation')),
+                'context_reviews' => count(array_filter($issues, fn (array $issue): bool => $issue['kind'] === 'review')),
+            ],
             'handoffs' => array_values($handoffs),
             'limitations' => $limitations,
         ];

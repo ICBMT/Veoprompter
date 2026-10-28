@@ -107,7 +107,9 @@
             handoffs.forEach((handoff) => {
                 const type = typeof handoff.type === 'string' ? handoff.type : '?';
                 const handoffRelation = handoff.overall_relation || handoff.continuity_relation;
-                const relation = handoffRelation === 'exact'
+                const relation = handoffRelation === 'transition_documented'
+                    ? 'intentional progression documented; not seamless'
+                    : handoffRelation === 'exact'
                     ? 'exact state match'
                     : handoffRelation === 'compatible' && type === 'B'
                         ? 'compatible state description, not a verbatim copy'
@@ -124,11 +126,22 @@
         }
 
         const issues = Array.isArray(review.issues) ? review.issues : [];
+        const firstPassSummary = panel.querySelector('[data-quality-review-first-pass]');
+        if (firstPassSummary) {
+            const first = review.first_pass;
+            firstPassSummary.hidden = !first || !Number.isInteger(first.issue_count);
+            if (!firstPassSummary.hidden) {
+                const label = first.stage === 'serialized_provider_template_before_repair' ? 'First serialized draft' : 'First-pass QA';
+                const newCount = Array.isArray(review.new_issues) ? review.new_issues.length : 'not measured';
+                firstPassSummary.textContent = `${label}: ${first.issue_count} findings (${first.status || 'not checked'}). Final: ${issues.length} findings. Newly introduced: ${newCount}. Text checks only, not rendered validation.`;
+            }
+        }
+
         const issuesWrap = panel.querySelector('[data-quality-review-issues-wrap]');
         const issuesList = panel.querySelector('[data-quality-review-issues]');
         if (issuesWrap && issuesList) {
             issuesList.replaceChildren();
-            issues.forEach((issue) => addText(issuesList, 'li', issue.message || 'A prompt issue needs review.'));
+            issues.forEach((issue) => addText(issuesList, 'li', `${issue.kind === 'contract_violation' ? 'Text contract' : 'Context review'}: ${issue.message || 'A prompt issue needs review.'}`));
             issuesWrap.hidden = issues.length === 0;
         }
         const limitations = panel.querySelector('[data-quality-review-limitations]');

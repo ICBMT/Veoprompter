@@ -52,7 +52,7 @@ class PromptPlanningPolicyTest extends TestCase
         foreach (array_keys(\App\Support\ProjectSettings::videoTypes()) as $type) {
             $input = ['mode' => 'story', 'video_type' => $type, 'clip_count' => 'quality', 'audience' => 'Preschool children'];
             $system = $this->invokePolicy('systemInstructions', $input);
-            $this->assertStringContainsString('FIRST-PASS PRODUCTION CONTRACT — VERSION 1', $system);
+            $this->assertStringContainsString('FIRST-PASS PRODUCTION CONTRACT — VERSION 2', $system);
             $this->assertStringContainsString('Minimum opening visual seconds: 0.5', $system);
             $this->assertStringContainsString('Minimum inter-line pause seconds: 0.4', $system);
             $this->assertStringContainsString('Minimum closing visual seconds: 1.2', $system);
@@ -76,7 +76,7 @@ class PromptPlanningPolicyTest extends TestCase
         $this->assertSame('not_checked', $result['quality_review']['first_pass']['status']);
         $this->assertSame(0, $result['quality_review']['first_pass']['clip_count']);
         $this->assertSame('automated_text_checks', $result['quality_review']['first_pass']['scope']);
-        $this->assertSame(1, $result['quality_review']['first_pass']['contract_version']);
+        $this->assertSame(2, $result['quality_review']['first_pass']['contract_version']);
     }
 
     public function test_a_clean_first_response_is_preserved_without_a_repair_call(): void
@@ -93,6 +93,36 @@ class PromptPlanningPolicyTest extends TestCase
         $this->assertSame([], $result['quality_review']['first_pass']['issue_codes']);
         $this->assertFalse($result['quality_review']['repair_attempted']);
         Http::assertSentCount(1);
+    }
+
+    public function test_provider_references_compile_before_the_first_independent_review_without_an_extra_provider_call(): void
+    {
+        $template = \Tests\Support\PromptQaCases::template();
+        Http::fake(['*' => Http::response(['candidates' => [['content' => ['parts' => [['text' => $template]]]]]])]);
+        $settings = new AiSetting(['provider' => 'gemini', 'model' => 'test-model', 'api_key' => 'test-secret']);
+        $result = (new PromptGenerationService)->generateWithQualityReview($settings, \Tests\Support\PromptQaCases::input());
+        $this->assertSame(\Tests\Support\PromptQaCases::characters(\Tests\Support\PromptQaCases::package()), $result['content']);
+        $this->assertSame('serialized_provider_template_before_repair', $result['quality_review']['first_pass']['stage']);
+        $this->assertSame(hash('sha256', $template), $result['quality_review']['first_pass']['serialization']['template_sha256']);
+        $this->assertTrue($result['quality_review']['first_pass']['was_clean']);
+        $this->assertGreaterThan(0, $result['quality_review']['first_pass']['serialization']['expanded']);
+        Http::assertSentCount(1);
+    }
+
+    public function test_one_shot_correction_is_also_compiled_and_reaudited_without_overwriting_first_pass_evidence(): void
+    {
+        $original = str_replace('OUTGOING HANDOFF TYPE: TYPE A — DIRECT CONTINUATION', '', \Tests\Support\PromptQaCases::characters(\Tests\Support\PromptQaCases::package()));
+        $response = fn (string $text): array => ['candidates' => [['content' => ['parts' => [['text' => $text]]]]]];
+        Http::fakeSequence()->push($response($original))->push($response(\Tests\Support\PromptQaCases::template()));
+        $settings = new AiSetting(['provider' => 'gemini', 'model' => 'test-model', 'api_key' => 'test-secret']);
+        $result = (new PromptGenerationService)->generateWithQualityReview($settings, \Tests\Support\PromptQaCases::input());
+        $this->assertFalse($result['quality_review']['first_pass']['was_clean']);
+        $this->assertContains('outgoing_handoff_missing', $result['quality_review']['first_pass']['issue_codes']);
+        $this->assertSame([], $result['quality_review']['issues']);
+        $this->assertSame([], $result['quality_review']['new_issues']);
+        $this->assertSame(0, $result['quality_review']['final_unresolved_count']);
+        $this->assertTrue($result['quality_review']['corrected']);
+        Http::assertSentCount(2);
     }
 
     public function test_fixed_settings_and_extensions_do_not_silently_grow(): void

@@ -50,6 +50,8 @@ async function receivePrompt(message, sender) {
         notice: parsed.notice,
         handoffWarnings: parsed.handoffWarnings || [],
         chunks: parsed.chunks,
+        continuityNotes: parsed.continuityNotes || '',
+        parserVersion: 2,
         nextIndex: 0,
         pendingPaste: null,
         lastInserted: null,
