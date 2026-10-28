@@ -1,0 +1,34 @@
+Audio & Speech Timing (High Risk of Failure in Production)
+
+The Error: Your QA flagged that voice-over lines start at 0.0s, lack breathing room between lines ($<0.2\text{s}$), or exceed natural speaking speeds (e.g., 14 words in 3.5 seconds).
+The Risk if Unfixed: Text-to-speech (TTS) engines or video models with audio alignment will either clip the narration or deliver rushed, unnatural speech. In a 9:16 short-form video, a narrator starting at exact $0.0\text{s}$ sounds jarring because the viewer hasn't visually oriented themselves to the shot yet.
+The Fix:
+Add a mandatory 0.2s–0.4s visual pad at the start of every clip before speech begins.
+Budget $\approx 2.5\text{ to } 3\text{ words per second}$ for natural, child-friendly English narration.
+Ensure a minimum 0.3s trailing pause at the end of every clip. 
+
+
+I want us to focus on fixing audio and speech timing in our prompt generation system. This is one of the biggest issues showing up in QA reports, especially when narration is rushed, starts immediately at 0 seconds, or doesn't leave enough breathing room at the end of a clip.
+
+Please inspect the existing master prompt, prompt-generation logic, and QA/Auto-Fix implementation before making changes. I don't want a separate patch for one example. I want this handled properly across all project types and prompt formats.
+
+Here's what I want:
+
+- Every clip containing speech should normally have a 0.2–0.4 second visual opening before the first spoken word and at least 0.3 seconds of visual time after the final word.
+- Use roughly 2.5–3 words per second as the initial planning range for ordinary English narration, adjusting for technical words, emphasis, pauses, and the target audience.
+- Leave at least 0.2 seconds between separate spoken lines as a default, with longer pauses when needed.
+- Calculate how much time is actually available for speech after accounting for these opening and closing periods and any required pauses.
+- If the dialogue doesn't fit naturally, don't force it into the clip. In Maximum Quality mode, allow the planner to add clips when appropriate instead of rushing the narration.
+- Never silently speed up speech, remove or rewrite protected dialogue, or exceed the project's declared duration limits just to make everything fit.
+
+I also want QA and Auto-Fix to handle this intelligently. QA should detect these timing problems in the final generated prompt, and Auto-Fix should use deterministic repairs when possible or call the AI to propose a targeted repair when contextual reasoning is needed. It should change only the affected parts, preserve everything else, synchronize related timing information, and run the full QA again afterward.
+
+An issue should only be marked as fixed when the final QA confirms that it is actually resolved. If it cannot be repaired safely within the existing constraints, leave it unresolved and explain why.
+
+Please add generic regression tests for these cases, including speech overflow, missing opening or closing visual time, insufficient pauses, and dialogue that cannot fit within the allowed duration. Make sure the tests cover different prompt formats rather than just one example.
+
+Keep the existing architecture and working functionality. Make focused changes, avoid unrelated refactoring, and preserve our existing maximum of two repair attempts.
+
+The goal is simple: I want our generated videos to have natural, properly paced speech by design, rather than relying on Veo or another video model to somehow fix bad timing on its own. Please implement this in the existing system, run the available tests, and give me an honest summary of what changed, what passed, and what still needs verification.
+
+
