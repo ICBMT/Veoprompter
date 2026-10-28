@@ -257,7 +257,10 @@ class PromptStudioTest extends TestCase
                 && str_contains($systemInstruction, 'If no physically and temporally plausible handoff exists, revise the beat order')
                 && str_contains($creativeBrief, 'Number of clips: AI decides for maximum quality; use enough connected clips to make every meaningful cause-and-effect beat')
                 && str_contains($creativeBrief, 'Logical visual/process continuity: Track identity and changing state for every important character, material, component')
-                && str_contains($creativeBrief, 'How are vehicles manufactured?');
+                && str_contains($creativeBrief, 'How are vehicles manufactured?')
+                && str_contains($systemInstruction, 'carry the remaining words into the next connected clip')
+                && str_contains($systemInstruction, 'Type B/C are exceptions, not quotas')
+                && data_get($request->data(), 'generationConfig.maxOutputTokens') === 32768;
         });
 
         Http::assertSentCount(1);

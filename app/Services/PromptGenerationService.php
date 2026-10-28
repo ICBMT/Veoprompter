@@ -33,7 +33,7 @@ class PromptGenerationService
 
         $systemInstructions = $this->systemInstructions($input);
         $brief = $this->buildCreativeBrief($input, $referenceFrame !== null);
-        $content = $this->requestText($settings, $systemInstructions, $brief, $referenceFrame);
+        $content = $this->requestText($settings, $systemInstructions, $brief, $referenceFrame, $this->outputTokenBudget($input));
         $auditor = new PromptOutputAuditor;
         $qualityReview = $auditor->audit($content, $input);
         $repairableIssues = array_values(array_filter(
@@ -49,8 +49,9 @@ class PromptGenerationService
                 $corrected = $this->requestText(
                     $settings,
                     $systemInstructions,
-                    $this->buildQualityRepairBrief($brief, $content, $repairableIssues),
+                    $this->buildQualityRepairBrief($brief, $content, $repairableIssues, $input),
                     $referenceFrame,
+                    $this->outputTokenBudget($input),
                 );
 
                 if ($corrected !== $content) {
@@ -106,12 +107,12 @@ REPAIR_POLICY;
         return $this->requestText($settings, $systemInstructions, $repairBrief, null);
     }
 
-    private function requestText(AiSetting $settings, string $systemInstructions, string $brief, ?UploadedFile $referenceFrame): string
+    private function requestText(AiSetting $settings, string $systemInstructions, string $brief, ?UploadedFile $referenceFrame, int $outputTokens = 12288): string
     {
         try {
             $response = $settings->provider === 'gemini'
-                ? $this->callGemini($settings, $systemInstructions, $brief, $referenceFrame)
-                : $this->callOpenAiCompatible($settings, $systemInstructions, $brief, $referenceFrame);
+                ? $this->callGemini($settings, $systemInstructions, $brief, $referenceFrame, $outputTokens)
+                : $this->callOpenAiCompatible($settings, $systemInstructions, $brief, $referenceFrame, $outputTokens);
         } catch (ConnectionException $exception) {
             Log::warning('The configured AI provider could not be reached.', [
                 'provider' => $settings->provider,
@@ -130,6 +131,13 @@ REPAIR_POLICY;
             throw new PromptGenerationException($this->providerFailureMessage($response->status()));
         }
 
+        $finishReason = $settings->provider === 'gemini'
+            ? $response->json('candidates.0.finishReason')
+            : $response->json('choices.0.finish_reason');
+        if (in_array($finishReason, ['MAX_TOKENS', 'length'], true)) {
+            throw new PromptGenerationException('The provider reached its response-length limit before finishing the prompt kit. No partial response was accepted. Ask an administrator to raise the output-token budget within the selected model’s supported limit, or use a model with a larger output capacity.');
+        }
+
         $text = $settings->provider === 'gemini'
             ? $this->geminiText($response)
             : $this->openAiText($response);
@@ -142,14 +150,20 @@ REPAIR_POLICY;
     }
 
     /** @param array<int, array{code: string, category: string, clip: int|null, message: string, repairable: bool}> $issues */
-    private function buildQualityRepairBrief(string $brief, string $draft, array $issues): string
+    private function buildQualityRepairBrief(string $brief, string $draft, array $issues, array $input): string
     {
         $issueList = implode("\n", array_map(
             fn (array $issue): string => '- '.($issue['clip'] === null ? '' : 'Clip '.$issue['clip'].': ').$issue['message'],
             $issues,
         ));
 
-        return "AUTOMATIC QUALITY-CONTROL CORRECTION\nThe original response below contains one or more detectable structural/timing issues. Return the complete corrected response, preserving the original output order, selected project settings, clip count, story intent, canonical identities, and all unaffected content. Correct the affected clip and recheck both adjacent handoffs, exact scene/presentation state strings, timing maps, and the final marker. Follow every explicit timing threshold in the detectable-issue messages, including opening visual lead-in, inter-line pauses, natural speaking time, and the ending visual tail. For an opening-beat issue, start the first speech row no earlier than the stated minimum; moving a line is not enough if its speech duration or the closing visual tail still fails. Do not rush speech to fit; shorten a line or, only when duration is AI-selected and remains within 10 seconds, allocate more time. Do not introduce filler or new factual claims. Do not append this audit or a score to the copy-ready response.\n\nORIGINAL USER BRIEF AND SETTINGS\n{$brief}\n\nDETECTABLE ISSUES\n{$issueList}\n\nDRAFT RESPONSE TO CORRECT\n{$draft}\n\nReturn only the complete corrected response.";
+        $aiCount = ($input['mode'] ?? 'story') !== 'extend'
+            && ProjectSettings::isAiClipCountChoice($input['clip_count'] ?? ProjectSettings::AI_CHOICE);
+        $countRule = $aiCount
+            ? 'For this AI-selected count, add meaningful consecutive clips if necessary to fit the complete narration and visible actions naturally; preserve exact spoken wording and order rather than deleting content or rushing. Prefer splitting to generic issue-message suggestions to shorten a line. Synchronize the overview, clip plan, total runtime, numbering, and all handoffs after a split.'
+            : 'Preserve the fixed clip count (or single extension) exactly; do not silently add clips. If complete requested content cannot fit, leave the conflict explicit rather than deleting essential content or rushing speech.';
+
+        return "AUTOMATIC QUALITY-CONTROL CORRECTION\nThe original response below contains one or more detectable structural/timing issues. Return the complete corrected response, preserving the original output order, selected project settings, story intent, canonical identities, and all unaffected content. {$countRule} Correct the affected clip and recheck both adjacent handoffs, exact scene/presentation state strings, timing maps, and the final marker. Follow every explicit timing threshold in the detectable-issue messages, including opening visual lead-in, inter-line pauses, natural speaking time, and the ending visual tail. For an opening-beat issue, start the first speech row no earlier than the stated minimum; moving a line is not enough if its speech duration or the closing visual tail still fails. Do not rush speech to fit or discard requested narration. For AI-selected durations, reserve 2–3 seconds of useful visual headroom after estimating content time, staying within 10 seconds and all stricter constraints; split across more clips only when the count is AI-selected. For fixed counts/durations, preserve those choices and report any remaining infeasibility. Do not introduce filler or new factual claims. Do not append this audit or a score to the copy-ready response.\n\nORIGINAL USER BRIEF AND SETTINGS\n{$brief}\n\nDETECTABLE ISSUES\n{$issueList}\n\nDRAFT RESPONSE TO CORRECT\n{$draft}\n\nReturn only the complete corrected response.";
     }
 
     private function addedQualityIssues(array $before, array $after): array
@@ -203,9 +217,9 @@ FACTUAL ACCURACY AND SOURCE HONESTY — Keep scientific, historical, chronologic
 
 VISUAL TEACHING CLARITY — Give every educational clip one primary idea and one legible cause → action → result. Show the actual component or mechanism being discussed. Explicitly label each clip's `VISUAL REPRESENTATION:` as a literal scene, cutaway, diagram, overlay, or illustrative metaphor. Keep internal geometry, layouts, scale, labels, and camera perspective consistent; avoid clutter, simultaneous competing mechanisms, and overloaded clips. Apply the same focus to non-educational beats without forcing a lesson.
 
-TIMED SPEECH AND STRUCTURED PROMPT CONTRACT — In every standalone clip prompt, include the exact one-line fields `CLIP DURATION: N seconds`, `PRIMARY IDEA:`, `VISUAL REPRESENTATION:`, `VISIBLE CAUSE → ACTION → RESULT:`, `OPENING CONTINUITY STATE:`, `ENDING CONTINUITY STATE:`, `OPENING PRESENTATION STATE:`, and `ENDING PRESENTATION STATE:`. Include `SPEECH/VISUAL MAP:` followed by exact per-line timing rows in this form: `- 0.0–1.8s | VISIBLE ACTION: [simultaneous visible action/result] | SPEAKER: [Narrator or exact canonical character name] | LINE: “[exact words]”`. Estimate speaking time conservatively at 2–2.5 words/second, plus pronunciation difficulty, natural pauses, and comprehension time; reserve time for visual setup/action and a settled ending, and shorten lines rather than rush. Do not describe a component before it appears or after its action is over. When speech is intentionally absent, say so explicitly; when audio is off, use `SPEECH/VISUAL MAP: None — spoken audio is off` and include no spoken words. Keep each metadata value on one line.
+TIMED SPEECH AND STRUCTURED PROMPT CONTRACT — In every standalone clip prompt, include the exact one-line fields `CLIP DURATION: N seconds`, `PRIMARY IDEA:`, `VISUAL REPRESENTATION:`, `VISIBLE CAUSE → ACTION → RESULT:`, `OPENING CONTINUITY STATE:`, `ENDING CONTINUITY STATE:`, `OPENING PRESENTATION STATE:`, and `ENDING PRESENTATION STATE:`. Include `SPEECH/VISUAL MAP:` followed by exact per-line timing rows in this form: `- 0.0–1.8s | VISIBLE ACTION: [simultaneous visible action/result] | SPEAKER: [Narrator or exact canonical character name] | LINE: “[exact words]”`. Estimate speaking time conservatively at 2–2.5 words/second, plus pronunciation difficulty, natural pauses, and comprehension time; reserve time for visual setup/action and a settled ending, and split complete narration across adjacent clips when count is AI-selected rather than rushing or deleting requested content; preserve fixed-count constraints and report infeasibility when necessary. Do not describe a component before it appears or after its action is over. When speech is intentionally absent, say so explicitly; when audio is off, use `SPEECH/VISUAL MAP: None — spoken audio is off` and include no spoken words. Keep each metadata value on one line.
 
-MATCHED HANDOFF CONTRACT — Compare each prior ending with the next opening across canonical cast/identity, poses and positions, carried objects, materials/process state, environment, camera and motion, lighting, and audible action. The prior `OUTGOING HANDOFF TYPE:` must exactly match the next `TRANSITION TYPE:`. Do not choose Type A merely because openings match: Type A continues an already-in-progress action with no separate bridge to depict; Type B also opens on the exact prior state, then begins a new visible physical action and shows the complete physical bridge after that opening. Every incoming clip copies the prior `ENDING CONTINUITY STATE:` value exactly into its `OPENING CONTINUITY STATE:`. Type A and Type B also copy the prior `ENDING PRESENTATION STATE:` value exactly into their opening. For Type B, the destination clip begins from that identical prior physical and presentation state, then shows the complete bridge only after the matching opening; never cut directly to its changed state or presentation. Type C begins from the actual prior continuity state and shows its intentional progression inside the clip; any presentation change must be motivated by the transition. Type A remains unchanged from its matched opening; Type B presentation changes are visible only after that opening. Type B must show the complete physically plausible bridge; Type C is an intentional, non-seamless before → credible intermediate change → after progression. Never use a label to hide a skipped stage, impossible change, or unaccounted interval. The last clip must mark `OUTGOING HANDOFF TYPE: FINAL — NO NEXT HANDOFF`.
+MATCHED HANDOFF CONTRACT — Compare each prior ending with the next opening across canonical cast/identity, poses and positions, carried objects, materials/process state, environment, camera and motion, lighting, and audible action. The prior `OUTGOING HANDOFF TYPE:` must exactly match the next `TRANSITION TYPE:`. Do not choose Type A merely because openings match: Type A continues an already-in-progress action with no separate bridge to depict; Type B also opens on the exact prior state, then begins a new visible physical action and shows the complete physical bridge after that opening. Every incoming clip copies the prior `ENDING CONTINUITY STATE:` value exactly into its `OPENING CONTINUITY STATE:`. Type A and Type B also copy the prior `ENDING PRESENTATION STATE:` value exactly into their opening. For Type B, the destination clip begins from that identical prior physical and presentation state, then shows the complete bridge only after the matching opening; never cut directly to its changed state or presentation. Type C begins from the actual prior continuity state and shows its intentional progression inside the clip; any presentation change must be motivated by the transition. Type A copies its opening unchanged, then lets the already-in-progress action advance naturally without a restart; Type B presentation changes are visible only after that opening. Type B must show the complete physically plausible bridge; Type C is an intentional, non-seamless before → credible intermediate change → after progression. Never use a label to hide a skipped stage, impossible change, or unaccounted interval. The last clip must mark `OUTGOING HANDOFF TYPE: FINAL — NO NEXT HANDOFF`.
 
 For an educational explainer, include all applicable sections of the master specification and its canonical character reference image prompt. Honor the saved project character type and description across every clip and reference, while adapting only unspecified details to the topic. For other video types, follow the mode-specific addendum after the master specification: retain its continuity, visual consistency, feasible action, and copy-ready prompt rules, but do not force educational-only sections or a recurring character when the format does not benefit from one. For an extension, use the supplied frame as evidence only when one is actually attached; if absent, rely only on the written starting-state description and requested action, make no image/video claims, and provide the single complete extension prompt plus concise continuity notes. If neither a frame nor a written starting-state description is available, ask the user to provide one instead of drafting an invented continuation. For new-sequence Type A/Type B prompts, include the exact continuation instruction only when the actual preceding final frame will be supplied to the target video model; otherwise use text-only opening-state wording and do not refer to a frame as shown/given. For Extend Video, include it only when an actual reference image is attached; otherwise use text-only starting-state wording. Never include it in a Type C transition clip. Before answering, silently perform the appropriate factual, continuity, and production-feasibility audit and correct any failures.
 POLICY;
@@ -217,7 +231,8 @@ POLICY;
         return $policy."\n\nMASTER SPECIFICATION\n".$specification
             .($modeInstructions === '' ? '' : "\n\n".$modeInstructions)
             .($aiChoiceInstructions === '' ? '' : "\n\n".$aiChoiceInstructions)
-            .($speechInstructions === '' ? '' : "\n\n".$speechInstructions);
+            .($speechInstructions === '' ? '' : "\n\n".$speechInstructions)
+            ."\n\n".$this->continuityFirstPlanningInstructions($input);
     }
 
     private function speechInstructions(array $input): string
@@ -246,14 +261,14 @@ POLICY;
 
         if ($mode !== 'extend' && ProjectSettings::isAiClipCountChoice($input['clip_count'] ?? null)) {
             $instructions[] = (string) ($input['clip_count'] ?? ProjectSettings::AI_CHOICE) === ProjectSettings::AI_QUALITY_CLIP_COUNT
-                ? 'CLIP COUNT — AI DIRECTS FOR MAXIMUM QUALITY: Optimize the sequence for logical clarity, visible cause and effect, correct chronology, complete process stages, and polished pacing rather than minimizing clip count. Use more than the minimum when a distinct additional clip materially improves the result—for example, by making a prerequisite operation, intermediate state, assembly, transformation, or handoff understandable. For processes, ensure the same identifiable materials or components advance through correctly ordered stages, with each output feeding the next. There is no arbitrary clip ceiling, but do not maximize count for its own sake: every clip must add essential information, a meaningful beat, or useful visual breathing room; never add filler or repeat coverage. Count meaningful Type C transition clips within the selected total. State the chosen total in the overview and provide exactly that many consecutively numbered clip prompts.'
+                ? 'CLIP COUNT — AI DIRECTS FOR MAXIMUM QUALITY: Optimize the sequence for logical clarity, visible cause and effect, correct chronology, complete process stages, full naturally delivered narration, and polished pacing rather than minimizing clip count. Use more than the minimum when a distinct additional clip materially improves the result—for example, by making a prerequisite operation, intermediate state, assembly, transformation, or handoff understandable. For processes, ensure the same identifiable materials or components advance through correctly ordered stages, with each output feeding the next. There is no arbitrary clip ceiling: do not stop at 7 or 8 or treat the manual 2–8 options as an AI maximum. Allocate the full script and its visual actions before selecting the total, and carry words that do not fit into further consecutive clips. Do not maximize count for its own sake: every clip must add essential information, a meaningful beat, or useful visual breathing room; never add filler or repeat coverage. Count meaningful Type C transition clips within the selected total. State the chosen total in the overview and provide exactly that many consecutively numbered clip prompts.'
                 : 'CLIP COUNT — AI DIRECTS: Choose the minimum practical number of connected clips needed to communicate the idea clearly and give it a complete arc. Preserve causal and physical logic without sacrificing clarity. There is no arbitrary four-clip or eight-clip ceiling for this AI-selected choice; use one or more clips as the idea genuinely needs, without filler or unnecessary fragmentation. Do not collapse prerequisite operations or unrelated actions into a misleading single beat. Include any meaningful Type C transition clips within the selected total. State the selected total in the project overview and provide exactly that many consecutively numbered clip prompts.';
         }
 
         if (ProjectSettings::isAiChoice($input['clip_duration'] ?? null)) {
             $instructions[] = $mode === 'extend'
-                ? 'EXTENSION DURATION — AI DIRECTS: Choose an exact whole-second duration that gives this continuation enough time to read clearly. Use about 2–3 seconds for one simple movement or reveal; about 4–6 seconds for a multi-step action, a meaningful camera move, or a short line; and 7–10 seconds when several actions must coordinate, a transformation unfolds, multiple subjects interact, camera movement combines with complex action, or dialogue/narration needs room. These are guidance bands, not rigid quotas: time the visible action, speech, and a brief settled ending, then choose what it actually needs. Give complex beats more time rather than defaulting to the shortest value; never exceed 10 seconds, invent filler, or pad unused time. State the duration in the extension prompt and fit the action and speech to it.'
-                : 'CLIP DURATION — AI DIRECTS: Choose an exact whole-second duration independently for each clip based on its real complexity, not a shortest-by-default rule. Use about 2–3 seconds for one simple reveal or movement; about 4–6 seconds for a moderately layered action, object interaction, meaningful camera move, or short spoken line; and 7–10 seconds when coordinated beats, multiple subjects, a transformation, camera movement plus complex action, or narration/dialogue needs more room. These are guidance bands, not rigid quotas: time the action, speech, comprehension pauses, and a brief settled ending. Intentionally give complex beats more time when warranted, while keeping simple beats short. Never exceed 10 seconds or add filler. State each chosen duration in the overview and that clip’s standalone prompt, then fit its action and speech to it.';
+                ? 'EXTENSION DURATION — AI DIRECTS: Choose an exact whole-second duration that gives this continuation enough time to read clearly. Use about 2–3 seconds for one simple movement or reveal; about 4–6 seconds for a multi-step action, a meaningful camera move, or a short line; and 7–10 seconds when several actions must coordinate, a transformation unfolds, multiple subjects interact, camera movement combines with complex action, or dialogue/narration needs room. These bands estimate content complexity, not final budgets: calculate actual content time, add 2–3 seconds of useful visual headroom, and repartition any overfull content before choosing a duration within 10 seconds. For a single extension, flag infeasibility rather than inventing extra clip blocks. Give complex beats more time rather than defaulting to the shortest value; never exceed 10 seconds, invent filler, or pad unused time. State the duration in the extension prompt and fit the action and speech to it.'
+                : 'CLIP DURATION — AI DIRECTS: Choose an exact whole-second duration independently for each clip based on its real complexity, not a shortest-by-default rule. Use about 2–3 seconds for one simple reveal or movement; about 4–6 seconds for a moderately layered action, object interaction, meaningful camera move, or short spoken line; and 7–10 seconds when coordinated beats, multiple subjects, a transformation, camera movement plus complex action, or narration/dialogue needs more room. These bands estimate content complexity, not final budgets: calculate actual content time, add 2–3 seconds of useful visual headroom, and split overfull content into more consecutive clips when count is AI-selected before choosing durations within 10 seconds. A fixed count stays exact; flag infeasibility rather than rushing. Headroom serves visible setup, reactions, comprehension and a settled ending, never empty waiting. Never exceed 10 seconds or add filler. State each chosen duration in the overview and that clip’s standalone prompt, then fit its action and speech to it.';
         }
 
         if ($instructions === []) {
@@ -300,7 +315,7 @@ POLICY;
         $fields['Visual style detail'] = filled($styleDetail) ? $styleDetail : 'None supplied';
         $clipDuration = $input['clip_duration'] ?? ProjectSettings::AI_CHOICE;
         $durationBrief = ProjectSettings::isAiChoice($clipDuration)
-            ? 'AI decides from complexity: about 2–3 seconds for a simple beat, 4–6 for a moderately layered action, and 7–10 when coordinated action, transformations, camera moves, multiple subjects, or speech genuinely need room. Choose the exact whole-second budget the beat needs; keep simple clips short, give complex clips more time, never pad, and never exceed 10 seconds.'
+            ? 'AI decides from complexity: about 2–3 seconds for a simple beat, 4–6 for a moderately layered action, and 7–10 when coordinated action, transformations, camera moves, multiple subjects, or speech genuinely need room. Treat those bands as initial content estimates, not final targets. Add 2–3 seconds of useful visual headroom to the calculated action/speech time (2 normally, 3 for complex delivery), then choose an exact whole-second duration. If the result exceeds 10 seconds or a stricter project limit, split content across additional clips when count is AI-selected; never clamp an overfull beat and rush its speech. A fixed duration remains exact. Headroom is for visible setup, reaction, comprehension, and a settled handoff, not empty filler.'
             : ((int) $clipDuration).' seconds';
         $language = $input['language'] ?? 'English';
         $fields += [
@@ -311,7 +326,7 @@ POLICY;
             'Structured quality and state fields' => 'Every standalone clip must include exact one-line CLIP DURATION, PRIMARY IDEA, VISUAL REPRESENTATION, VISIBLE CAUSE → ACTION → RESULT, OPENING/ENDING CONTINUITY STATE, OPENING/ENDING PRESENTATION STATE, and SPEECH/VISUAL MAP fields. Copy each previous ending scene state exactly into the next opening; make Type B/C changes visible within the destination clip.',
             'Narration timing' => ! $spokenAudioEnabled
                 ? 'No speech; use `SPEECH/VISUAL MAP: None — spoken audio is off` in every clip.'
-                : 'Time every exact line within its own clip at a natural 2–2.5 words per second, adding allowance for pronunciation and pauses. Use clip-relative start/end seconds with the exact visible-action and speaker fields; leave visual action and a settled ending, and shorten rather than rush.',
+                : 'Time every exact line within its own clip at a natural 2–2.5 words per second, adding allowance for pronunciation and pauses. Use clip-relative start/end seconds with the exact visible-action and speaker fields; leave useful visual setup/reaction and a settled ending. With AI clip count, continue remaining words in the next connected clip without dropping or repeating requested narration; preserve the speaker identity and same-clip visible alignment. With fixed count/duration, do not silently change those settings to fit an infeasible script.',
             'Aspect ratio' => $input['aspect_ratio'] ?? '9:16',
             'Logical visual/process continuity' => 'Track identity and changing state for every important character, material, component, object, quantity, location, orientation, condition, and process stage—not only visual appearance. Each clip must begin from the actual state produced by the prior clip, and visibly show the action or operation that causes any change. For manufacturing or other sequential processes, use a factually plausible prerequisite order; carry the same identifiable materials or parts through intermediate operations, and make each result the input to the next. Never reset, duplicate, teleport, skip a necessary operation, or show a finished result before it has been physically produced. A Type C montage or time passage may condense time only when the causal progression and intermediate states remain credible.',
             'Character identity enforcement' => $this->characterIdentityBrief($input, $hasReferenceFrame),
@@ -353,6 +368,8 @@ POLICY;
             return "EXTEND VIDEO BRIEF\nIf a final-frame image is attached, use its visible state as the exact start and preserve its visible characters, objects, lighting, camera, composition, and style. If no image is attached, use only the written starting-state description and do not claim to have seen a frame or video. In either case, continue one physically plausible action without a reset and do not invent details that are not visible or stated.\n\n".$this->formatFields($fields);
         }
 
+        $fields['Preferred handoff strategy'] = 'Plan long continuously evolving action first, then divide it at consecutive moments to favor Type A wherever the ongoing motion and exact opening permit it. Do not add new bridge actions or time jumps merely to vary transitions. Type B/C are exceptions requiring a brief concrete reason in the plan; never mislabel a genuine bridge or time jump as Type A. The opening is copied unchanged, not the entire clip: ongoing action must keep advancing.';
+        $fields['Timing flexibility for the video generator'] = 'Include a TIMING FLEXIBILITY note in each standalone prompt with its actual declared duration. Permit earlier/later sub-beat and speech placement only inside that fixed window, maintaining natural delivery, words/order, visible action, pauses, and exact handoff states. Reallocate clips during planning if content cannot fit; never tell the renderer to exceed the duration or speed up the voice.';
         $fields['Transition planning'] = 'Before drafting, compare every prior ending with the next opening across exact cast/identity, poses and positions, objects, materials/process state, environment, camera/motion, lighting, and audible action. Match each prior `OUTGOING HANDOFF TYPE:` exactly to the destination `TRANSITION TYPE:`. Do not choose Type A merely because openings match: Type A continues an already-in-progress action with no separate bridge to depict; Type B also opens on the exact prior state, then begins a new visible physical action and shows the complete physical bridge after that opening. Copy every preceding `ENDING CONTINUITY STATE:` value verbatim into the `OPENING CONTINUITY STATE:` field of the next clip; for Type A and Type B, also copy the prior `ENDING PRESENTATION STATE:` verbatim into the opening. A Type B destination clip starts from that identical prior physical and presentation state; its complete visible physical bridge happens only after the matching opening, never as a cut directly to a changed state or presentation. Type C begins at the prior physical state, then shows its intentional progression inside the clip; any presentation change is motivated by that transition. Type A is the immediate next moment with an identical opening and no reset; Type B shows the complete visible physical bridge and resulting state; Type C is explicitly non-seamless and shows a credible before → intermediate progression → after. Type B camera, lighting, environment, or audible-state changes must be visible after the matching opening. Never hide travel, elapsed time, a handoff, prerequisite operation, or other state change between clips. Do not use Type C to excuse impossible transformations, skipped stages, or unexplained finished objects; show credible intermediate states or give essential stages their own clips. Keep the same identifiable workpieces and components through operations. Use one primary idea and a legible cause/action/result per clip, no filler, and count transition clips within the selected total. Use `OUTGOING HANDOFF TYPE: FINAL — NO NEXT HANDOFF` on the last clip, and include the verbatim continuation instruction in Type A/Type B only if an actual previous rendered frame will be supplied as image input; otherwise use text-only opening-state wording and make no frame claim.';
         $fields['Continuity input note'] = 'For a multi-clip sequence, include the concise Section 1 CONTINUITY INPUT NOTE outside all copyable prompts. If the selected tool supports reference/continuation frames, advise the user to provide each actual previous rendered final frame to anchor the next clip opening. No prior rendered frame was supplied to this new-sequence request; do not claim the app or model received, saw, or used one. Unless the user explicitly confirms that an actual prior frame will be attached when generating the video, treat frame input as unconfirmed: omit the verbatim continuation quote from new-sequence Type A/B prompts and use text-only opening-state wording. Text-state matching cannot guarantee a pixel-matched seam.';
 
@@ -441,10 +458,37 @@ POLICY;
         return 'NEW-SEQUENCE CHARACTER LOCK: '.$typeDirection.' Every intended individual, including a silent or one-shot figure, must be entered in a closed canonical roster before appearing. Preserve the complete identity from that roster in every clip; include `VISIBLE CHARACTER CAST:` with exact canonical names/IDs and counts and repeat the complete canonical identity details in each standalone prompt. For every shot/cut, use literal `SHOT N VISIBLE CHARACTER CAST:` and `SHOT N CHARACTER IDENTITY LOCK:` lines and repeat all defining traits for each on-screen character; do not leave a person, creature, speaker, background figure, reflection, portrait, or silhouette unaccounted for. No unlisted cast, generic stand-ins, crowds, clones, duplicate bodies, composites, identity swaps, substitutes, or alternate versions. Only explicit story/user-authorized doubles, outfit changes, or age transformations may vary; define each in the roster, keep individuals distinguishable, and preserve all unrelated traits. If there is no character, write `VISIBLE CHARACTER CAST: None` and prohibit incidental characters. Saved character type: '.$characterType.'. Saved character profile: '.($savedProfile !== '' ? $savedProfile : 'none supplied').'. Saved character idea: '.($characterIdea !== '' ? $characterIdea : 'none supplied').'.';
     }
 
+    private function outputTokenBudget(array $input): int
+    {
+        $quality = ($input['mode'] ?? 'story') !== 'extend'
+            && (string) ($input['clip_count'] ?? '') === ProjectSettings::AI_QUALITY_CLIP_COUNT;
+        $value = $quality
+            ? config('prompt_generation.quality_output_tokens', 32768)
+            : config('prompt_generation.output_tokens', 12288);
+
+        return max(1024, min(65536, (int) $value));
+    }
+
+    private function continuityFirstPlanningInstructions(array $input): string
+    {
+        $isExtension = ($input['mode'] ?? 'story') === 'extend';
+        $aiCount = ! $isExtension && ProjectSettings::isAiClipCountChoice($input['clip_count'] ?? ProjectSettings::AI_CHOICE);
+        $duration = $isExtension ? ($input['extend_duration'] ?? $input['clip_duration'] ?? ProjectSettings::AI_CHOICE)
+            : ($input['clip_duration'] ?? ProjectSettings::AI_CHOICE);
+        $timing = ProjectSettings::isAiChoice($duration)
+            ? 'Estimate natural speech and visible action time together (overlapping only when genuinely simultaneous), then add 2–3 seconds of useful visual headroom: normally 2 seconds, or 3 for complex pronunciation, coordinated action, or reactions. Round up to whole seconds. Use this room for establishing the subject before speech, breathing/reaction/comprehension beats, and a settled ending; do not add these allowances twice or pad with inactivity. Never exceed 10 seconds or any stricter declared per-clip/project-wide limit. If content plus headroom cannot fit, repartition the content before drafting rather than truncating its calculated duration. This is not a new four-second minimum.'
+            : 'The selected manual duration is exact. Reserve useful setup, breathing, reaction, and ending room inside it; never add 2–3 seconds to a fixed duration or silently expand the project runtime.';
+        $splitting = $aiCount
+            ? 'The AI-selected clip count is uncapped: the manual 2–8 choices are not AI limits. Budget the complete requested narration/dialogue in its original order at conservative natural delivery speed, with pauses and useful visual headroom. Assign only the words that genuinely fit each clip; carry the remaining words into the next connected clip and repeat until all requested content has been covered. Prefer sentence/clause boundaries, never repeat a line or cut a word, never drop essential narration to keep the count low, and keep the same voice identity across the chain. Every spoken phrase must describe an action/result visibly shown in that same clip; extend the visible process too, not just the voice track. Add meaningful clips whenever necessary; do not aim for 7 or 8, and do not force a larger count for a simple brief. Update all overview/plan/runtime references and handoff fields to the final allocation.'
+            : 'Keep the fixed count or single extension exactly. Do not invent extra clip blocks, repeat or delete essential narration, or rush speech to conceal an infeasible brief. State an unresolved count/duration/content conflict if the full requested content cannot fit.';
+
+        return "CONTINUITY-FIRST PACING — FINAL PLANNING RULE\nSpeech-off settings remain authoritative: do not invent narration/dialogue, and retain the silent speech-map marker. When speech is enabled and count is AI-selected, the spillover rule below overrides generic shorten-line advice.\n{$timing}\n{$splitting}\nPlan long continuous takes and divide them at genuinely consecutive moments so Type A direct continuation is the preferred handoff wherever honest. Use additional connected clips to let ongoing motion, narration, and physical stages unfold without resets. Type B/C are exceptions, not quotas: use B only for a genuinely new visible bridge action, and C only for necessary non-seamless temporal/narrative progression. Briefly justify each B/C choice in the clip plan. Never relabel a jump as Type A, invent travel, freeze a changing object, hide prerequisites, or claim perfect rendered continuity. For Type A, only the copied opening is unchanged; the existing action advances naturally inside the clip. An extension remains one prompt governed by its supplied evidence, not a new multi-clip chain.\nIn every standalone video-generator prompt, include a concise TIMING FLEXIBILITY note stating its actual declared N-second window: redistribute sub-beat/action/speech start and end times earlier or later inside that window to fit natural delivery, while preserving exact spoken wording/order, visible alignment, opening/ending states, pauses and settled tail. Never authorize exceeding or silently changing CLIP DURATION, speeding speech, skipping action, or moving words into an unseen future event. If a target tool offers only fixed durations, use an allowed duration and plan within it; the planner must update all duration views before export if it chooses a different allowed duration.";
+    }
+
     private function clipCountBrief(mixed $clipCount): string
     {
         if ((string) $clipCount === ProjectSettings::AI_QUALITY_CLIP_COUNT) {
-            return 'AI decides for maximum quality; use enough connected clips to make every meaningful cause-and-effect beat and prerequisite stage visually clear, including additional clips where they materially improve process continuity, physical plausibility, comprehension, or pacing. Do not minimize the count or maximize it mechanically; no arbitrary cap, filler, or duplicate coverage. Include any meaningful Type C transition clips within the selected total and state that total.';
+            return 'AI decides for maximum quality; use enough connected clips to make every meaningful cause-and-effect beat and prerequisite stage visually clear, including additional clips where they materially improve process continuity, physical plausibility, comprehension, or pacing. Do not stop at 7 or 8 clips or use the manual 2–8 selector as an AI limit. Plan the complete narration and action first, then allocate as many clips as their natural delivery and visual headroom require, even well beyond eight. Preserve the full narration in order across adjacent clips, with the same narrator/character voice and same-clip visible action. No arbitrary cap, filler, or duplicate coverage. Include any meaningful Type C transition clips within the selected total and state that total.';
         }
 
         return ProjectSettings::isAiChoice($clipCount)
@@ -464,7 +508,7 @@ POLICY;
         return implode("\n", $lines);
     }
 
-    private function callGemini(AiSetting $settings, string $systemInstructions, string $brief, ?UploadedFile $referenceFrame): Response
+    private function callGemini(AiSetting $settings, string $systemInstructions, string $brief, ?UploadedFile $referenceFrame, int $outputTokens): Response
     {
         $parts = [['text' => $brief]];
 
@@ -488,12 +532,12 @@ POLICY;
                 'contents' => [['role' => 'user', 'parts' => $parts]],
                 'generationConfig' => [
                     'temperature' => 0.55,
-                    'maxOutputTokens' => 12288,
+                    'maxOutputTokens' => $outputTokens,
                 ],
             ]);
     }
 
-    private function callOpenAiCompatible(AiSetting $settings, string $systemInstructions, string $brief, ?UploadedFile $referenceFrame): Response
+    private function callOpenAiCompatible(AiSetting $settings, string $systemInstructions, string $brief, ?UploadedFile $referenceFrame, int $outputTokens): Response
     {
         $userContent = $brief;
 
@@ -524,7 +568,7 @@ POLICY;
                     ['role' => 'user', 'content' => $userContent],
                 ],
                 'temperature' => 0.55,
-                'max_tokens' => 12288,
+                'max_tokens' => $outputTokens,
             ]);
     }
 
