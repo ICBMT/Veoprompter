@@ -2,16 +2,21 @@
 
 namespace App\Services;
 
-/** Expand reserved references from authoritative clip fields; never infer or repair scene facts. */
+/** Compile literal saved identities and scoped references; never infer or repair scene facts. */
 final class PromptPlanSerializer
 {
     public const TOKEN_PATTERN = '/\{\{VEO_[^{}\r\n]*\}\}/';
 
     public function __construct(private readonly PromptOutputAuditor $auditor) {}
 
-    /** @return array{content: string, expanded: int, template_sha256: string} */
+    /** @return array{content: string, expanded: int, template_sha256: string, inherited_identity_ids: list<string>} */
     public function serialize(string $template, array $input): array
     {
+        $templateHash = hash('sha256', $template);
+        $inherited = [];
+        if (isset($input['_story_context'])) {
+            [$template, $inherited] = $this->inheritIdentityDefinitions($template, $input);
+        }
         $lines = preg_split('/\R/u', $template) ?: [];
         $plan = $this->auditor->canonicalProjectPlan($template, $input);
         $clips = $plan->clips;
@@ -89,7 +94,51 @@ final class PromptPlanSerializer
         unset($line);
         $content = $expanded === 0 ? $template : implode(str_contains($template, "\r\n") ? "\r\n" : "\n", $lines);
 
-        return ['content' => $content, 'expanded' => $expanded, 'template_sha256' => hash('sha256', $template)];
+        return ['content' => $content, 'expanded' => $expanded, 'template_sha256' => $templateHash, 'inherited_identity_ids' => $inherited];
+    }
+
+    /** Fill omissions only: conflicting literal definitions are rejected, never overwritten. */
+    private function inheritIdentityDefinitions(string $template, array $input): array
+    {
+        $stories = new StoryContinuationService($this->auditor);
+        $ledger = $stories->canonicalIdentities($input);
+        $plan = $this->auditor->canonicalProjectPlan($template, $input);
+        $lines = preg_split('/\R/u', $template) ?: [];
+        $prefixEnd = $plan->clips[0]['heading_line'] ?? $plan->clips[0]['start_line'] ?? count($lines);
+        $prefix = implode("\n", array_slice($lines, 0, $prefixEnd));
+        $defined = [];
+        $insertAt = 0;
+        foreach (array_slice($lines, 0, $prefixEnd) as $index => $line) {
+            $plain = str_replace(['**', '__', '`'], '', $line);
+            if (preg_match('/^\s*(?:[-*+>]\s*)?CANONICAL CHARACTER ROSTER\s*:/iu', $plain)) {
+                $insertAt = $index + 1;
+            }
+            if (preg_match('/^\s*(?:[-*+>]\s*)?CANONICAL IDENTITY ([A-Za-z]+-\d+)\s*:\s*(.*)$/iu', $plain, $match)) {
+                $id = strtoupper($match[1]);
+                if (isset($defined[$id])) {
+                    throw new PromptGenerationException('The provider supplied an ambiguous canonical identity; no template was accepted.');
+                }
+                $defined[$id] = trim($match[2]);
+                if (isset($ledger[$id]) && $defined[$id] !== $ledger[$id]) {
+                    throw new PromptGenerationException('The continuation redefined canonical identity '.$id.'. It was not saved.');
+                }
+                if ($insertAt === 0) {
+                    $insertAt = $index;
+                }
+            }
+        }
+        $missing = [];
+        foreach ($stories->declaredIdentityIds($prefix, $plan->clips) as $id) {
+            if (! array_key_exists($id, $defined) && isset($ledger[$id])) {
+                $missing[$id] = 'CANONICAL IDENTITY '.$id.': '.$ledger[$id];
+            }
+        }
+        if ($missing === []) {
+            return [$template, []];
+        }
+        array_splice($lines, $insertAt, 0, array_values($missing));
+
+        return [implode(str_contains($template, "\r\n") ? "\r\n" : "\n", $lines), array_keys($missing)];
     }
 
     private function seconds(float $seconds): string

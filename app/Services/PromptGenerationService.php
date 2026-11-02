@@ -59,7 +59,7 @@ class PromptGenerationService
             'contract_version' => 2,
             'was_clean' => $qualityReview['status'] === 'passed',
             'issue_categories' => array_values(array_unique(array_column($qualityReview['issues'], 'category'))),
-            'serialization' => ['expanded' => $serialization['expanded'], 'template_sha256' => $serialization['template_sha256']],
+            'serialization' => ['expanded' => $serialization['expanded'], 'template_sha256' => $serialization['template_sha256'], 'inherited_identity_ids' => $serialization['inherited_identity_ids']],
         ];
         if (PromptRepairService::hasSupportedIssues($qualityReview)) {
             $timed = (new PromptRepairService($auditor, $this))->repair(null, $content, $input);
@@ -132,7 +132,9 @@ class PromptGenerationService
         }
 
         if (isset($input['_story_context'])) {
-            (new StoryContinuationService($auditor))->assertOpening($content, $input);
+            $stories = new StoryContinuationService($auditor);
+            $stories->assertOpening($content, $input);
+            $stories->assertIdentities($content, $input);
         }
 
         $qualityReview['rejected_candidate_issues'] = $rejectedCandidateIssues;
