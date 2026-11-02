@@ -51,10 +51,16 @@ class ProcessSubtitleVideo implements ShouldQueue
 
     public function failed(?Throwable $exception): void
     {
-        $video = SubtitleVideo::find($this->videoId);
-        if ($video && ! $video->terminal()) {
-            $video->update(['status' => 'failed', 'failure_code' => 'processing_failed', 'finished_at' => now()]);
-            app(VideoSubtitleProcessor::class)->cleanup($video);
+        $lock = Cache::lock('subtitle-video:'.$this->videoId, 60);
+        if (! $lock->get()) { return; }
+        try {
+            $video = SubtitleVideo::find($this->videoId);
+            if ($video && in_array($video->status, ['extracting_audio', 'transcribing'], true)) {
+                $video->update(['status' => 'failed', 'failure_code' => 'processing_failed', 'finished_at' => now()]);
+                app(VideoSubtitleProcessor::class)->cleanup($video);
+            }
+        } finally {
+            $lock->release();
         }
     }
 }

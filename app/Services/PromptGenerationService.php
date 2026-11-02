@@ -32,6 +32,9 @@ class PromptGenerationService
         }
 
         $systemInstructions = $this->systemInstructions($input);
+        if (($input['content_form'] ?? 'short') === 'long' || isset($input['_story_context'])) {
+            $systemInstructions .= StoryContinuationService::instructions($input);
+        }
         $brief = $this->buildCreativeBrief($input, $referenceFrame !== null);
         $content = $this->requestText($settings, $systemInstructions, $brief, $referenceFrame, $this->outputTokenBudget($input));
         $auditor = new PromptOutputAuditor;

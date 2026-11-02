@@ -37,6 +37,10 @@ Route::middleware('user.auth')->group(function (): void {
     Route::post('/subtitles', [\App\Http\Controllers\SubtitleVideoController::class, 'store'])->middleware('throttle:3,1')->name('subtitles.store');
     Route::get('/subtitles/{subtitleVideo}', [\App\Http\Controllers\SubtitleVideoController::class, 'show'])->name('subtitles.show');
     Route::get('/subtitles/{subtitleVideo}/status', [\App\Http\Controllers\SubtitleVideoController::class, 'status'])->middleware('throttle:30,1')->name('subtitles.status');
+    Route::get('/subtitles/{subtitleVideo}/transcript', [\App\Http\Controllers\SubtitleReviewController::class, 'show'])->middleware('throttle:30,1')->name('subtitles.transcript');
+    Route::put('/subtitles/{subtitleVideo}/transcript', [\App\Http\Controllers\SubtitleReviewController::class, 'save'])->middleware('throttle:20,1')->name('subtitles.transcript.save');
+    Route::post('/subtitles/{subtitleVideo}/approve', [\App\Http\Controllers\SubtitleReviewController::class, 'approve'])->middleware('throttle:5,1')->name('subtitles.approve');
+    Route::get('/subtitles/{subtitleVideo}/original', [\App\Http\Controllers\SubtitleReviewController::class, 'original'])->name('subtitles.original');
     Route::get('/subtitles/{subtitleVideo}/preview', [\App\Http\Controllers\SubtitleVideoController::class, 'preview'])->name('subtitles.preview');
     Route::get('/subtitles/{subtitleVideo}/download', [\App\Http\Controllers\SubtitleVideoController::class, 'download'])->name('subtitles.download');
 
@@ -52,6 +56,9 @@ Route::middleware('user.auth')->group(function (): void {
 
     Route::get('/history', [PromptHistoryController::class, 'index'])->name('history.index');
     Route::get('/history/{project}', [PromptHistoryController::class, 'show'])->name('history.show');
+    Route::post('/history/{project}/continue', [\App\Http\Controllers\StoryContinuationController::class, 'store'])
+        ->middleware('throttle:8,1')
+        ->name('history.continue');
     Route::post('/history/{project}/repair', [PromptRepairController::class, 'repair'])
         ->middleware('throttle:3,1')
         ->name('history.repair');

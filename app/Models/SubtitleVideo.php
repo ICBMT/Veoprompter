@@ -14,7 +14,10 @@ class SubtitleVideo extends Model
 
     protected function casts(): array
     {
-        return ['settings' => 'array', 'media' => 'array', 'started_at' => 'datetime', 'finished_at' => 'datetime'];
+        return ['settings' => 'array', 'media' => 'array', 'started_at' => 'datetime', 'finished_at' => 'datetime',
+            'transcript_source' => 'array', 'transcript_draft' => 'array', 'transcript_approved' => 'array',
+            'transcript_revision' => 'integer', 'approved_revision' => 'integer', 'approved_by' => 'integer',
+            'approved_at' => 'datetime', 'review_ready_at' => 'datetime'];
     }
 
     public function directory(): string
@@ -31,6 +34,20 @@ class SubtitleVideo extends Model
         return Storage::disk('subtitles')->path($this->directory().'/'.$file);
     }
 
+    public function hasApprovedTranscript(): bool
+    {
+        if (! $this->approved_at || (int) $this->approved_by !== (int) $this->user_id
+            || $this->approved_revision !== $this->transcript_revision || ! is_array($this->transcript_approved)
+            || $this->transcript_approved === [] || ! is_string($this->approved_hash)) {
+            return false;
+        }
+        try {
+            return hash_equals($this->approved_hash, \App\Services\Subtitles\TranscriptReview::hash($this->transcript_approved));
+        } catch (\Throwable) {
+            return false;
+        }
+    }
+
     public function terminal(): bool
     {
         return in_array($this->status, ['completed', 'failed'], true);
@@ -44,6 +61,8 @@ class SubtitleVideo extends Model
             'storage_limit' => 'The server does not currently have enough free space for a lossless render. Please contact the administrator.',
             'output_limit' => 'The lossless output exceeds the server output-size limit. Your original is intact; try a shorter video or ask the administrator to raise the limit.',
             'sentence_too_long' => 'A sentence is too long to fit safely. Try a larger line length or a shorter video with clearer sentence boundaries.',
+            'approval_required' => 'Rendering was blocked because a valid transcript approval was missing. Your original is unchanged.',
+            'invalid_transcript' => 'The transcript could not be aligned safely. Your original is unchanged; try a clearer or shorter recording.',
             'no_speech' => 'No recognizable English speech was found in this video.',
             default => $this->status === 'failed' ? 'Processing could not finish. Your original is unchanged. Please contact the administrator or try a new upload.' : null,
         };

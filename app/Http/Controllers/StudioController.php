@@ -6,7 +6,9 @@ use App\Models\AiSetting;
 use App\Models\StudioProject;
 use App\Services\PromptGenerationException;
 use App\Services\PromptGenerationService;
+use App\Services\PromptOutputAuditor;
 use App\Services\PromptRepairService;
+use App\Services\StoryContinuationService;
 use App\Support\ProjectSettings;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -37,6 +39,7 @@ class StudioController extends Controller
 
         $validated = $request->validate([
             'mode' => ['required', Rule::in(['story', 'extend'])],
+            'content_form' => ['sometimes', Rule::in(['short', 'long'])],
             'project_title' => ['nullable', 'string', 'max:120'],
             'video_type' => ['required', Rule::in(array_keys(ProjectSettings::videoTypes()))],
             'topic' => ['nullable', 'required_if:mode,story', 'string', 'max:250'],
@@ -86,6 +89,7 @@ class StudioController extends Controller
             $generation = $generator->generateWithQualityReview($settings, $validated, $referenceFrame);
             $content = $generation['content'];
             $qualityReview = $generation['quality_review'];
+            $storyContext = (new StoryContinuationService(new PromptOutputAuditor))->initial($content, $validated);
         } catch (PromptGenerationException $exception) {
             return response()->json(['message' => $exception->getMessage()], 502);
         } catch (Throwable $exception) {
@@ -113,6 +117,8 @@ class StudioController extends Controller
                 'brief' => $brief,
                 'content' => $content,
                 'original_content' => $content,
+                'story_status' => ($validated['content_form'] ?? 'short') === 'long' && $validated['mode'] === 'story' ? 'open' : 'ended',
+                'story_context' => $storyContext,
                 'repair_history' => [],
                 'quality_review' => $qualityReview,
                 'provider' => $settings->provider,
@@ -142,6 +148,8 @@ class StudioController extends Controller
                 'url' => route('history.show', $run, false),
                 'repair_url' => route('history.repair', $run, false),
                 'restore_url' => route('history.restore', $run, false),
+                'continuation_url' => route('history.continue', $run, false),
+                'story_status' => $run->story_status,
             ] : null,
         ]);
     }

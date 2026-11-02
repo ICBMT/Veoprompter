@@ -18,6 +18,7 @@
     <script src="/js/extension-handoff.js" defer></script>
     <script src="/js/veoprompter.js" defer></script>
     <script src="/js/prompt-repair.js" defer></script>
+    <script src="/js/story-continuation.js" defer></script>
     <script src="/js/site-motion.js" defer></script>
     @stack('scripts')
     @stack('styles')

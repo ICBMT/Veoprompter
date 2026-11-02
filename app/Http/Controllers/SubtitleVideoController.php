@@ -32,7 +32,7 @@ class SubtitleVideoController extends Controller
                 return $existing;
             }
             if (SubtitleVideo::where('user_id', $request->user()->id)->whereNotIn('status', ['completed', 'failed'])->count() >= config('subtitles.max_active_per_user')) {
-                throw ValidationException::withMessages(['video' => 'You already have two videos waiting or processing. Wait for one to finish.']);
+                throw ValidationException::withMessages(['video' => 'You already have two videos processing or awaiting review. Approve a transcript or wait for a render to finish.']);
             }
             $owned = SubtitleVideo::where('user_id', $request->user()->id);
             if ((clone $owned)->count() >= 20 || (clone $owned)->sum('size_bytes') + $request->file('video')->getSize() > 2147483648) {

@@ -452,6 +452,7 @@
         hideMessage();
         if (!form.reportValidity()) return;
 
+        document.dispatchEvent(new CustomEvent('veoprompter:run-ready', { detail: {} }));
         const priorLabel = submitLabel.textContent;
         submitButton.disabled = true;
         submitButton.classList.add('is-loading');
@@ -487,8 +488,9 @@
             renderOutput(latestOutput);
             resultSection.hidden = false;
             document.querySelector('#results-heading').textContent = payload.mode === 'extend' ? 'The next shot is in frame.' : 'The video plan is in frame.';
-            readyLabel.textContent = payload.mode === 'extend' ? 'EXTENSION PROMPT READY' : 'PROMPT KIT READY';
+            readyLabel.textContent = payload.mode === 'extend' ? 'EXTENSION PROMPT READY' : payload.run?.story_status === 'open' ? 'STORY BATCH READY · ONGOING' : 'PROMPT KIT READY';
             renderHistoryNotice(payload);
+            document.dispatchEvent(new CustomEvent('veoprompter:run-ready', { detail: payload }));
             latestRunId = payload.run?.id ?? null;
             latestCanRestoreOriginal = payload.can_restore_original === true;
             latestRepairUrl = payload.run?.repair_url || '';

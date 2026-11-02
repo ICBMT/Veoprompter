@@ -1,6 +1,7 @@
 <div class="form-grid project-settings-grid" data-project-settings-form>
     <section class="form-panel brief-panel">
         <div class="panel-heading"><span class="panel-step">A</span><div><h2>Visual identity</h2><p>Set the creative defaults every prompt in this project will reuse.</p></div></div>
+        <div class="setting-field-block"><label class="field-label" for="content_form">Content length</label><select class="text-input select-input" id="content_form" name="content_form"><option value="short" @selected(old('content_form', $settings['content_form']) === 'short')>Short-form · complete first story</option><option value="long" @selected(old('content_form', $settings['content_form']) === 'long')>Long-form · ongoing batches</option></select><p class="field-hint">Both support sequels. Long-form stays open until you choose End story.</p></div>
 
         <div class="setting-field-block">
             <div class="field-label-row"><label class="field-label" for="audience">Who is it for?</label><button class="field-info" type="button" data-tooltip="Audience guides vocabulary, pacing, and how much background knowledge each prompt assumes." aria-label="Help: audience">i</button></div>

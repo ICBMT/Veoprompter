@@ -32,6 +32,8 @@
     <section class="saved-brief-card">
         <div class="saved-brief-heading"><span class="section-index">THE ORIGINAL BRIEF</span><span class="saved-readonly">SAVED WITH THIS KIT</span></div>
         <div class="saved-brief-grid">
+            <div><span>Original length preference</span><strong>{{ ($project->brief['content_form'] ?? 'short') === 'long' ? 'Long-form · ongoing batches' : 'Short-form · complete first story' }}</strong></div>
+            @if(!empty($project->brief['continuation_direction']))<div><span>Direction for this batch</span><strong>{{ $project->brief['continuation_direction'] }}</strong></div>@endif
             <div><span>Video type</span><strong>{{ $videoTypeLabel }}</strong></div>
             @if($project->mode === 'extend')
                 <div><span>Next action</span><strong>{{ $project->brief['next_action'] ?? '—' }}</strong></div>
@@ -66,6 +68,13 @@
         <section class="repair-report" data-repair-report hidden role="status" aria-live="polite"></section>
     @endif
 
+    <x-story-continuation :run="$project" />
+    @if($project->parentPrompt)
+        <p class="history-project-origin">Continues <a href="{{ route('history.show', $project->parentPrompt, false) }}">{{ $project->parentPrompt->title }}</a>. Each branch keeps its own ending and history.</p>
+    @endif
+    @if($storyChildren->count())
+        <section class="saved-brief-card"><strong>Next batches / sequel branches</strong><ul>@foreach($storyChildren as $child)<li><a href="{{ route('history.show', $child, false) }}">{{ $child->title }}</a> · {{ $child->story_status === 'open' ? 'Ongoing' : 'Part complete' }}</li>@endforeach</ul>{{ $storyChildren->links('components.pagination') }}</section>
+    @endif
     <section class="saved-output-card">
         <div class="saved-output-heading"><div><span class="section-index">YOUR COPY-READY PROMPTS</span><p>Send the saved kit to the extension, then copy each part into a text field when ready.</p></div><span class="result-status"><i></i> SAVED</span></div>
         <pre class="history-output" id="saved-prompt-output" data-repair-output>{{ $project->content }}</pre>

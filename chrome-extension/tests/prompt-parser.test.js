@@ -573,3 +573,9 @@ test('old stored video chunks are sanitized without modifying the original objec
     assert.match(old.text, /Do not paste/);
     assert.equal(copyableChunk({ ...old, kind: 'context' }).text, old.text);
 });
+
+test('story memory remains separate from the final video-generator prompt', () => {
+    const parsed = parsePrompt('COPY CLIP 1 PROMPT\n```text\nThe same wheel turns.\n```\nSECTION 11 — STORY MEMORY\nSTORY STATUS: OPEN\nSTORY MEMORY: {"summary":"The investigation continues."}');
+    assert.equal(parsed.chunks.at(-1).text, 'The same wheel turns.');
+    assert.match(parsed.continuityNotes, /STORY MEMORY/);
+});

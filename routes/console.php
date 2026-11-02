@@ -74,18 +74,26 @@ Artisan::command('subtitles:maintain', function () {
             return;
         }
         try {
+            $video->refresh();
             if ($video->status === 'uploaded' && $video->created_at->lt(now()->subDay())) {
                 $video->update(['status' => 'failed', 'failure_code' => 'processing_failed', 'finished_at' => now()]);
                 $processor->cleanup($video);
             } elseif ($video->status === 'uploaded' && $video->created_at->lt(now()->subMinutes(5))) {
                 \App\Jobs\ProcessSubtitleVideo::dispatch($video->id);
-            } elseif (! $video->terminal() && $video->started_at?->lt(now()->subSeconds(config('subtitles.job_timeout') + 300))) {
+            } elseif ($video->status === 'approved' && $video->approved_at?->lt(now()->subDay())) {
+                $video->update(['status' => 'failed', 'failure_code' => 'processing_failed', 'finished_at' => now()]);
+                $processor->cleanup($video);
+            } elseif ($video->status === 'approved' && $video->approved_at?->lt(now()->subMinutes(5))) {
+                \App\Jobs\RenderSubtitleVideo::dispatch($video->id);
+            } elseif (in_array($video->status, ['extracting_audio', 'transcribing', 'generating_subtitles', 'rendering'], true) && $video->started_at?->lt(now()->subSeconds(config('subtitles.job_timeout') + 300))) {
                 $video->update(['status' => 'failed', 'failure_code' => 'processing_failed', 'finished_at' => now()]);
                 $processor->cleanup($video);
             }
-            if ($video->terminal() && $video->created_at->lt(now()->subDays(max(1, config('subtitles.retention_days'))))) {
-                $disk->deleteDirectory($video->directory());
-                $video->delete();
+            if (($video->terminal() || $video->status === 'awaiting_review') && $video->created_at->lt(now()->subDays(max(1, config('subtitles.retention_days'))))) {
+                // A last-moment approval must not be deleted using an old review-state snapshot.
+                if (\App\Models\SubtitleVideo::whereKey($video->id)->where('status', $video->status)->delete()) {
+                    $disk->deleteDirectory($video->directory());
+                }
             }
         } finally {
             $lock->release();

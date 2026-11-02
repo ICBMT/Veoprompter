@@ -149,10 +149,12 @@ The test suite covers the master prompt's synchronization with root `prompt.txt`
 
 ## Video Subtitle Studio
 
-Upload a finished MP4 at `/subtitles` for local Whisper transcription and animated, word-highlighted subtitles. Processing uses a dedicated background queue and private, owner-authorized preview/download routes; the original upload is not modified. See [Subtitle Studio setup, quality contract, tests, and deployment checklist](docs/subtitle-studio.md) before enabling the worker. Burning subtitles requires re-encoding: lossless H.264 is the default, not a claim of bit-identical output.
+Upload a finished MP4 at `/subtitles` for local Whisper transcription and animated, word-highlighted subtitles. **Mandatory transcript review** pauses after transcription: correct timed words, save drafts, and explicitly approve the exact wording before any captions are rendered. Processing uses a dedicated background queue and private, owner-authorized preview/download routes; the original upload is not modified. See [Subtitle Studio setup, quality contract, tests, and deployment checklist](docs/subtitle-studio.md) before enabling the worker. Burning subtitles requires re-encoding: lossless H.264 is the default, not a claim of bit-identical output.
 
 See [continuity-first maximum-quality planning](docs/prompt-planning.md) for speech spillover, 2–3 second visual headroom, Type A preference, and server-side provider output budgets.
 
 See [speech timing and safe narration repair](docs/speech-timing.md) for opening/closing pads, breathing pauses, exact-dialogue protection and unresolved overflow handling.
 
 See [first-pass error prevention](docs/first-pass-planning.md) for the canonical-plan/preflight contract and original-response QA measurements.
+
+See [short-/long-form story continuations](docs/story-continuations.md) for the new project preference, next/ending/sequel batches, linked Prompt Library controls, context safeguards and required database migration.

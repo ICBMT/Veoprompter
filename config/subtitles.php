@@ -15,6 +15,7 @@ return [
     'max_pixels' => 9000000,
     'max_fps' => 60,
     'max_active_per_user' => 2,
+    'max_review_words' => 6000,
     'retention_days' => (int) env('SUBTITLE_RETENTION_DAYS', 7),
     'process_timeout' => 3000,
     'job_timeout' => 7200,

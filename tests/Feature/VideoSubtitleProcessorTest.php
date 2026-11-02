@@ -6,6 +6,7 @@ use App\Models\SubtitleVideo;
 use App\Models\User;
 use App\Services\Subtitles\AssSubtitleGenerator;
 use App\Services\Subtitles\LocalMediaProcess;
+use App\Services\Subtitles\TranscriptReview;
 use App\Services\Subtitles\VideoSubtitleProcessor;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Storage;
@@ -61,6 +62,16 @@ class VideoSubtitleProcessorTest extends TestCase
         });
         $processor = new VideoSubtitleProcessor($runner, new AssSubtitleGenerator);
         $processor->process($video);
+        $this->assertSame('awaiting_review', $video->fresh()->status);
+        $this->assertNotContains('rendering', $stages);
+        $disk->assertMissing($video->directory().'/captions.ass');
+        $disk->assertMissing($video->directory().'/output.mp4');
+        $processor->cleanup($video->refresh());
+        $this->assertCount(7, $video->fresh()->transcript_draft);
+        $video->update(['status' => 'generating_subtitles', 'transcript_approved' => $video->transcript_draft,
+            'approved_revision' => $video->transcript_revision, 'approved_by' => $video->user_id,
+            'approved_at' => now(), 'approved_hash' => TranscriptReview::hash($video->transcript_draft)]);
+        $processor->render($video->refresh());
         $this->assertSame('completed', $video->fresh()->status);
         $this->assertContains('transcribing', $stages);
         $this->assertContains('rendering', $stages);

@@ -12,6 +12,12 @@ class PromptProject extends Model
 
     protected $fillable = [
         'studio_project_id',
+        'parent_prompt_id',
+        'story_part',
+        'story_batch',
+        'story_status',
+        'story_context',
+        'continuation_key',
         'title',
         'mode',
         'brief',
@@ -28,10 +34,23 @@ class PromptProject extends Model
     {
         return [
             'brief' => 'array',
+            'story_context' => 'array',
+            'story_part' => 'integer',
+            'story_batch' => 'integer',
             'quality_review' => 'array',
             'repair_history' => 'array',
             'reference_frame_attached' => 'boolean',
         ];
+    }
+
+    public function parentPrompt(): BelongsTo
+    {
+        return $this->belongsTo(self::class, 'parent_prompt_id');
+    }
+
+    public function continuations(): \Illuminate\Database\Eloquent\Relations\HasMany
+    {
+        return $this->hasMany(self::class, 'parent_prompt_id');
     }
 
     public function user(): BelongsTo

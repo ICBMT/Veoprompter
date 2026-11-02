@@ -27,7 +27,7 @@
 
         <div class="wizard-progress" aria-label="Project setup progress">
             <div class="wizard-progress-heading"><span class="section-index" data-wizard-step-count>STEP 1</span><strong data-wizard-step-group>PROJECT BASICS</strong></div>
-            <div class="wizard-progress-track" role="progressbar" aria-label="Project setup progress" aria-valuemin="1" aria-valuemax="21" aria-valuenow="1"><span data-wizard-progress></span></div>
+            <div class="wizard-progress-track" role="progressbar" aria-label="Project setup progress" aria-valuemin="1" aria-valuemax="22" aria-valuenow="1"><span data-wizard-progress></span></div>
             <p data-wizard-progress-note>One small choice at a time. You can go back whenever you like.</p>
         </div>
         @if(!$durationOptions['clip_duration'] || !$durationOptions['extend_duration'])
@@ -45,6 +45,14 @@
             <section class="wizard-step" data-wizard-step data-wizard-group="PROJECT BASICS" data-wizard-title="Choose your audience">
                 <div class="wizard-question"><span class="wizard-question-number" data-wizard-number>02</span><h2 tabindex="-1">Who are these videos for?</h2><p>This helps choose vocabulary, pacing, and tone for the people who will watch.</p></div>
                 <div class="wizard-answer wizard-answer--narrow"><label class="field-label" for="audience">Your audience</label><input class="text-input input-large" id="audience" name="audience" type="text" maxlength="160" required value="{{ old('audience', $settings['audience']) }}" placeholder="Curious kids, new learners, film fans"><span class="field-hint">A short description is plenty.</span></div>
+            </section>
+
+            <section class="wizard-step" data-wizard-step data-wizard-group="PROJECT BASICS" data-wizard-title="Choose content length">
+                <div class="wizard-question"><span class="wizard-question-number" data-wizard-number>03</span><h2 tabindex="-1">Short-form or a longer story?</h2><p>Choose how each new story starts. Either format can grow into more parts later.</p></div>
+                <div class="wizard-choice-grid">
+                    <label class="wizard-choice"><input type="radio" name="content_form" value="short" data-summary-label="Short-form · complete story" @checked(old('content_form', $settings['content_form']) === 'short') required><span class="wizard-choice-title">Short-form</span><span class="wizard-choice-description">A complete story in the first set, just like today. Create Part 2 whenever you want.</span></label>
+                    <label class="wizard-choice"><input type="radio" name="content_form" value="long" data-summary-label="Long-form · ongoing batches" @checked(old('content_form', $settings['content_form']) === 'long')><span class="wizard-choice-title">Long-form</span><span class="wizard-choice-description">An opening set that leaves the story open. Continue one clip or a set at a time, then choose when to end.</span></label>
+                </div>
             </section>
 
             <section class="wizard-step" data-wizard-step data-wizard-group="PROJECT BASICS" data-wizard-title="Choose a video type">
@@ -223,7 +231,7 @@
             <section class="wizard-step wizard-review-step" data-wizard-step data-wizard-group="READY TO CREATE" data-wizard-title="Review your project" data-wizard-review>
                 <div class="wizard-question"><span class="wizard-question-number">✓</span><h2 tabindex="-1">Your project is ready to take shape.</h2><p>Here’s a quick look at the preferences you chose. You can edit these at any time.</p></div>
                 <dl class="wizard-review-list">
-                    @foreach(['name' => 'Project', 'audience' => 'Audience', 'video_type' => 'Default video type', 'visual_style' => 'Visual style', 'style_detail' => 'Custom style', 'character_type' => 'Main character', 'character_details' => 'Character description', 'clip_count' => 'Video clips', 'clip_duration' => 'Video clip duration', 'extend_duration' => 'Extension duration', 'aspect_ratio' => 'Frame shape', 'educational_depth' => 'Learning depth', 'narration' => 'Spoken audio', 'speech_mode' => 'Who speaks', 'language' => 'Language', 'narrator_voice' => 'Narrator voice', 'narrator_accent' => 'Narrator accent', 'narrator_tone' => 'Narrator tone', 'music' => 'Background music', 'sound_effects' => 'Sound effects'] as $field => $label)
+                    @foreach(['name' => 'Project', 'audience' => 'Audience', 'content_form' => 'Content length', 'video_type' => 'Default video type', 'visual_style' => 'Visual style', 'style_detail' => 'Custom style', 'character_type' => 'Main character', 'character_details' => 'Character description', 'clip_count' => 'Video clips', 'clip_duration' => 'Video clip duration', 'extend_duration' => 'Extension duration', 'aspect_ratio' => 'Frame shape', 'educational_depth' => 'Learning depth', 'narration' => 'Spoken audio', 'speech_mode' => 'Who speaks', 'language' => 'Language', 'narrator_voice' => 'Narrator voice', 'narrator_accent' => 'Narrator accent', 'narrator_tone' => 'Narrator tone', 'music' => 'Background music', 'sound_effects' => 'Sound effects'] as $field => $label)
                         <div data-wizard-review-row="{{ $field }}"><dt>{{ $label }}</dt><dd data-wizard-summary-for="{{ $field }}">—</dd></div>
                     @endforeach
                 </dl>

@@ -36,7 +36,7 @@ class PromptHistoryController extends Controller
     {
         abort_unless((int) $project->user_id === (int) $request->user()->id, 404);
 
-        $project->load('studioProject');
+        $project->load(['studioProject', 'parentPrompt' => fn ($query) => $query->where('user_id', $request->user()->id)]);
         $brief = is_array($project->brief) ? $project->brief : [];
         $qualityReview = is_array($project->quality_review)
             ? $project->quality_review
@@ -47,6 +47,7 @@ class PromptHistoryController extends Controller
 
         return view('history.show', [
             'project' => $project,
+            'storyChildren' => $project->continuations()->where('user_id', $request->user()->id)->latest()->paginate(8, ['*'], 'branches'),
             'summary' => $this->summary($project),
             'qualityReview' => $qualityReview,
             'manualRepairAttempts' => PromptRepairService::manualAttempts($project->repair_history ?? []),

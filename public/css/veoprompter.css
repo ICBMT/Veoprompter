@@ -1693,3 +1693,15 @@ body {
 @media (prefers-reduced-motion: reduce) {
     .motion-roll__current, .motion-roll__clone { transform: none !important; }
 }
+
+/* Story batches reuse the studio's controls, typography and rainy-sky palette. */
+.story-continuation { margin: 20px 0; padding: 20px; border: 1px solid var(--border, #243742); border-radius: 14px; background: rgba(14, 27, 37, .65); }
+.story-continuation summary { cursor: pointer; font-size: 13px; font-weight: 650; color: #cbe4ea; line-height: 1.6; }
+.story-continuation form { display: grid; gap: 14px; margin-top: 16px; }
+.story-continuation .field-label { display: grid; gap: 8px; }
+.story-continuation textarea { width: 100%; min-height: 90px; resize: vertical; }
+.story-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+.story-actions [hidden] { display: none; }
+.story-request-status { font-size: 12px; line-height: 1.6; color: #cbe4ea; overflow-wrap: anywhere; }
+.history-card .story-continuation { margin: 12px 0; padding: 12px; }
+@media (max-width: 600px) { .story-actions > button { width: 100%; justify-content: center; } }

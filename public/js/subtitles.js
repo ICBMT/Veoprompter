@@ -1,3 +1,5 @@
+import { initTranscriptReview } from './subtitle-review.js';
+
 (() => {
     'use strict';
     const form = document.querySelector('[data-subtitle-upload]');
@@ -10,17 +12,21 @@
     }
     const job = document.querySelector('[data-subtitle-job]');
     if (!job) return;
-    const stages = ['uploaded', 'extracting_audio', 'transcribing', 'generating_subtitles', 'rendering', 'completed'];
+    const stages = ['uploaded', 'extracting_audio', 'transcribing', 'awaiting_review', 'approved', 'generating_subtitles', 'rendering', 'completed'];
     const messages = {
         uploaded: 'Queued securely. Waiting for the subtitle worker.',
         extracting_audio: 'Checking your video and extracting the audio track.',
         transcribing: 'Whisper is listening locally and aligning individual words. This may take a few minutes.',
+        awaiting_review: 'Transcription is ready. Review and correct the words below. Rendering is paused until you explicitly approve.',
+        approved: 'Your exact transcript was approved. Waiting for the render worker.',
         generating_subtitles: 'Wrapping sentences and composing word-highlighted captions.',
         rendering: 'FFmpeg is burning captions into a lossless video. Larger videos take longer.',
         completed: 'Ready. Review the captions, then download your MP4.',
     };
     let stopped = false;
     let failures = 0;
+    const reviewPanel = job.querySelector('[data-transcript-review]');
+    const editor = reviewPanel ? initTranscriptReview(reviewPanel, async () => { reviewPanel.hidden = true; stopped = false; await poll(); }, { onUncertain: async () => { stopped = false; await poll(); } }) : null;
     const render = (data) => {
         const index = stages.indexOf(data.status);
         job.querySelectorAll('[data-stage]').forEach((step, i) => {
@@ -35,7 +41,11 @@
             job.querySelector('[data-job-download]').href = data.download_url;
             job.querySelector('[data-job-output]').hidden = false;
         }
-        stopped = ['completed', 'failed'].includes(data.status);
+        if (reviewPanel) {
+            reviewPanel.hidden = data.status !== 'awaiting_review';
+            if (data.status === 'awaiting_review') editor.load();
+        }
+        stopped = ['completed', 'failed', 'awaiting_review'].includes(data.status);
     };
     render({ status: job.dataset.status, failure: job.dataset.status === 'failed' ? job.querySelector('[data-job-feedback]').textContent : null });
     const poll = async () => {

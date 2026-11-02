@@ -39,6 +39,7 @@ final class ProjectSettings
         return [
             'audience' => 'Curious children and families',
             'video_type' => 'educational',
+            'content_form' => 'short',
             'visual_style' => '3d-family-animation',
             'style_detail' => '',
             'character_type' => 'ai-choice',
@@ -149,6 +150,9 @@ final class ProjectSettings
     public static function applyDurationOptions(array $settings, array $durationOptions = []): array
     {
         $settings = array_replace(self::defaults(), $settings);
+        if (! in_array($settings['content_form'] ?? null, ['short', 'long'], true)) {
+            $settings['content_form'] = 'short';
+        }
         if (! in_array($settings['speech_mode'] ?? null, [self::SPEECH_MODE_VOICEOVER, self::SPEECH_MODE_CHARACTER_DIALOGUE], true)) {
             $settings['speech_mode'] = self::SPEECH_MODE_VOICEOVER;
         }
@@ -252,6 +256,7 @@ final class ProjectSettings
     public static function rules(array $durationOptions = []): array
     {
         return [
+            'content_form' => ['sometimes', Rule::in(['short', 'long'])],
             'audience' => ['required', 'string', 'max:160'],
             'video_type' => ['required', Rule::in(array_keys(self::videoTypes()))],
             'visual_style' => ['required', Rule::in(array_keys(self::visualStyleOptions()))],

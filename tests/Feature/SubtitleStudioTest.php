@@ -105,18 +105,18 @@ class SubtitleStudioTest extends TestCase
         (new ProcessSubtitleVideo($video->id))->handle($processor);
     }
 
-    public function test_success_transitions_and_cleanup_keep_completed_output(): void
+    public function test_transcription_pauses_and_cleanup_preserves_the_draft_not_an_output(): void
     {
         $video = $this->video(User::factory()->create());
         $processor = $this->partialMock(VideoSubtitleProcessor::class);
         $processor->shouldReceive('process')->once()->andReturnUsing(function (SubtitleVideo $claimed): void {
             $this->assertSame('extracting_audio', $claimed->status);
-            Storage::disk('subtitles')->put($claimed->directory().'/output.mp4', 'output');
-            $claimed->update(['status' => 'completed', 'finished_at' => now()]);
+            $claimed->update(['status' => 'awaiting_review', 'transcript_draft' => [['start' => 0.1, 'end' => 0.5, 'word' => 'Hello.']]]);
         });
         (new ProcessSubtitleVideo($video->id))->handle($processor);
-        $this->assertSame('completed', $video->fresh()->status);
-        Storage::disk('subtitles')->assertExists($video->directory().'/output.mp4');
+        $this->assertSame('awaiting_review', $video->fresh()->status);
+        $this->assertSame('Hello.', $video->fresh()->transcript_draft[0]['word']);
+        Storage::disk('subtitles')->assertMissing($video->directory().'/output.mp4');
         Storage::disk('subtitles')->assertExists($video->directory().'/original.mp4');
     }
 
