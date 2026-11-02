@@ -155,8 +155,13 @@ export function armPasteOnNextField(text, promptId, expectedIndex, token, tabId)
                 }
 
                 removeListener();
-                activePrompt.pendingPaste = null;
-                await chrome.storage.local.set({ activePrompt });
+                // Input handlers can replace, rewind, or advance the prompt during insertion.
+                // Do not restore the pre-insertion snapshot over their newer state.
+                const { activePrompt: currentPrompt = null } = await chrome.storage.local.get('activePrompt');
+                if (matchesPendingPaste(currentPrompt)) {
+                    currentPrompt.pendingPaste = null;
+                    await chrome.storage.local.set({ activePrompt: currentPrompt });
+                }
             } catch {
                 processingClick = false;
             }

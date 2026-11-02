@@ -235,3 +235,30 @@ test('supports contenteditable fields', async () => {
         assert.equal(field.innerText, 'contenteditable prompt');
     });
 });
+
+for (const action of ['replace', 'rewind', 'rearm', 'clear', 'update metadata']) {
+    test(`preserves a ${action} performed by a field input handler`, async () => {
+        const field = new FakeTextArea();
+        await withMockDom(async ({ state, listeners }) => {
+            let expected;
+            field.dispatchEvent = () => {
+                if (expected !== undefined) return true;
+                if (action === 'replace') state.activePrompt = { id: 'new-prompt', nextIndex: 0, pendingPaste: null };
+                if (action === 'rewind') state.activePrompt = { ...state.activePrompt, nextIndex: 0, pendingPaste: null };
+                if (action === 'rearm') state.activePrompt = { ...state.activePrompt, pendingPaste: { token: 'new-token', index: 1, tabId: 17 }, nextIndex: 2 };
+                if (action === 'clear') state.activePrompt = null;
+                if (action === 'update metadata') state.activePrompt.title = 'Updated title';
+                expected = structuredClone(state.activePrompt);
+                if (action === 'update metadata') expected.pendingPaste = null;
+                return true;
+            };
+            armPasteOnNextField('one-time prompt', 'prompt-1', 0, 'paste-token', 17);
+            const [listener] = listeners;
+            listener({ target: field, composedPath: () => [field] });
+            await waitForPaste();
+            assert.equal(field.value, 'one-time prompt');
+            assert.deepEqual(state.activePrompt, expected);
+            assert.equal(listeners.size, 0);
+        });
+    });
+}

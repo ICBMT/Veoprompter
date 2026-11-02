@@ -3,7 +3,7 @@
 namespace Tests\Unit;
 
 use App\Services\PromptOutputAuditor;
-use PHPUnit\Framework\TestCase;
+use Tests\TestCase;
 
 class PromptOutputAuditorTest extends TestCase
 {

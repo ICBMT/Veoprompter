@@ -95,7 +95,7 @@ class ProjectAndTemporaryAccountTest extends TestCase
 
         $this->get(route('projects.settings.edit', $project))
             ->assertOk()
-            ->assertSee('value="quality" title="Let AI add meaningful clips when they improve causal clarity, complete process stages, or pacing; no arbitrary count cap or filler." selected', false)
+            ->assertSee('value="quality" title="No 7 or 8 clip target: let AI allocate the full narration and visible stages across as many clips as quality needs, with visual breathing room and continuous Type A handoffs wherever valid. No filler." selected', false)
             ->assertSee('Let AI decide · maximum quality');
 
         $this->get(route('projects.index'))
@@ -222,7 +222,7 @@ class ProjectAndTemporaryAccountTest extends TestCase
         $this->assertSame(3 * 60 * 60, $testAccount->expires_at->timestamp - $testAccount->created_at->timestamp);
         $temporaryAdminPassword = session('test_account_credentials.password');
         $this->assertTrue(password_verify($temporaryAdminPassword, $testAccount->password));
-        $this->assertSessionHas('test_account_credentials.email', 'temp-admin@example.test');
+        $response->assertSessionHas('test_account_credentials.email', 'temp-admin@example.test');
         $this->get(route('admin.users.index'))->assertOk()->assertSee('Temporary password')->assertSee($temporaryAdminPassword);
 
         $this->post(route('admin.users.test-accounts.store'), [

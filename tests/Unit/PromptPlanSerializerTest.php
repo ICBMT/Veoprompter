@@ -8,6 +8,8 @@ use App\Services\PromptPlanSerializer;
 use App\Services\PromptQaEvidence;
 use App\Services\PromptGenerationService;
 use App\Services\PromptRepairService;
+use App\Services\StoryContinuationService;
+use Tests\Support\StoryContinuationCases;
 use Tests\Support\PromptQaCases;
 use Tests\TestCase;
 
@@ -42,6 +44,41 @@ class PromptPlanSerializerTest extends TestCase
                 $this->assertStringContainsString('No incomplete prompt template was accepted', $exception->getMessage());
             }
         }
+    }
+
+    public function test_source_opening_references_are_scoped_to_the_first_clips_matching_fields_only(): void
+    {
+        $auditor = new PromptOutputAuditor;
+        $stories = new StoryContinuationService($auditor);
+        $brief = [...PromptQaCases::input(), 'content_form' => 'long'];
+        $root = PromptQaCases::package().StoryContinuationCases::footer();
+        $input = $stories->prepare($root, $brief, $stories->initial($root, $brief), 'open', 'continue', '', 'set');
+        $serializer = new PromptPlanSerializer($auditor);
+        $template = PromptQaCases::edit($root, 1, 'OPENING CONTINUITY STATE: '.PromptQaCases::state(), 'OPENING CONTINUITY STATE: {{VEO_SOURCE_END_STATE}}');
+        $template = PromptQaCases::edit($template, 1, 'OPENING PRESENTATION STATE: camera=static; lighting=daylight; audio=quiet', 'OPENING PRESENTATION STATE: {{VEO_SOURCE_END_PRESENTATION}}');
+        $compiled = $serializer->serialize($template, $input);
+        $this->assertSame($root, $compiled['content']);
+        $this->assertSame(2, $compiled['expanded']);
+        $stories->assertOpening($compiled['content'], $input);
+        foreach ([
+            'Note: {{VEO_SOURCE_END_STATE}}',
+            PromptQaCases::edit($root, 2, 'OPENING CONTINUITY STATE: '.PromptQaCases::state(), 'OPENING CONTINUITY STATE: {{VEO_SOURCE_END_STATE}}'),
+            PromptQaCases::edit($root, 1, 'PRIMARY IDEA: Controlled motion.', 'PRIMARY IDEA: {{VEO_SOURCE_END_PRESENTATION}}'),
+            str_replace('{{VEO_SOURCE_END_STATE}}', '{{VEO_SOURCE_END_PRESENTATION}}', $template),
+        ] as $invalid) {
+            try { $serializer->serialize($invalid, $input); $this->fail('Out-of-scope source reference accepted.'); }
+            catch (PromptGenerationException $exception) { $this->assertStringContainsString('unresolved or out-of-scope', $exception->getMessage()); }
+        }
+        foreach ([$brief, [...$input, '_story_context' => [...$input['_story_context'], 'batch_state' => []]],
+            [...$input, '_story_context' => [...$input['_story_context'], 'ending_state' => 'Reconstructed from summary']]] as $invalidInput) {
+            try { $serializer->serialize($template, $invalidInput); $this->fail('Missing/inconsistent snapshot accepted.'); }
+            catch (PromptGenerationException) { $this->addToAssertionCount(1); }
+        }
+        $wrong = PromptQaCases::edit($root, 1, 'OPENING CONTINUITY STATE: '.PromptQaCases::state(), 'OPENING CONTINUITY STATE: an incompatible state');
+        $this->assertSame($wrong, $serializer->serialize($wrong, $input)['content']); // Never fix incompatible literals by overwriting them.
+        $spoken = str_replace('It keeps turning.', 'Literal {{VEO_SOURCE_END_STATE}} spoken text.', $root);
+        $this->assertSame($spoken, $serializer->serialize($spoken, $input)['content']); // Spoken words are never template-expanded.
+
     }
 
     public function test_numeric_message_changes_do_not_misreport_an_unresolved_issue_as_new_or_fixed(): void

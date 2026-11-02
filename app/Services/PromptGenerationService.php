@@ -40,6 +40,9 @@ class PromptGenerationService
         $auditor = new PromptOutputAuditor;
         $serialization = (new PromptPlanSerializer($auditor))->serialize($content, $input);
         $content = $serialization['content'];
+        if (isset($input['_story_context'])) {
+            (new StoryContinuationService($auditor))->assertOpening($content, $input);
+        }
         $qualityReview = $auditor->audit($content, $input);
         $initialReview = $qualityReview;
         $rejectedCandidateIssues = [];
@@ -126,6 +129,10 @@ class PromptGenerationService
                 ]);
                 $qualityReview['repair_outcome'] = 'failed';
             }
+        }
+
+        if (isset($input['_story_context'])) {
+            (new StoryContinuationService($auditor))->assertOpening($content, $input);
         }
 
         $qualityReview['rejected_candidate_issues'] = $rejectedCandidateIssues;

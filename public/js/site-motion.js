@@ -163,8 +163,10 @@
 
     const reveal = (element, options = {}) => {
         if (!element || !visible(element)) return;
+        // Keep below-fold controls focusable: visibility:hidden would remove them
+        // from keyboard navigation before scrolling can trigger their reveal.
         const start = {
-            autoAlpha: 0,
+            opacity: 0,
             y: options.y ?? 17,
             z: options.z ?? 8,
             rotationX: options.rotationX ?? 1.2,
@@ -173,7 +175,7 @@
             transformOrigin: 'center bottom',
         };
         const finish = {
-            autoAlpha: 1,
+            opacity: 1,
             x: 0,
             y: 0,
             z: 0,
@@ -209,9 +211,9 @@
             const children = [...parent.querySelectorAll(childSelector)].filter(visible);
             if (!children.length) return;
             gsap.fromTo(children,
-                { autoAlpha: 0, y: 13, scale: 0.99, transformPerspective: 850 },
+                { opacity: 0, y: 13, scale: 0.99, transformPerspective: 850 },
                 {
-                    autoAlpha: 1,
+                    opacity: 1,
                     y: 0,
                     scale: 1,
                     duration: 0.44,

@@ -123,3 +123,23 @@ The complete suite was also run against an isolated `git archive` of the pre-fix
 
 
 Final checks for this fix: **44 focused PHPUnit tests / 422 assertions passed**, **49 standalone story assertions**, **851 refinement assertions**, **79 planning assertions**, and **49 Node tests**. Full-suite comparison: **373 tests, 27 errors, 13 failures** after the fix versus **367 tests, 27 errors, 14 failures** at pre-fix HEAD; no new failing test names. These broader failures remain visible and are not a claim of a fully green suite.
+
+
+## Authoritative continuation-opening construction
+
+The prior request already sent ending-state strings to the model, but relied on prose instructions and model retyping. Continuation planning now explicitly loads the validated persisted `batch_state` for long-form sources and treats both `ending_state` and `ending_presentation` as authoritative first-frame inputs. The actual provider request includes a separate `authoritative_opening_snapshot` plus the complete `source_batch_snapshot`; compact memory remains context for later beats, never a reconstruction source for the opening. Existing short-form sources retain their saved-final-clip evidence path rather than gaining a new metadata prerequisite.
+
+The planner is instructed to emit these whole-field references in the first copy-ready clip:
+
+```text
+OPENING CONTINUITY STATE: {{VEO_SOURCE_END_STATE}}
+OPENING PRESENTATION STATE: {{VEO_SOURCE_END_PRESENTATION}}
+```
+
+The existing canonical serializer expands them literally from the authoritative inputs **before** independent QA. These are prospective template bindings, not post-hoc repairs: incompatible literal fields are never overwritten. References are permitted only in Clip 1's corresponding opening fields; later clips, notes, swapped fields, missing/inconsistent snapshots and unresolved references fail closed. Protected spoken words are never expanded. This preserves the entire stored state string, including positions, environment, motion, camera/framing, lighting, visual style and relevant audio state, without selecting only a subset of properties or interpreting a summary.
+
+The exact-equality boundary check remains mandatory, now shared by generation and acceptance: it runs after initial serialization (before any automatic repair), after generation's repair pipeline, and again at child acceptance. A literal mismatch fails immediately without a hidden corrective provider call. Type A/B/C changes must start from the inherited state and visibly progress afterward; their existing independent junction validators are unchanged. Existing literal outputs still work when they already match exactly. No saved source story is rewritten and no migration is required.
+
+Regression tests exercise actual Studio opening creation, persisted final-batch evidence, the next actual HTTP-faked provider request, compiler expansion, independent QA, and linked-child saving. The test uses explicit character/object positions and environment/camera/framing/lighting/style/motion/audio details absent from the compact summary. Separate continuity and presentation mismatch cases assert one provider call, no child, and identical full source attributes. Serializer tests cover scope, invalid snapshots, literal preservation and protected speech.
+
+Verification for this follow-up uses the native PHP/Composer environment described above. The broader suite still has its known baseline errors/failures; no new failing test names appeared. These tests establish text/schema inheritance and fail-closed behavior, not flawless live-model scene descriptions or rendered-video continuity.

@@ -18,6 +18,13 @@ class User extends Authenticatable
     /** @use HasFactory<UserFactory> */
     use HasFactory, Notifiable;
 
+    // Match database defaults on newly created instances as well as reloaded accounts.
+    protected $attributes = [
+        'is_admin' => false,
+        'can_choose_clip_duration' => true,
+        'can_choose_extension_duration' => true,
+    ];
+
     protected function casts(): array
     {
         return [

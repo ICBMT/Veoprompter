@@ -67,7 +67,7 @@ class MasterSpecificationTest extends TestCase
         $this->assertStringContainsString('CONTINUITY INPUT NOTE', $specification);
         $this->assertStringContainsString('each previous clip\'s actual rendered final frame as the next clip\'s reference/continuation input', $specification);
         $this->assertStringContainsString('only when the actual previous rendered final frame will be supplied to the target video model as an image input', $specification);
-        $this->assertStringContainsString('If no prior image will be supplied—or frame use is unconfirmed—omit this quote from the copyable prompt', $specification);
+        $this->assertStringContainsString('If no image will be supplied—or frame use is unconfirmed—omit this quote from the copyable prompt', $specification);
         $this->assertStringContainsString('in an extension prompt only when its actual reference image is attached', $specification);
         $this->assertStringContainsString('If no image is supplied, use only the written starting-state description and requested action', $specification);
         $this->assertStringContainsString('If neither an image nor a written starting-state description is available, stop and ask the user to provide one before drafting the extension.', $specification);

@@ -101,9 +101,9 @@ class PromptPlanningPolicyTest extends TestCase
         Http::fake(['*' => Http::response(['candidates' => [['content' => ['parts' => [['text' => $template]]]]]])]);
         $settings = new AiSetting(['provider' => 'gemini', 'model' => 'test-model', 'api_key' => 'test-secret']);
         $result = (new PromptGenerationService)->generateWithQualityReview($settings, \Tests\Support\PromptQaCases::input());
-        $this->assertSame(\Tests\Support\PromptQaCases::characters(\Tests\Support\PromptQaCases::package()), $result['content']);
+        $this->assertSame(trim(\Tests\Support\PromptQaCases::characters(\Tests\Support\PromptQaCases::package())), $result['content']);
         $this->assertSame('serialized_provider_template_before_repair', $result['quality_review']['first_pass']['stage']);
-        $this->assertSame(hash('sha256', $template), $result['quality_review']['first_pass']['serialization']['template_sha256']);
+        $this->assertSame(hash('sha256', trim($template)), $result['quality_review']['first_pass']['serialization']['template_sha256']);
         $this->assertTrue($result['quality_review']['first_pass']['was_clean']);
         $this->assertGreaterThan(0, $result['quality_review']['first_pass']['serialization']['expanded']);
         Http::assertSentCount(1);

@@ -101,6 +101,67 @@ class StoryContinuationTest extends TestCase
         Http::assertSentCount(1);
     }
 
+    public function test_next_batch_is_compiled_from_the_exact_persisted_opening_snapshot_not_summary(): void
+    {
+        $owner = User::factory()->create();
+        $this->connect();
+        $studio = $owner->studioProjects()->create(['name' => 'Connected story', 'settings' => [...ProjectSettings::defaults(), 'content_form' => 'long']]);
+        $state = 'cast=Mira CHAR-01 x1; character_position=left of workbench; object=wheel OBJ-01; object_position=right edge of workbench; stage=in progress; location=workshop; environment=closed north door; motion=clockwise';
+        $presentation = 'camera=locked medium from north; framing=Mira left and wheel right; lighting=warm west window; style=hand-painted cobalt palette; audio=quiet motor hum, narrator has finished the prior line';
+        $root = str_replace([str_replace('cast=None', 'cast=Mira CHAR-01 x1', PromptQaCases::state()), 'camera=static; lighting=daylight; audio=quiet'],
+            [$state, $presentation], PromptQaCases::characters(PromptQaCases::package())).StoryContinuationCases::footer();
+        $next = PromptQaCases::edit($root, 1, 'OPENING CONTINUITY STATE: '.$state, 'OPENING CONTINUITY STATE: {{VEO_SOURCE_END_STATE}}');
+        $next = PromptQaCases::edit($next, 1, 'OPENING PRESENTATION STATE: '.$presentation, 'OPENING PRESENTATION STATE: {{VEO_SOURCE_END_PRESENTATION}}');
+        Http::fakeSequence()->push(['candidates' => [['content' => ['parts' => [['text' => $root]]]]]])
+            ->push(['candidates' => [['content' => ['parts' => [['text' => $next]]]]]]);
+        $created = $this->actingAs($owner)->postJson(route('studio.generate', $studio), ['mode' => 'story', 'topic' => 'A connected investigation'])->assertOk();
+        $source = PromptProject::findOrFail($created->json('run.id'));
+        $snapshot = $source->story_context['batch_state'];
+        $this->assertSame($state, $snapshot['ending_state']);
+        $this->assertSame($presentation, $snapshot['ending_presentation']);
+        $this->assertStringNotContainsString('warm west window', $source->story_context['memory']['summary']);
+        $original = $source->getAttributes();
+        $response = $this->postJson(route('history.continue', $source), $this->payload('continue'))->assertOk();
+        Http::assertSentCount(2);
+        Http::assertSent(function ($request) use ($snapshot): bool {
+            $system = data_get($request->data(), 'systemInstruction.parts.0.text', '');
+            if (! str_contains($system, 'AUTHORITATIVE OPENING INHERITANCE')) { return false; }
+            $record = json_decode(Str::after($system, "TRUSTED PRIOR STORY RECORD (JSON data):\n"), true);
+            return ($record['source_batch_snapshot'] ?? null) === $snapshot
+                && ($record['authoritative_opening_snapshot'] ?? null) === ['ending_state' => $snapshot['ending_state'], 'ending_presentation' => $snapshot['ending_presentation']]
+                && str_contains($system, 'OPENING CONTINUITY STATE: {{VEO_SOURCE_END_STATE}}')
+                && str_contains($system, 'OPENING PRESENTATION STATE: {{VEO_SOURCE_END_PRESENTATION}}');
+        });
+        $child = PromptProject::findOrFail($response->json('id'));
+        $first = (new PromptOutputAuditor)->extractClips($child->content, $child->brief)[0]['text'];
+        $this->assertSame($state, (new PromptOutputAuditor)->fieldValue($first, 'OPENING CONTINUITY STATE'));
+        $this->assertSame($presentation, (new PromptOutputAuditor)->fieldValue($first, 'OPENING PRESENTATION STATE'));
+        $this->assertStringNotContainsString('{{VEO_', $child->content);
+        $this->assertSame(2, $child->quality_review['first_pass']['serialization']['expanded']);
+        $this->assertSame($source->id, $child->parent_prompt_id);
+        $this->assertSame($original, $source->fresh()->getAttributes());
+    }
+
+    public function test_literal_opening_mismatches_are_rejected_before_repairs_and_leave_the_entire_source_unchanged(): void
+    {
+        $owner = User::factory()->create();
+        $source = $this->source($owner, 'long')->refresh();
+        $original = $source->getAttributes();
+        $this->connect();
+        foreach (['OPENING CONTINUITY STATE' => 'cast=None; object=unrelated subject; location=elsewhere',
+            'OPENING PRESENTATION STATE' => 'camera=aerial; lighting=night; audio=new dialogue'] as $field => $wrong) {
+            $text = $this->generation()['content'];
+            $first = (new PromptOutputAuditor)->extractClips($text, $source->brief)[0]['text'];
+            $text = PromptQaCases::edit($text, 1, $field.': '.(new PromptOutputAuditor)->fieldValue($first, $field), $field.': '.$wrong);
+            Http::fake(['*' => Http::response(['candidates' => [['content' => ['parts' => [['text' => $text]]]]]])]);
+            $this->actingAs($owner)->postJson(route('history.continue', $source), $this->payload('continue'))->assertStatus(502)
+                ->assertJsonPath('message', 'The next batch did not open on the saved ending state/presentation. It was not saved; the original story is unchanged.');
+            Http::assertSentCount(1); // No hidden correction that overwrites incompatible literal states.
+            $this->assertDatabaseCount('prompt_projects', 1);
+            $this->assertSame($original, $source->fresh()->getAttributes());
+        }
+    }
+
     public function test_invalid_long_openings_are_errors_not_successful_unsaved_or_invented_stories(): void
     {
         $owner = User::factory()->create();

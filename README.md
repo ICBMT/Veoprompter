@@ -158,3 +158,7 @@ See [speech timing and safe narration repair](docs/speech-timing.md) for opening
 See [first-pass error prevention](docs/first-pass-planning.md) for the canonical-plan/preflight contract and original-response QA measurements.
 
 See [short-/long-form story continuations](docs/story-continuations.md) for the new project preference, next/ending/sequel batches, linked Prompt Library controls, context safeguards and required database migration.
+
+## Build audit and browser regression checks
+
+See [the build audit](docs/build-audit.md) for verified results, isolated browser-test setup, real-media checks and remaining live/deployment verification. Run helper regressions with `npm test` and production assets with `npm run build`.

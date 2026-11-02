@@ -35,7 +35,7 @@ class AssSubtitleGeneratorTest extends TestCase
         $ass = (new AssSubtitleGenerator)->generate($json, $settings, 360, 640, 4);
         $this->assertStringContainsString('PlayResY: 640', $ass);
         $this->assertStringContainsString('\\fs23', $ass);
-        $this->assertStringNotContains('\\t(', $ass);
+        $this->assertStringNotContainsString('\\t(', $ass);
     }
 
     public function test_timestamp_rounding_and_override_escaping(): void
@@ -44,9 +44,9 @@ class AssSubtitleGeneratorTest extends TestCase
         $this->assertSame('1:01:01.24', $generator->timestamp(3661.235));
         $this->assertSame('0:01:00.00', $generator->timestamp(59.999));
         $escaped = $generator->escape("{\\pos(0,0)}\\N\ntext");
-        $this->assertStringNotContains('{', $escaped);
-        $this->assertStringNotContains('\\', $escaped);
-        $this->assertStringNotContains("\n", $escaped);
+        $this->assertStringNotContainsString('{', $escaped);
+        $this->assertStringNotContainsString('\\', $escaped);
+        $this->assertStringNotContainsString("\n", $escaped);
     }
 
     public function test_missing_words_is_no_speech_not_invented_timing(): void

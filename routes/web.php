@@ -15,31 +15,32 @@ use Illuminate\Support\Facades\Route;
 
 Route::view('/guide', 'pages.guide')->name('guide');
 
+// Keep operation quotas independent; unprefixed throttles share an authenticated user's counter.
 Route::middleware('guest')->group(function (): void {
     Route::get('/login', [AuthController::class, 'showLogin'])->name('login');
-    Route::post('/login', [AuthController::class, 'login'])->middleware('throttle:8,1')->name('login.store');
+    Route::post('/login', [AuthController::class, 'login'])->middleware('throttle:8,1,login')->name('login.store');
     Route::get('/register', [AuthController::class, 'showRegister'])->name('register');
-    Route::post('/register', [AuthController::class, 'register'])->middleware('throttle:5,1')->name('register.store');
+    Route::post('/register', [AuthController::class, 'register'])->middleware('throttle:5,1,registration')->name('register.store');
 
     Route::get('/forgot-password', [PasswordResetController::class, 'requestForm'])->name('password.request');
-    Route::post('/forgot-password', [PasswordResetController::class, 'sendLink'])->middleware('throttle:3,1')->name('password.email');
+    Route::post('/forgot-password', [PasswordResetController::class, 'sendLink'])->middleware('throttle:3,1,password-email')->name('password.email');
     Route::get('/reset-password/{token}', [PasswordResetController::class, 'resetForm'])->name('password.reset');
-    Route::post('/reset-password', [PasswordResetController::class, 'reset'])->middleware('throttle:5,1')->name('password.update');
+    Route::post('/reset-password', [PasswordResetController::class, 'reset'])->middleware('throttle:5,1,password-reset')->name('password.update');
 });
 
 Route::middleware('user.auth')->group(function (): void {
     Route::get('/', [StudioProjectController::class, 'index'])->name('studio');
     Route::post('/logout', [AuthController::class, 'logout'])->name('logout');
-    Route::post('/presence', [PresenceController::class, 'ping'])->middleware('throttle:2,1')->name('presence.ping');
-    Route::post('/voice-samples', [VoiceSampleController::class, 'store'])->middleware('throttle:12,1')->name('voice-samples.store');
+    Route::post('/presence', [PresenceController::class, 'ping'])->middleware('throttle:2,1,presence')->name('presence.ping');
+    Route::post('/voice-samples', [VoiceSampleController::class, 'store'])->middleware('throttle:12,1,voice-sample')->name('voice-samples.store');
 
     Route::get('/subtitles', [\App\Http\Controllers\SubtitleVideoController::class, 'index'])->name('subtitles.index');
-    Route::post('/subtitles', [\App\Http\Controllers\SubtitleVideoController::class, 'store'])->middleware('throttle:3,1')->name('subtitles.store');
+    Route::post('/subtitles', [\App\Http\Controllers\SubtitleVideoController::class, 'store'])->middleware('throttle:3,1,subtitle-upload')->name('subtitles.store');
     Route::get('/subtitles/{subtitleVideo}', [\App\Http\Controllers\SubtitleVideoController::class, 'show'])->name('subtitles.show');
-    Route::get('/subtitles/{subtitleVideo}/status', [\App\Http\Controllers\SubtitleVideoController::class, 'status'])->middleware('throttle:30,1')->name('subtitles.status');
-    Route::get('/subtitles/{subtitleVideo}/transcript', [\App\Http\Controllers\SubtitleReviewController::class, 'show'])->middleware('throttle:30,1')->name('subtitles.transcript');
-    Route::put('/subtitles/{subtitleVideo}/transcript', [\App\Http\Controllers\SubtitleReviewController::class, 'save'])->middleware('throttle:20,1')->name('subtitles.transcript.save');
-    Route::post('/subtitles/{subtitleVideo}/approve', [\App\Http\Controllers\SubtitleReviewController::class, 'approve'])->middleware('throttle:5,1')->name('subtitles.approve');
+    Route::get('/subtitles/{subtitleVideo}/status', [\App\Http\Controllers\SubtitleVideoController::class, 'status'])->middleware('throttle:30,1,subtitle-status')->name('subtitles.status');
+    Route::get('/subtitles/{subtitleVideo}/transcript', [\App\Http\Controllers\SubtitleReviewController::class, 'show'])->middleware('throttle:30,1,subtitle-transcript-read')->name('subtitles.transcript');
+    Route::put('/subtitles/{subtitleVideo}/transcript', [\App\Http\Controllers\SubtitleReviewController::class, 'save'])->middleware('throttle:20,1,subtitle-transcript-save')->name('subtitles.transcript.save');
+    Route::post('/subtitles/{subtitleVideo}/approve', [\App\Http\Controllers\SubtitleReviewController::class, 'approve'])->middleware('throttle:5,1,subtitle-approval')->name('subtitles.approve');
     Route::get('/subtitles/{subtitleVideo}/original', [\App\Http\Controllers\SubtitleReviewController::class, 'original'])->name('subtitles.original');
     Route::get('/subtitles/{subtitleVideo}/preview', [\App\Http\Controllers\SubtitleVideoController::class, 'preview'])->name('subtitles.preview');
     Route::get('/subtitles/{subtitleVideo}/download', [\App\Http\Controllers\SubtitleVideoController::class, 'download'])->name('subtitles.download');
@@ -50,20 +51,20 @@ Route::middleware('user.auth')->group(function (): void {
     Route::get('/projects/{studioProject}/settings', [StudioProjectController::class, 'edit'])->name('projects.settings.edit');
     Route::put('/projects/{studioProject}/settings', [StudioProjectController::class, 'update'])->name('projects.settings.update');
     Route::post('/projects/{studioProject}/generate', [StudioController::class, 'generate'])
-        ->middleware('throttle:8,1')
+        ->middleware('throttle:8,1,prompt-generation')
         ->name('studio.generate');
     Route::get('/projects/{studioProject}', [StudioProjectController::class, 'show'])->name('projects.show');
 
     Route::get('/history', [PromptHistoryController::class, 'index'])->name('history.index');
     Route::get('/history/{project}', [PromptHistoryController::class, 'show'])->name('history.show');
     Route::post('/history/{project}/continue', [\App\Http\Controllers\StoryContinuationController::class, 'store'])
-        ->middleware('throttle:8,1')
+        ->middleware('throttle:8,1,story-continuation')
         ->name('history.continue');
     Route::post('/history/{project}/repair', [PromptRepairController::class, 'repair'])
-        ->middleware('throttle:3,1')
+        ->middleware('throttle:3,1,prompt-repair')
         ->name('history.repair');
     Route::post('/history/{project}/restore', [PromptRepairController::class, 'restore'])
-        ->middleware('throttle:5,1')
+        ->middleware('throttle:5,1,prompt-restore')
         ->name('history.restore');
     Route::delete('/history/{project}', [PromptHistoryController::class, 'destroy'])->name('history.destroy');
 
@@ -77,14 +78,14 @@ Route::prefix('admin')
     ->middleware('admin')
     ->group(function (): void {
         Route::get('/', [AiSettingsController::class, 'edit'])->name('settings');
-        Route::post('/models', [AiSettingsController::class, 'models'])->middleware('throttle:8,1')->name('models');
-        Route::post('/test-connection', [AiSettingsController::class, 'testConnection'])->middleware('throttle:5,1')->name('connection.test');
+        Route::post('/models', [AiSettingsController::class, 'models'])->middleware('throttle:8,1,admin-models')->name('models');
+        Route::post('/test-connection', [AiSettingsController::class, 'testConnection'])->middleware('throttle:5,1,admin-connection')->name('connection.test');
         Route::put('/settings', [AiSettingsController::class, 'update'])->name('settings.update');
         Route::put('/duration-options', [AiSettingsController::class, 'updateDurationOptions'])->name('duration-options.update');
         Route::put('/voice-settings', [AiSettingsController::class, 'updateVoice'])->name('voice-settings.update');
 
         Route::get('/users', [UserManagementController::class, 'index'])->name('users.index');
-        Route::get('/users/presence', [UserManagementController::class, 'presence'])->middleware('throttle:10,1')->name('users.presence');
+        Route::get('/users/presence', [UserManagementController::class, 'presence'])->middleware('throttle:10,1,admin-presence')->name('users.presence');
         Route::post('/users/test-accounts', [UserManagementController::class, 'createTestAccount'])->name('users.test-accounts.store');
         Route::put('/users/{user}/duration-options', [UserManagementController::class, 'updateDurationOptions'])->name('users.duration-options.update');
         Route::get('/users/{user}', [UserManagementController::class, 'show'])->name('users.show');

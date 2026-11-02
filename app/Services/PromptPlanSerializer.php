@@ -39,11 +39,17 @@ final class PromptPlanSerializer
                     break;
                 }
             }
-            $editable = preg_replace_callback(self::TOKEN_PATTERN, function (array $match) use ($index, $owner, $clips, $plan, $durations, $identities, $line, &$expanded): string {
+            $editable = preg_replace_callback(self::TOKEN_PATTERN, function (array $match) use ($index, $owner, $clips, $plan, $durations, $identities, $line, $input, &$expanded): string {
                 $token = $match[0];
                 $replacement = null;
                 $field = fn (string $name): bool => preg_match('/^\s*(?:[-*+>]\s*)?'.preg_quote($name, '/').'\s*:\s*'.preg_quote($token, '/').'\s*$/iu', str_replace(['**', '__', '`'], '', $line)) === 1;
-                if (preg_match('/^\{\{VEO_CLIP_SECONDS:(\d+)\}\}$/', $token, $number)) {
+                if (in_array($token, ['{{VEO_SOURCE_END_STATE}}', '{{VEO_SOURCE_END_PRESENTATION}}'], true)) {
+                    $expectedField = $token === '{{VEO_SOURCE_END_STATE}}' ? 'OPENING CONTINUITY STATE' : 'OPENING PRESENTATION STATE';
+                    if ($owner === 0 && $clips[0]['number'] === 1 && isset($input['_story_context']) && $field($expectedField)) {
+                        $opening = (new StoryContinuationService($this->auditor))->openingState($input);
+                        $replacement = $opening[$token === '{{VEO_SOURCE_END_STATE}}' ? 'ending_state' : 'ending_presentation'];
+                    }
+                } elseif (preg_match('/^\{\{VEO_CLIP_SECONDS:(\d+)\}\}$/', $token, $number)) {
                     // Copy-ready duration fields are sources, never self-referential expressions.
                     if (! $field('CLIP DURATION') && $plan->hasCompleteSequentialClipDurations()) {
                         $replacement = isset($durations[(int) $number[1]]) ? $this->seconds($durations[(int) $number[1]]) : null;

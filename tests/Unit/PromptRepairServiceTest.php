@@ -19,7 +19,7 @@ class PromptRepairServiceTest extends TestCase
         $this->auditor = new PromptOutputAuditor;
     }
 
-    public function test_reconstructed_six_clip_38_second_glass_bottle_case_repairs_speech_handoffs_and_all_runtime_views(): void
+    public function test_reconstructed_six_clip_case_repairs_safe_handoffs_and_runtime_views_without_hiding_remaining_speech_limits(): void
     {
         [$content, $input] = $this->reconstructedSixClipGlassBottleFixture();
         $before = $this->auditor->audit($content, $input);
@@ -63,24 +63,50 @@ class PromptRepairServiceTest extends TestCase
         $afterReview = $this->auditor->audit($result['content'], $input);
 
         $this->assertTrue($result['repair_report']['applied']);
-        $this->assertSame('passed', $afterReview['status']);
-        $this->assertSame([], $afterReview['issues']);
-        $this->assertSame(39.0, $afterPlan->totalRuntimeSeconds());
-        $this->assertSame(39.0, $afterPlan->overviewRuntimes[0]['seconds']);
+        // Existing visual pauses must not be silently compressed to force every clip under ten seconds.
+        $this->assertSame('needs_review', $afterReview['status']);
+        $this->assertSame(['speech_opening_visual_beat_missing', 'speech_overrun', 'speech_leaves_no_visual_tail'], array_values(array_unique(array_column($afterReview['issues'], 'code'))));
+        $this->assertSame([3, 5, 6], array_values(array_unique(array_column($afterReview['issues'], 'clip'))));
+        $this->assertGreaterThan(38, $afterPlan->totalRuntimeSeconds());
+        $this->assertSame($afterPlan->totalRuntimeSeconds(), $afterPlan->overviewRuntimes[0]['seconds']);
         $this->assertCount(6, $afterPlan->overviewDurations);
         $this->assertCount(6, $afterPlan->clipPlanDurations);
-        $this->assertSame(39.0, array_sum(array_column($afterPlan->clipPlanDurations, 'seconds')));
-        $this->assertSame('CLIP DURATION: 6 seconds', $this->auditor->fieldValue($result['content'], 'CLIP DURATION'));
-        $this->assertStringContainsString('- Clip 1 — 6 seconds', $result['content']);
-        $this->assertStringContainsString('Exact duration: 6 seconds', $result['content']);
-        $this->assertStringContainsString('Estimated overall running time: 00:39', $result['content']);
-        $this->assertStringContainsString('LINE: “The glass bottle is glowing.”', $result['content']);
-        $this->assertStringContainsString('LINE: “The bottle remains clear and smooth.”', $result['content']);
+        $this->assertSame($afterPlan->totalRuntimeSeconds(), (float) array_sum(array_column($afterPlan->clipPlanDurations, 'seconds')));
+        foreach ($afterPlan->clips as $clip) {
+            $this->assertLessThanOrEqual(10, $clip['duration_seconds']);
+        }
+        $this->assertTrue($this->auditor->preservesSpokenContent($content, $result['content'], $input));
         $this->assertContains('continuity_state_mismatch', array_column($result['repair_report']['fixed'], 'code'));
         $this->assertContains('speech_overrun', array_column($result['repair_report']['fixed'], 'code'));
-        $this->assertContains('speech_leaves_no_visual_tail', array_column($result['repair_report']['fixed'], 'code'));
+        $this->assertContains('speech_overrun', array_column($result['repair_report']['unresolved'], 'code'));
         $this->assertSame([], $result['repair_report']['new_issues']);
+        $this->assertSame($afterReview['issues'], $result['repair_report']['unresolved']);
+    }
+
+    public function test_six_clip_speech_and_handoff_repairs_can_pass_when_original_pauses_fit_legal_budgets(): void
+    {
+        [$content, $input] = $this->reconstructedSixClipGlassBottleFixture();
+        // Keep real pauses, but do not place the second action near the end of each clip.
+        $content = preg_replace('/- [0-9.]+–[0-9.]+s \| VISIBLE ACTION: the bottle advances/u', '- 2.7–3.65s | VISIBLE ACTION: the bottle advances', $content);
+        $generation = Mockery::mock(PromptGenerationService::class);
+        $generation->shouldReceive('requestTargetedRepair')->once()->andReturn(implode("\n", array_map(
+            static fn (int $pair): string => 'PAIR '.$pair.' PHYSICAL STATE: PRIOR_ENDING', range(1, 5),
+        )));
+        $settings = new AiSetting(['provider' => 'gemini', 'model' => 'test-model', 'api_key' => 'test-secret']);
+        $result = (new PromptRepairService($this->auditor, $generation))->repair($settings, $content, $input);
+        $plan = $this->auditor->canonicalProjectPlan($result['content'], $input);
+
+        $this->assertTrue($result['repair_report']['applied']);
+        $this->assertSame('passed', $result['quality_review']['status']);
         $this->assertSame([], $result['repair_report']['unresolved']);
+        $this->assertSame([], $result['repair_report']['new_issues']);
+        $this->assertSame(6, $plan->clipCount());
+        $this->assertTrue($this->auditor->preservesSpokenContent($content, $result['content'], $input));
+        $this->assertSame($plan->totalRuntimeSeconds(), $plan->overviewRuntimes[0]['seconds']);
+        $this->assertSame($plan->totalRuntimeSeconds(), (float) array_sum(array_column($plan->clipPlanDurations, 'seconds')));
+        foreach ($plan->clips as $clip) {
+            $this->assertLessThanOrEqual(10, $clip['duration_seconds']);
+        }
     }
 
     public function test_same_rejected_no_progress_signature_is_blocked_but_retryable_provider_failures_are_not(): void
@@ -217,12 +243,12 @@ class PromptRepairServiceTest extends TestCase
         $result = $service->repair(null, $content, $this->input());
 
         $this->assertContains('speech_rows_overlap', array_column($before['issues'], 'code'));
-        $this->assertSame('CLIP DURATION: 5 seconds', $this->auditor->fieldValue($result['content'], 'CLIP DURATION'));
+        $this->assertSame('5 seconds', $this->auditor->fieldValue($result['content'], 'CLIP DURATION'));
         $this->assertStringContainsString('- Clip 1 — 5 seconds', $result['content']);
         $this->assertStringContainsString('Exact duration: 5 seconds', $result['content']);
         $this->assertStringContainsString('- Approximate total runtime: 5 seconds', $result['content']);
         $this->assertStringContainsString('- 0.2–2.2s | VISIBLE ACTION: the bee gathers pollen | SPEAKER: Narrator | LINE: “The bee carries pollen.”', $result['content']);
-        $this->assertStringContainsString('- 2.4–4.4s | VISIBLE ACTION: the bee reaches another bloom | SPEAKER: Narrator | LINE: “It reaches another flower.”', $result['content']);
+        $this->assertStringContainsString('- 2.4–4.2s | VISIBLE ACTION: the bee reaches another bloom | SPEAKER: Narrator | LINE: “It reaches another flower.”', $result['content']);
         $this->assertSame('passed', $result['quality_review']['status']);
         $this->assertSame([], $result['repair_report']['new_issues']);
         $this->assertTrue($result['repair_report']['applied']);
@@ -305,7 +331,7 @@ class PromptRepairServiceTest extends TestCase
         $result = $service->repair(null, $content, $this->input(['narration' => '0']));
 
         $this->assertContains('declared_duration_constraint_violation', array_column($before['issues'], 'code'));
-        $this->assertSame('CLIP DURATION: 7 seconds', $this->auditor->fieldValue($result['content'], 'CLIP DURATION'));
+        $this->assertSame('7 seconds', $this->auditor->fieldValue($result['content'], 'CLIP DURATION'));
         $this->assertStringContainsString('- Clip 1 — 7 seconds', $result['content']);
         $this->assertStringContainsString('Exact duration: 7 seconds', $result['content']);
         $this->assertStringContainsString('- Approximate total runtime: 7 seconds', $result['content']);
@@ -330,7 +356,7 @@ class PromptRepairServiceTest extends TestCase
         $result = $service->repair(null, $content, $this->input());
 
         $this->assertSame($content, $result['content']);
-        $this->assertSame('CLIP DURATION: 4 seconds', $this->auditor->fieldValue($result['content'], 'CLIP DURATION'));
+        $this->assertSame('4 seconds', $this->auditor->fieldValue($result['content'], 'CLIP DURATION'));
         $this->assertContains('clip_plan_duration_missing', array_column($result['repair_report']['unresolved'], 'code'));
         $this->assertContains('speech_rows_overlap', array_column($result['repair_report']['unresolved'], 'code'));
         $this->assertNotContains('speech_rows_overlap', array_column($result['repair_report']['fixed'], 'code'));
@@ -339,7 +365,7 @@ class PromptRepairServiceTest extends TestCase
     public function test_final_audit_claims_are_rephrased_from_qa_evidence_and_remaining_findings_stay_unresolved(): void
     {
         $state = 'cast=None; object=turning gear; stage=rotating; environment=workshop';
-        $dialogue = '“One two three four five six seven eight nine ten eleven twelve thirteen fourteen fifteen sixteen seventeen eighteen nineteen twenty twenty-one twenty-two twenty-three.”';
+        $dialogue = '“One two three four five six seven eight nine ten eleven twelve thirteen fourteen fifteen sixteen seventeen eighteen nineteen twenty twenty-one twenty-two twenty-three twenty-four twenty-five twenty-six twenty-seven twenty-eight twenty-nine thirty thirty-one thirty-two thirty-three thirty-four thirty-five.”';
         $row = '- 0.0–1.0s | VISIBLE ACTION: the gear turns | SPEAKER: Narrator | LINE: '.$dialogue;
         $clip = $this->clip(1, 'INITIAL CLIP — NO PREVIOUS HANDOFF', 'FINAL — NO NEXT HANDOFF', $state, $state, duration: 4, speechRows: [$row]);
         $content = $clip."\n\n### FINAL CONTINUITY AUDIT\n- All clip durations are synchronized, and every spoken line respects natural pacing.";
@@ -481,8 +507,8 @@ class PromptRepairServiceTest extends TestCase
 
         $this->assertContains('speech_time_range_invalid', array_column($negativeBefore['issues'], 'code'));
         $this->assertContains('speech_exceeds_clip', array_column($beyondBefore['issues'], 'code'));
-        $this->assertStringContainsString('- 0.2–2.6s | VISIBLE ACTION:', $negativeResult['content']);
-        $this->assertStringContainsString('- 0.2–2.6s | VISIBLE ACTION:', $beyondResult['content']);
+        $this->assertStringContainsString('- 0.2–2.4s | VISIBLE ACTION:', $negativeResult['content']);
+        $this->assertStringContainsString('- 3.0–5.2s | VISIBLE ACTION:', $beyondResult['content']);
         $this->assertSame('passed', $negativeResult['quality_review']['status']);
         $this->assertSame('passed', $beyondResult['quality_review']['status']);
     }
@@ -491,7 +517,7 @@ class PromptRepairServiceTest extends TestCase
     {
         $state = 'cast=None; object=glowing seed; stage=ready to plant; environment=greenhouse';
         $presentation = 'camera=static macro; lighting=warm; audio=quiet ambience';
-        $dialogue = '“One two three four five six seven eight nine ten eleven twelve thirteen fourteen fifteen sixteen seventeen eighteen nineteen twenty.”';
+        $dialogue = '“One two three four five six seven eight nine ten eleven twelve thirteen fourteen fifteen sixteen seventeen eighteen nineteen twenty twenty-one twenty-two twenty-three.”';
         $row = '- 0.0–4.0s | VISIBLE ACTION: the seed glows steadily | SPEAKER: Narrator | LINE: '.$dialogue;
         $content = $this->clip(1, 'INITIAL CLIP — NO PREVIOUS HANDOFF', 'FINAL — NO NEXT HANDOFF', $state, $state, $presentation, $presentation, duration: 4, speechRows: [$row]);
         $service = new PromptRepairService($this->auditor, Mockery::mock(PromptGenerationService::class));
@@ -499,7 +525,7 @@ class PromptRepairServiceTest extends TestCase
         $aiResult = $service->repair(null, $content, $this->input());
         $manualResult = $service->repair(null, $content, $this->input(['clip_duration' => 4]));
 
-        $this->assertSame('CLIP DURATION: 10 seconds', $this->auditor->fieldValue($aiResult['content'], 'CLIP DURATION'));
+        $this->assertSame('10 seconds', $this->auditor->fieldValue($aiResult['content'], 'CLIP DURATION'));
         $this->assertSame('passed', $aiResult['quality_review']['status']);
         $this->assertStringContainsString($dialogue, $aiResult['content']);
         $this->assertSame($content, $manualResult['content']);
@@ -511,7 +537,7 @@ class PromptRepairServiceTest extends TestCase
     {
         $state = 'cast=None; object=spinning gear; stage=rotating; environment=workshop';
         $presentation = 'camera=close-up; lighting=neutral; audio=machine hum';
-        $dialogue = '“One two three four five six seven eight nine ten eleven twelve thirteen fourteen fifteen sixteen seventeen eighteen nineteen twenty twenty-one twenty-two twenty-three.”';
+        $dialogue = '“One two three four five six seven eight nine ten eleven twelve thirteen fourteen fifteen sixteen seventeen eighteen nineteen twenty twenty-one twenty-two twenty-three twenty-four twenty-five twenty-six twenty-seven twenty-eight twenty-nine thirty thirty-one thirty-two thirty-three thirty-four thirty-five.”';
         $row = '- 0.0–4.0s | VISIBLE ACTION: the gear rotates | SPEAKER: Narrator | LINE: '.$dialogue;
         $content = $this->clip(1, 'INITIAL CLIP — NO PREVIOUS HANDOFF', 'FINAL — NO NEXT HANDOFF', $state, $state, $presentation, $presentation, duration: 4, speechRows: [$row]);
         $service = new PromptRepairService($this->auditor, Mockery::mock(PromptGenerationService::class));
