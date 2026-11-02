@@ -4,8 +4,10 @@ namespace App\Http\Controllers;
 
 use App\Models\AiSetting;
 use App\Models\PromptProject;
+use App\Services\PromptGenerationException;
 use App\Services\PromptOutputAuditor;
 use App\Services\PromptRepairService;
+use App\Services\StoryContinuationService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -229,6 +231,7 @@ class PromptRepairController extends Controller
             ];
 
             $locked->content = $result['content'];
+            $this->refreshStoryState($locked);
             $locked->quality_review = $this->preserveFirstPass($result['quality_review'], $locked);
             if ($locked->original_content === null) {
                 // Older saved runs predate the original-content column; preserve their
@@ -311,6 +314,7 @@ class PromptRepairController extends Controller
             ];
 
             $locked->content = $original;
+            $this->refreshStoryState($locked);
             $locked->quality_review = $review;
             $locked->repair_history = $history;
             $locked->save();
@@ -361,6 +365,25 @@ class PromptRepairController extends Controller
             'repair_url' => route('history.repair', $fresh, false),
             'restore_url' => route('history.restore', $fresh, false),
         ]);
+    }
+
+    private function refreshStoryState(PromptProject $project): void
+    {
+        if (($project->brief['content_form'] ?? 'short') !== 'long' || $project->mode !== 'story') {
+            return;
+        }
+        $context = $project->story_context ?? [];
+        try {
+            // Repairs refresh existing evidence, never bootstrap missing state or invent memory.
+            if (! isset($context['batch_state']) || ($context['status'] ?? null) !== $project->story_status) {
+                throw new PromptGenerationException('Missing persisted story state.');
+            }
+            $project->story_context = (new StoryContinuationService(new PromptOutputAuditor))->refreshBatchState(
+                $project->content, $project->brief, $context, $project->story_status);
+        } catch (PromptGenerationException) {
+            // Preserve the existing repair/restore result, but do not certify invalid continuation state.
+            $project->story_context = [...$context, 'batch_state' => null];
+        }
     }
 
     /** Original generation evidence must not become the result of a later repair/re-audit/restore. */

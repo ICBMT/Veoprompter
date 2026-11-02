@@ -57,7 +57,7 @@ class StoryContinuationTest extends TestCase
         $owner = User::factory()->create();
         $this->connect();
         $studio = $owner->studioProjects()->create(['name' => 'Long story', 'settings' => [...ProjectSettings::defaults(), 'content_form' => 'long']]);
-        $text = $this->generation()['content'];
+        $text = trim($this->generation()['content']);
         Http::fake(['*' => Http::response(['candidates' => [['content' => ['parts' => [['text' => $text]]]]]])]);
         $this->actingAs($owner)->postJson(route('studio.generate', $studio), ['mode' => 'story', 'topic' => 'The wheel investigation'])
             ->assertOk()->assertJsonPath('run.story_status', 'open')->assertJsonPath('saved_to_history', true);
@@ -67,6 +67,110 @@ class StoryContinuationTest extends TestCase
         $this->assertNotEmpty($saved->story_context['memory']['open_threads']);
         $this->assertSame($text, $saved->original_content);
         $this->get(route('history.show', $saved))->assertOk()->assertSee('Generate next clips')->assertSee('Generate ending');
+        $this->assertSame('open', $saved->story_context['status']);
+        $this->assertSame(hash('sha256', $saved->content), $saved->story_context['batch_state']['content_sha256']);
+        $this->assertSame(2, $saved->story_context['batch_state']['clip_count']);
+        $this->assertSame(PromptQaCases::state(), $saved->story_context['batch_state']['ending_state']);
+        $this->assertNotEmpty($saved->story_context['batch_state']['ending_presentation']);
+        Http::assertSent(fn ($request) => str_contains(json_encode($request->data()), 'sole exception') && str_contains(json_encode($request->data()), 'three separate'));
+        $this->mock(PromptGenerationService::class, function (MockInterface $mock): void {
+            $mock->shouldReceive('generateWithQualityReview')->once()->andReturn($this->generation());
+        });
+        $response = $this->postJson(route('history.continue', $saved), $this->payload('continue'))->assertOk();
+        $this->assertSame($saved->id, PromptProject::findOrFail($response->json('id'))->parent_prompt_id);
+        $this->assertSame($text, $saved->fresh()->content);
+
+    }
+
+    public function test_opening_state_is_captured_after_serialization_and_automatic_repairs(): void
+    {
+        $owner = User::factory()->create();
+        $this->connect();
+        $studio = $owner->studioProjects()->create(['name' => 'Long story', 'settings' => [...ProjectSettings::defaults(), 'content_form' => 'long']]);
+        $raw = str_replace('0.2–2.2s', '0.0–2.0s', PromptQaCases::template()).StoryContinuationCases::footer();
+        Http::fake(['*' => Http::response(['candidates' => [['content' => ['parts' => [['text' => $raw]]]]]])]);
+        $this->actingAs($owner)->postJson(route('studio.generate', $studio), ['mode' => 'story', 'topic' => 'A connected investigation'])
+            ->assertOk()->assertJsonPath('saved_to_history', true);
+        $saved = $owner->promptProjects()->firstOrFail();
+        $this->assertStringNotContainsString('{{VEO_', $saved->content);
+        $this->assertNotSame(hash('sha256', trim($raw)), $saved->story_context['batch_state']['content_sha256']);
+        $this->assertSame(hash('sha256', $saved->content), $saved->story_context['batch_state']['content_sha256']);
+        $this->assertTrue($saved->quality_review['corrected']);
+        $this->assertSame($saved->content, $saved->original_content);
+        (new StoryContinuationService(new PromptOutputAuditor))->prepare($saved->content, $saved->brief, $saved->story_context, 'open', 'continue', '', 'set');
+        Http::assertSentCount(1);
+    }
+
+    public function test_invalid_long_openings_are_errors_not_successful_unsaved_or_invented_stories(): void
+    {
+        $owner = User::factory()->create();
+        $this->connect();
+        $studio = $owner->studioProjects()->create(['name' => 'Long story', 'settings' => [...ProjectSettings::defaults(), 'content_form' => 'long']]);
+        foreach ([PromptQaCases::package(), PromptQaCases::package().StoryContinuationCases::footer('ended'),
+            $this->generation()['content']."STORY STATUS: OPEN\n",
+            str_replace('STORY MEMORY: {', 'STORY MEMORY: invalid {', $this->generation()['content'])] as $text) {
+            Http::fake(['*' => Http::response(['candidates' => [['content' => ['parts' => [['text' => $text]]]]]])]);
+            $this->actingAs($owner)->postJson(route('studio.generate', $studio), ['mode' => 'story', 'topic' => 'A connected investigation'])->assertStatus(502);
+            $this->assertSame(0, $owner->promptProjects()->count());
+        }
+    }
+
+    public function test_continuation_rejects_missing_stale_or_tampered_persisted_state_without_changing_source(): void
+    {
+        $owner = User::factory()->create();
+        $source = $this->source($owner, 'long');
+        $good = $source->story_context;
+        $this->connect();
+        Http::fake();
+        $badStates = [[], array_diff_key($good, ['memory' => true]), array_diff_key($good, ['batch_state' => true]),
+            [...$good, 'status' => 'ended'], [...$good, 'memory' => [...$good['memory'], 'summary' => 'Invented outcome']],
+            [...$good, 'batch_state' => [...$good['batch_state'], 'ending_state' => 'A different ending']],
+            [...$good, 'batch_state' => [...$good['batch_state'], 'content_sha256' => str_repeat('0', 64)]]];
+        foreach ($badStates as $bad) {
+            $source->update(['story_context' => $bad]);
+            $this->actingAs($owner)->postJson(route('history.continue', $source), $this->payload('continue'))->assertStatus(502);
+            $this->assertSame($source->content, $source->fresh()->content);
+            $this->assertSame($source->original_content, $source->fresh()->original_content);
+        }
+        Http::assertNothingSent();
+        $this->assertSame(1, $owner->promptProjects()->count());
+    }
+
+    public function test_long_opening_is_not_reported_successful_when_atomic_history_save_fails(): void
+    {
+        $owner = User::factory()->create();
+        $this->connect();
+        $studio = $owner->studioProjects()->create(['name' => 'Long story', 'settings' => [...ProjectSettings::defaults(), 'content_form' => 'long']]);
+        $this->mock(PromptGenerationService::class, function (MockInterface $mock): void {
+            $mock->shouldReceive('generateWithQualityReview')->once()->andReturn($this->generation());
+        });
+        // Fail after the source INSERT, proving the transaction rolls back the incomplete save.
+        \Illuminate\Support\Facades\Event::listen('eloquent.created: '.PromptProject::class, function (): void {
+            throw new \RuntimeException('Synthetic storage failure');
+        });
+        $this->actingAs($owner)->postJson(route('studio.generate', $studio), ['mode' => 'story', 'topic' => 'A connected investigation'])
+            ->assertStatus(503)->assertJsonPath('saved_to_history', false);
+        $this->assertSame(0, $owner->promptProjects()->count());
+    }
+
+    public function test_repair_and_restore_keep_long_form_snapshot_bound_to_the_actual_saved_batch(): void
+    {
+        $owner = User::factory()->create();
+        $source = $this->source($owner, 'long');
+        $content = str_replace('0.2–2.2s', '0.0–2.0s', $source->content);
+        $stories = new StoryContinuationService(new PromptOutputAuditor);
+        $source->update(['content' => $content, 'original_content' => $content,
+            'story_context' => $stories->refreshBatchState($content, $source->brief, $source->story_context, 'open')]);
+        $this->actingAs($owner)->postJson(route('history.repair', $source))->assertOk()->assertJsonPath('repair_report.applied', true);
+        $source->refresh();
+        $this->assertNotSame($content, $source->content);
+        $this->assertSame(hash('sha256', $source->content), $source->story_context['batch_state']['content_sha256']);
+        $stories->prepare($source->content, $source->brief, $source->story_context, 'open', 'continue', '', 'set');
+        $this->postJson(route('history.restore', $source))->assertOk();
+        $source->refresh();
+        $this->assertSame($content, $source->content);
+        $this->assertSame(hash('sha256', $content), $source->story_context['batch_state']['content_sha256']);
+        $stories->prepare($source->content, $source->brief, $source->story_context, 'open', 'continue', '', 'set');
     }
 
     public function test_continuations_require_authentication_and_ownership(): void
@@ -167,6 +271,24 @@ class StoryContinuationTest extends TestCase
         });
         $this->actingAs($owner)->postJson(route('history.continue', $source), $this->payload())->assertStatus(409);
         $this->assertDatabaseCount('prompt_projects', 1);
+    }
+
+    public function test_state_only_changes_during_generation_cannot_attach_a_child_to_an_obsolete_snapshot(): void
+    {
+        $owner = User::factory()->create();
+        $source = $this->source($owner, 'long');
+        $original = $source->content;
+        $this->connect();
+        $this->mock(PromptGenerationService::class, function (MockInterface $mock) use ($source): void {
+            $mock->shouldReceive('generateWithQualityReview')->once()->andReturnUsing(function () use ($source): array {
+                $source->update(['story_context' => [...$source->story_context, 'status' => 'ended']]);
+
+                return $this->generation();
+            });
+        });
+        $this->actingAs($owner)->postJson(route('history.continue', $source), $this->payload('continue'))->assertStatus(409);
+        $this->assertDatabaseCount('prompt_projects', 1);
+        $this->assertSame($original, $source->fresh()->content);
     }
 
     public function test_direction_and_explicit_new_subject_permission_are_validated(): void

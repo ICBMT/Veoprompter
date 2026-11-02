@@ -53,7 +53,7 @@ final class StoryContinuationService
             throw new PromptGenerationException('The initial bible is too large for safe continuation. Shorten it rather than discarding canonical context.');
         }
 
-        return [
+        $context = [
             'version' => 1,
             'canon' => $prefix,
             'anchors' => $anchors,
@@ -61,6 +61,13 @@ final class StoryContinuationService
             'memory' => $long ? $this->memory($content, 'open') : null,
             'recipe_clip_count' => $brief['clip_count'] ?? ProjectSettings::AI_CHOICE,
         ];
+        if ($long) {
+            $context = $this->refreshBatchState($content, $brief, $context, 'open');
+            // Do not advertise a successful opening that immediately fails the continuation gate.
+            $this->prepare($content, $brief, $context, 'open', 'continue', '', 'set');
+        }
+
+        return $context;
     }
 
     public function prepare(string $content, array $brief, array $savedContext, string $status, string $intent, string $direction, string $size, bool $allowNewSubjects = false): array
@@ -84,6 +91,9 @@ final class StoryContinuationService
             }
         }
         // Re-read current source after a repair; saved memory must never override the actual last frame.
+        if (($brief['content_form'] ?? 'short') === 'long') {
+            $this->validateBatchState($content, $brief, $savedContext, $status);
+        }
         $source = $savedContext ?: $this->initial($content, [...$brief, 'content_form' => 'short']);
         if ($source === []) {
             throw new PromptGenerationException('The source identity bible is ambiguous. Resolve it before continuing.');
@@ -175,8 +185,68 @@ final class StoryContinuationService
             throw new PromptGenerationException('The accumulated identity ledger exceeded its safe context budget. No identity was discarded and no continuation was saved.');
         }
 
-        return ['version' => 1, 'canon' => $canon, 'anchors' => $anchors, 'approved_cast' => $cast,
+        $saved = ['version' => 1, 'canon' => $canon, 'anchors' => $anchors, 'approved_cast' => $cast,
             'memory' => $this->memory($content, $context['target_status']), 'recipe_clip_count' => $context['recipe_clip_count']];
+        if (($input['content_form'] ?? 'short') === 'long') {
+            $saved = $this->refreshBatchState($content, $input, $saved, $context['target_status']);
+        }
+
+        return $saved;
+    }
+
+    /** Bind existing explicit memory to the current completed text, also after an authorized repair/restore. */
+    public function refreshBatchState(string $content, array $brief, array $context, string $status): array
+    {
+        if (($brief['content_form'] ?? 'short') !== 'long' || ($brief['mode'] ?? 'story') !== 'story') {
+            return $context;
+        }
+        $this->validateMemoryAgainstBatch($content, $context, $status);
+
+        return [...$context, 'status' => $status, 'batch_state' => $this->batchState($content, $brief)];
+    }
+
+    private function validateMemoryAgainstBatch(string $content, array $context, string $status): void
+    {
+        if (! in_array($status, ['open', 'ended'], true)) {
+            throw new PromptGenerationException('The saved story status is invalid. The source story is unchanged.');
+        }
+        $memory = $this->memory($content, $status);
+        if (! is_array($context['memory'] ?? null) || count($context['memory']) !== count($memory)) {
+            throw new PromptGenerationException('The saved compact memory is missing or invalid. The source story is unchanged.');
+        }
+        foreach (['summary', 'open_threads', 'resolved_threads', 'important_facts'] as $key) {
+            if (($context['memory'][$key] ?? null) !== $memory[$key]) {
+                throw new PromptGenerationException('The saved compact memory is missing or does not match the latest completed batch. The source story is unchanged.');
+            }
+        }
+    }
+
+    private function batchState(string $content, array $brief): array
+    {
+        $clips = $this->auditor->extractClips($content, $brief);
+        $last = $clips === [] ? null : $clips[array_key_last($clips)];
+        $ending = $last ? $this->auditor->fieldValue($last['text'], 'ENDING CONTINUITY STATE') : null;
+        $presentation = $last ? $this->auditor->fieldValue($last['text'], 'ENDING PRESENTATION STATE') : null;
+        if (! $ending || ! $presentation) {
+            throw new PromptGenerationException('The latest completed batch needs an unambiguous ending continuity state and ending presentation state. The source story is unchanged.');
+        }
+
+        return ['content_sha256' => hash('sha256', $content), 'clip_count' => count($clips),
+            'last_clip_number' => $last['number'], 'last_clip_sha256' => hash('sha256', $last['text']),
+            'ending_state' => $ending, 'ending_presentation' => $presentation];
+    }
+
+    private function validateBatchState(string $content, array $brief, array $context, string $status): void
+    {
+        $this->validateMemoryAgainstBatch($content, $context, $status);
+        if (($context['status'] ?? null) !== $status || ! is_array($context['batch_state'] ?? null)) {
+            throw new PromptGenerationException('The persisted story status or final-batch state is missing or invalid. The source story is unchanged.');
+        }
+        foreach ($this->batchState($content, $brief) as $key => $value) {
+            if (($context['batch_state'][$key] ?? null) !== $value) {
+                throw new PromptGenerationException('The persisted story state does not match the latest completed batch. The source story is unchanged.');
+            }
+        }
     }
 
     /** Reuse the exact A/B/C validators at the junction while keeping local batch numbering unchanged. */
@@ -274,7 +344,10 @@ final class StoryContinuationService
         $instructions .= $target === 'ended'
             ? "The user chose END STORY. Generate a meaningful final batch that resolves the current part's established goals and open threads; no cliffhanger or unfulfilled promise. Do not introduce a new arc just to pad clips.\n"
             : "Keep this part OPEN. Advance it with substantive connected beats; do not resolve the whole story, show The End, a final farewell, or a closing recap. End this batch at a clear continuation point with at least one specific unresolved thread. A new part is a sequel that respects prior outcomes, never a reset, replay or retcon.\n";
-        $instructions .= 'After all existing output sections, add SECTION 11 — STORY MEMORY (outside every copy-ready fence). Exactly once write STORY STATUS: '.strtoupper($target)." and STORY MEMORY: followed by ONE LINE of valid JSON with summary (nonempty, max 8000 bytes), open_threads, resolved_threads, important_facts (arrays of at most 40 concise strings, each max 1000 bytes; total JSON max 20000 bytes). OPEN requires a real open thread; ENDED requires an empty open_threads array. This is compact factual story memory, not private reasoning. Carry forward story-critical prior causes, decisions, relationships and resolved outcomes while updating the current unresolved threads. Do not infer rendered footage or external research.\n";
+        $instructions .= "For this story batch, the following footer is the sole exception to the general 'Do not output JSON' rule: only the STORY MEMORY value is JSON; all ordinary prompt sections stay in their existing plain-text format. After ALL existing sections and outside EVERY copy-ready fence, emit these three separate, unformatted lines exactly once (replace the schema descriptions with factual values from this completed batch):\n";
+        $openThreads = $target === 'ended' ? '[]' : '["Specific unresolved thread"]';
+        $instructions .= "SECTION 11 — STORY MEMORY\nSTORY STATUS: ".strtoupper($target)."\nSTORY MEMORY: {\"summary\":\"Established events and current situation so far\",\"open_threads\":{$openThreads},\"resolved_threads\":[],\"important_facts\":[]}\n";
+        $instructions .= "Do not combine STORY STATUS and STORY MEMORY on one line or wrap their labels/JSON in markdown. The JSON must occupy exactly one line: summary is nonempty (max 8000 bytes); open_threads, resolved_threads and important_facts are arrays of at most 40 concise strings each (max 1000 bytes/string, max 20000 bytes total JSON). OPEN requires a real open thread; ENDED requires open_threads: []. Describe only the actual completed batch and carry forward established causes, decisions, relationships and outcomes. Never use placeholder/example facts. This is factual compact story memory, not private reasoning, rendered-footage evidence or external research. Preserve this footer during any correction, updating it only to reflect actual corrected content.\n";
         if ($context !== null) {
             if (($input['clip_count'] ?? null) === 1) {
                 $instructions .= "The user explicitly chose ONE NEXT CLIP for this continuation: emit exactly one COPY CLIP 1 PROMPT, with local INITIAL and FINAL markers. This scoped single-clip request overrides the ordinary new-project manual-count menu; it does not change future set-count preferences. If the requested action cannot fit its legal duration, report the conflict rather than secretly adding clips or rushing.\n";

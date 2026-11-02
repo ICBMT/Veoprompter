@@ -65,7 +65,9 @@ class StoryContinuationController extends Controller
                     'detail' => 'Opening state and presentation match source kit '.$project->id.' literally; memory/status structure was checked. This is text evidence, not a rendered-video or plot-factuality guarantee.'];
                 $child = DB::transaction(function () use ($request, $project, $sourceHash, $input, $generation, $context, $settings, $data, $key, $requestHash) {
                     $source = PromptProject::query()->whereKey($project->id)->lockForUpdate()->first();
-                    abort_unless($source && (int) $source->user_id === (int) $request->user()->id && hash('sha256', $source->content) === $sourceHash, 409,
+                    abort_unless($source && (int) $source->user_id === (int) $request->user()->id && hash('sha256', $source->content) === $sourceHash
+                        && $source->story_status === $project->story_status && $source->story_context === $project->story_context
+                        && $source->brief === $project->brief, 409,
                         'The source was edited or deleted during generation. Reload it and retry with the current ending.');
                     $part = $source->story_part + ($data['intent'] === 'sequel' ? 1 : 0);
                     $batch = $data['intent'] === 'sequel' ? 1 : $source->story_batch + 1;

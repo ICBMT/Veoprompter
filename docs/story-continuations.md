@@ -74,7 +74,7 @@ The extension already excludes trailing sections from video chunks; a regression
 
 A per-owner/source/request UUID maps to a unique database key. A 360-second cache lease covers the two existing 120-second provider calls without holding a database transaction open over network work. Identical retries reuse the saved child instead of generating again; reused IDs with changed directions are rejected. The browser disables controls while generating, preserves the request ID on errors, and creates a new ID when the direction/options change. Both endpoints and result navigation must be same-origin.
 
-Immediately before saving, a short transaction locks/re-reads the source and compares its content hash. If another action edited/deleted it while generation was running, the result is rejected rather than attaching to an obsolete ending. The original kit and its repair history are never replaced. As with other provider calls, charges may still occur for a generated candidate rejected by validation; no automatic retry or extra story-specific provider call is hidden here.
+Immediately before saving, a short transaction locks/re-reads the source and compares its content hash, persisted status/context and brief. If another action edited/deleted it while generation was running, the result is rejected rather than attaching to an obsolete ending. The original kit and its repair history are never replaced. As with other provider calls, charges may still occur for a generated candidate rejected by validation; no automatic retry or extra story-specific provider call is hidden here.
 
 ## Verification and deployment
 
@@ -95,4 +95,31 @@ Executed here with a standalone native PHP 8.4 CLI:
 - **43** Node tests (6 new story UI tests plus 37 extension tests);
 - changed/new non-Blade PHP syntax checks, changed JS syntax checks and protected-file/diff checks.
 
-Laravel database/auth/HTTP Feature tests were added for owner isolation, initial long-form generation, linked sequels/endings, UI availability, replay/lock behavior, invalid input, junction rejection and concurrent source editing. Composer/vendor dependencies are unavailable here, so those Feature tests, real Blade rendering, browser end-to-end and migration execution remain **unexecuted**. Run them in your PHP/Composer-enabled test deployment. No live-provider, rendered-video or long-story model-quality benchmark was performed. A compact memory record and text-based heuristics cannot establish perfect narrative recall, physical continuity or factual accuracy.
+Laravel database/auth/HTTP Feature tests were added for owner isolation, initial long-form generation, linked sequels/endings, UI availability, replay/lock behavior, invalid input, junction rejection and concurrent source editing. Those tests were originally unexecuted without dependencies; see the follow-up verification below for the now-running native Laravel/PHPUnit environment. Browser end-to-end remains unexecuted. Run them in your PHP/Composer-enabled test deployment. No live-provider, rendered-video or long-story model-quality benchmark was performed. A compact memory record and text-based heuristics cannot establish perfect narrative recall, physical continuity or factual accuracy.
+
+
+## Long-form opening state integrity fix
+
+Inspection found contradictory provider instructions: the general plain-text contract prohibited JSON, while compact memory required JSON; the footer instruction also described status and memory together rather than showing separate lines. The long-form-only addendum now explicitly permits JSON solely for the memory value and shows separate plain labels and a one-line JSON schema. Missing/malformed/duplicate metadata still fails validation—no fallback summary, inferred status, source rewrite or story-specific patch is supplied.
+
+Previously the opening context stored memory/canon but not an explicit current-batch snapshot, and `prepare()` trusted cached memory without comparing it to the current source footer. New long-form openings now:
+
+1. Validate explicit OPEN status and compact factual memory from the **final serialized/repaired** output.
+2. Capture the final scene/presentation state, final-clip number/hash, clip count and full-content hash in `story_context.batch_state`, with the validated status in `story_context.status`.
+3. Pass the same continuation-readiness checks before being saved. Save content, status and context atomically; a failed long-form history save returns an error, never a successful but unsaved opening. Existing short-form save behavior stays unchanged.
+4. On continuation, re-read and validate actual-batch memory/status and compare the persisted snapshot with the latest source. A missing/invalid/stale snapshot is rejected without generating or modifying the source. The commit guard also rejects a concurrent context/status/brief-only change.
+
+Authorized existing repair/restore actions refresh an already-valid snapshot from the actual saved result in the same transaction. They do not invent missing memory or bootstrap missing legacy state; invalid state remains blocked while normal repair/restore behavior is preserved. Old sources without the required persisted snapshot are deliberately **not silently backfilled or rebuilt**. No new migration is needed: these fields use the existing private JSON context column.
+
+Regression coverage includes newly generated opening → persisted state → successful continuation, canonical reference expansion and automatic repairs before capture, missing/ended/ambiguous/malformed metadata rejection, stale/tampered cached state, transactional save failure, normal repair/restore, concurrent state-only edits and multiple synthetic subject topics.
+
+### Native PHP/Composer test environment follow-up
+
+The sandbox now has PHP 8.4.21, actual Laravel 13.39.0 and PHPUnit 12.5.33 dependencies (all satisfy the project's declared constraints), installed into ignored `vendor/`. The official Composer release asset route was blocked. A working Composer 2.2.25 bundled in the official WP-CLI GitHub phar was used instead, with plugins/scripts disabled. A temporary local Composer metadata repository was assembled from public GitHub lockfiles/package manifests; package archives came from their GitHub distribution URLs. Temporary metadata, lockfile, downloads and launchers remain outside Git under `/home/user/.cache/composer`; application dependency requirements were not edited.
+
+This NativePHP binary lacks XMLWriter. Dependency resolution therefore ignored **only** `ext-xmlwriter`, and tests used the unmodified `PHPUnit\TextUI\Application` via a temporary console launcher rather than PHPUnit's CLI extension preflight. No XMLWriter shim, fake PHPUnit assertions, framework doubles or skipped failing tests were installed. XML reports/coverage and tests using that unavailable extension remain unsupported here. Normal deployment/testing should install full PHP extensions and use the standard Composer/PHPUnit commands.
+
+The complete suite was also run against an isolated `git archive` of the pre-fix HEAD with the identical dependencies. It already had 27 errors and 14 failures (including non-existent assertion methods, unit tests lacking a Laravel config container, stale UI/prompt string assertions and a provider-trimming expectation). Those unrelated failures are not silently repaired in this focused change. The post-fix suite has no newly failing test names; the opening regression's provider-whitespace expectation was corrected without changing production trimming. Provider calls are HTTP-faked; no live model or rendered-video quality guarantee follows from these results.
+
+
+Final checks for this fix: **44 focused PHPUnit tests / 422 assertions passed**, **49 standalone story assertions**, **851 refinement assertions**, **79 planning assertions**, and **49 Node tests**. Full-suite comparison: **373 tests, 27 errors, 13 failures** after the fix versus **367 tests, 27 errors, 14 failures** at pre-fix HEAD; no new failing test names. These broader failures remain visible and are not a claim of a fully green suite.

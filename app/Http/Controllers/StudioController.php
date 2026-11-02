@@ -13,6 +13,7 @@ use App\Support\ProjectSettings;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Arr;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 use Throwable;
@@ -110,26 +111,35 @@ class StudioController extends Controller
                 ? $title
                 : (string) ($validated['mode'] === 'extend' ? ($validated['next_action'] ?? 'Video extension') : ($validated['topic'] ?? 'Video prompt'));
 
-            $run = $request->user()->promptProjects()->create([
-                'studio_project_id' => $studioProject->id,
-                'title' => Str::limit($title, 160, ''),
-                'mode' => $validated['mode'],
-                'brief' => $brief,
-                'content' => $content,
-                'original_content' => $content,
-                'story_status' => ($validated['content_form'] ?? 'short') === 'long' && $validated['mode'] === 'story' ? 'open' : 'ended',
-                'story_context' => $storyContext,
-                'repair_history' => [],
-                'quality_review' => $qualityReview,
-                'provider' => $settings->provider,
-                'model' => $settings->model,
-                'reference_frame_attached' => $referenceFrame !== null,
-            ]);
+            $save = function () use (&$run, $request, $studioProject, $title, $validated, $brief, $content, $storyContext, $qualityReview, $settings, $referenceFrame) {
+                $run = $request->user()->promptProjects()->create([
+                    'studio_project_id' => $studioProject->id,
+                    'title' => Str::limit($title, 160, ''),
+                    'mode' => $validated['mode'],
+                    'brief' => $brief,
+                    'content' => $content,
+                    'original_content' => $content,
+                    'story_status' => $storyContext['status'] ?? 'ended',
+                    'story_context' => $storyContext,
+                    'repair_history' => [],
+                    'quality_review' => $qualityReview,
+                    'provider' => $settings->provider,
+                    'model' => $settings->model,
+                    'reference_frame_attached' => $referenceFrame !== null,
+                ]);
 
-            $studioProject->touch();
+                $studioProject->touch();
+
+                return $run;
+            };
+            $run = ($validated['content_form'] ?? 'short') === 'long' && $validated['mode'] === 'story'
+                ? DB::transaction($save) : $save();
         } catch (Throwable $exception) {
             report($exception);
             $historyError = true;
+            if (($validated['content_form'] ?? 'short') === 'long' && $validated['mode'] === 'story') {
+                return response()->json(['message' => 'The long-form opening and its continuation state could not be saved together. No continuation-ready story was created. Please retry.', 'saved_to_history' => false], 503);
+            }
         }
 
         return response()->json([

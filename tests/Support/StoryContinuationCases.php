@@ -25,6 +25,14 @@ final class StoryContinuationCases
         $root = $package.self::footer();
         $context = $service->initial($root, $brief);
         $verify($context['memory']['open_threads'] !== [], 'A long-form opening retains an explicit open thread.');
+        foreach (['pump', 'lens'] as $topic) {
+            $opening = PromptQaCases::package($topic).str_replace('wheel', $topic, self::footer());
+            $saved = $service->initial($opening, $brief);
+            $prepared = $service->prepare($opening, $brief, $saved, 'open', 'continue', '', 'set');
+            $verify($saved['status'] === 'open' && $saved['batch_state']['content_sha256'] === hash('sha256', $opening), 'Fresh long-form state is persisted generically for '.$topic.'.');
+            $verify($prepared['_story_context']['ending_state'] === $saved['batch_state']['ending_state'], 'The persisted final state passes the gate for '.$topic.'.');
+        }
+
         $verify($context['anchors']['OBJ-01'] === 'One cobalt wheel with a silver rim.', 'Canonical identity is captured literally.');
         $reject = function (callable $call, string $message) use ($verify): void {
             try {
@@ -36,6 +44,10 @@ final class StoryContinuationCases
             $verify($rejected, $message);
         };
         $reject(fn () => $service->initial($package, $brief), 'Long-form needs readable memory/status.');
+        $reject(fn () => $service->prepare($package, $brief, $context, 'open', 'continue', '', 'set'), 'Valid cached memory cannot stand in for a missing actual-batch footer.');
+        $reject(fn () => $service->prepare($root."STORY STATUS: OPEN\n", $brief, $context, 'open', 'continue', '', 'set'), 'Duplicate actual-batch status is rejected even with previously valid persisted state.');
+        $reject(fn () => $service->prepare(str_replace('STORY MEMORY: {', 'STORY MEMORY: invalid {', $root), $brief, $context, 'open', 'continue', '', 'set'), 'Malformed actual-batch memory cannot be replaced with cached or invented facts.');
+
         $reject(fn () => $service->initial('No clip blocks', $brief), 'An unparsed long-form output is not continuation-ready.');
         $verify($service->initial('No clip blocks', [...$brief, 'content_form' => 'short']) === [], 'Unparsed short-form still follows its old review behavior.');
         $verify(StoryContinuationService::instructions([...$brief, 'content_form' => 'short']) === '', 'Ordinary short-form has no new generation instructions.');
@@ -100,7 +112,9 @@ final class StoryContinuationCases
         $unreadable = str_replace('0.2–2.2s | VISIBLE ACTION:', 'untimed | VISIBLE ACTION:', $root);
         $reject(fn () => $service->prepare($unreadable, $brief, $context, 'open', 'continue', '', 'set'), 'Unreadable source dialogue is not silently omitted from story context.');
         $repair = PromptQaCases::edit($root, 2, 'ENDING CONTINUITY STATE: '.PromptQaCases::state(), 'ENDING CONTINUITY STATE: cast=None; object=wheel OBJ-01; stage=repaired');
-        $current = $service->prepare($repair, $brief, $context, 'open', 'continue', '', 'set');
+        $reject(fn () => $service->prepare($repair, $brief, $context, 'open', 'continue', '', 'set'), 'Unsaved repaired state cannot bypass the latest-batch check.');
+        $repairedContext = $service->refreshBatchState($repair, $brief, $context, 'open');
+        $current = $service->prepare($repair, $brief, $repairedContext, 'open', 'continue', '', 'set');
         $verify(str_contains($current['_story_context']['ending_state'], 'repaired'), 'Current repaired ending takes precedence over saved memory.');
         $verify(! isset($accepted['last_clip'], $accepted['recent_batch'], $accepted['source_memory']), 'Saved memory does not recursively embed the full prior request.');
         $loop = $context;
