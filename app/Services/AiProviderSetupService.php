@@ -38,8 +38,11 @@ class AiProviderSetupService
             throw new AiProviderSetupException($this->failureMessage($response->status()), 502);
         }
 
+        if ($provider === 'gemini' && ($failure = GeminiTextResponse::failure($response)) !== null) {
+            throw new AiProviderSetupException($failure, 502);
+        }
         $reply = $provider === 'gemini'
-            ? collect($response->json('candidates.0.content.parts', []))->pluck('text')->filter()->implode("\n")
+            ? GeminiTextResponse::text($response)
             : $this->openAiReply($response);
 
         if (blank($reply)) {
@@ -169,7 +172,7 @@ class AiProviderSetupService
             ->post($url, [
                 'systemInstruction' => ['parts' => [['text' => 'Reply with one short sentence confirming this connection test.']]],
                 'contents' => [['role' => 'user', 'parts' => [['text' => 'Say: VeoPrompter connection test passed.']]]],
-                'generationConfig' => ['temperature' => 0, 'maxOutputTokens' => 64],
+                'generationConfig' => ['temperature' => 0, 'maxOutputTokens' => 1024],
             ]);
     }
 

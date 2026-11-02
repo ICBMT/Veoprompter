@@ -1627,12 +1627,96 @@ class PromptOutputAuditor
 
     public function fieldValues(string $text, string $field): array
     {
+        if ($field === 'CANONICAL CHARACTER ROSTER') {
+            return $this->rosterValues($text);
+        }
         $values = [];
         foreach (preg_split('/\R/u', $text) ?: [] as $line) {
             $line = str_replace(['**', '__', '`'], '', $line);
             if (preg_match('/^\s*(?:[-*+>]\s*)?'.preg_quote($field, '/').'\s*:\s*(.*?)\s*$/iu', $line, $match) === 1) {
                 $values[] = trim($match[1]);
             }
+        }
+
+        return $values;
+    }
+
+    /** Read only explicitly declared IDs; bounded list/table layouts do not authorize inferred characters. */
+    private function rosterValues(string $text): array
+    {
+        $lines = preg_split('/\R/u', str_replace(['**', '__', '`'], '', $text)) ?: [];
+        $values = [];
+        foreach ($lines as $index => $line) {
+            if (! preg_match('/^\h*(?:#{1,6}\h+)?(?:[-*+>]\h*)?CANONICAL CHARACTER ROSTER(?:\h*:\h*(.*)|\h*)$/iu', $line, $match)) {
+                continue;
+            }
+            if (trim($match[1] ?? '') !== '') {
+                $values[] = trim($match[1]);
+                continue;
+            }
+            $records = [];
+            $countColumn = null;
+            $invalid = false;
+            foreach (array_slice($lines, $index + 1) as $row) {
+                $row = trim($row);
+                if ($row === '') {
+                    continue;
+                }
+                if (preg_match('/^(?:[-*+>]\h*)?(?:CANONICAL IDENTITY\b|SECTION\h+[0-9]+\b|VISIBLE CHARACTER CAST\h*:|CHARACTER IDENTITY LOCK\h*:)/iu', $row)) {
+                    break;
+                }
+                if (str_starts_with($row, '|')) {
+                    $cells = array_map('trim', explode('|', trim($row, '|')));
+                    if (preg_match('/^[|\h:\-]+$/', $row)) {
+                        continue;
+                    }
+                    $headers = array_map('strtolower', $cells);
+                    if (array_intersect($headers, ['id', 'character id', 'canonical id']) !== []) {
+                        foreach ($headers as $column => $header) {
+                            if (in_array($header, ['count', 'quantity'], true)) {
+                                $countColumn = $column;
+                            }
+                        }
+                        continue;
+                    }
+                    $entry = implode(' ', $cells);
+                    if ($countColumn !== null) {
+                        $count = $cells[$countColumn] ?? '';
+                        if (! preg_match('/^[1-9][0-9]*$/D', $count)) {
+                            $invalid = true;
+                        }
+                    } else {
+                        $count = null;
+                    }
+                } elseif (preg_match('/^(?:[-*+]\h+|[0-9]+[.)]\h+)(.+)$/u', $row, $bullet)) {
+                    $entry = $bullet[1];
+                    $count = null;
+                } else {
+                    break; // Never borrow IDs from definitions, clip fields, prose or a later section.
+                }
+                preg_match_all('/\b[A-Za-z]+-\d+\b/u', $entry, $ids);
+                if (count($ids[0]) !== 1) {
+                    if (preg_match('/^None[.!]?$/i', $entry) && $records === []) {
+                        $records[] = 'None';
+                    } else {
+                        $invalid = true;
+                    }
+                    continue;
+                }
+                $id = strtoupper($ids[0][0]);
+                if ($count === null && preg_match('/'.preg_quote($id, '/').'\)?\h*[×x]\h*([0-9]+)/iu', $entry, $quantity)) {
+                    $count = $quantity[1];
+                }
+                if ($count === null && preg_match('/\b(?:count|quantity)\h*[:=]\h*([0-9]+)/iu', $entry, $quantity)) {
+                    $count = $quantity[1];
+                }
+                if (in_array('None', $records, true) || in_array($id, array_map(static fn ($record) => explode(' ', $record)[0], $records), true)
+                    || ($count !== null && ! preg_match('/^[1-9][0-9]*$/D', $count))) {
+                    $invalid = true;
+                }
+                $records[] = $id.($count !== null ? ' ×'.$count : '');
+            }
+            $values[] = $invalid || $records === [] ? 'Unreadable explicit roster block' : implode('; ', $records);
         }
 
         return $values;

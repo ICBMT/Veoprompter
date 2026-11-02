@@ -178,8 +178,9 @@ REPAIR_POLICY;
             $brief, null);
     }
 
-    private function requestText(AiSetting $settings, string $systemInstructions, string $brief, ?UploadedFile $referenceFrame, int $outputTokens = 12288): string
+    private function requestText(AiSetting $settings, string $systemInstructions, string $brief, ?UploadedFile $referenceFrame, int $outputTokens = 12288, bool $retryEmpty = true): string
     {
+        $started = microtime(true);
         try {
             $response = $settings->provider === 'gemini'
                 ? $this->callGemini($settings, $systemInstructions, $brief, $referenceFrame, $outputTokens)
@@ -202,6 +203,9 @@ REPAIR_POLICY;
             throw new PromptGenerationException($this->providerFailureMessage($response->status()));
         }
 
+        if ($settings->provider === 'gemini' && ($failure = GeminiTextResponse::failure($response)) !== null) {
+            throw new PromptGenerationException($failure);
+        }
         $finishReason = $settings->provider === 'gemini'
             ? $response->json('candidates.0.finishReason')
             : $response->json('choices.0.finish_reason');
@@ -214,7 +218,12 @@ REPAIR_POLICY;
             : $this->openAiText($response);
 
         if (blank($text)) {
-            throw new PromptGenerationException('The AI provider returned an empty response. Please try again or check the configured model.');
+            // Retry an empty successful Gemini response once, not safety blocks or truncated output.
+            // This is before persistence and does not add another quality-repair round.
+            if ($settings->provider === 'gemini' && $retryEmpty && microtime(true) - $started < 10.0) {
+                return $this->requestText($settings, $systemInstructions, $brief, $referenceFrame, $outputTokens, false);
+            }
+            throw new PromptGenerationException('The AI provider returned no final text'.($settings->provider === 'gemini' && ! $retryEmpty ? ' after two attempts' : '').'. No output was accepted. Check the selected text-generation model, provider availability and quota in the Control room.');
         }
 
         return trim($text);
@@ -658,9 +667,7 @@ POLICY;
 
     private function geminiText(Response $response): string
     {
-        $parts = $response->json('candidates.0.content.parts', []);
-
-        return collect($parts)->pluck('text')->filter()->implode("\n");
+        return GeminiTextResponse::text($response);
     }
 
     private function openAiText(Response $response): string

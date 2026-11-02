@@ -98,6 +98,14 @@ final class StoryContinuationService
         if ($source === []) {
             throw new PromptGenerationException('The source identity bible is ambiguous. Resolve it before continuing.');
         }
+        if (($source['approved_cast'] ?? null) === []
+            && preg_match('/^\h*(?:#{1,6}\h+)?CANONICAL CHARACTER ROSTER(?:\h*:\h*)?$/imu', str_replace(['**', '__', '`'], '', $source['canon'] ?? ''))) {
+            $explicit = $this->castRecords($source['canon']);
+            $prefix = implode("\n", array_slice(preg_split('/\R/u', $content) ?: [], 0, $clips[0]['heading_line'] ?? $clips[0]['start_line']));
+            if ($explicit !== [] && $explicit === $this->castRecords($prefix)) {
+                $source['approved_cast'] = $explicit; // Read-time interpretation only; the saved source is never rewritten.
+            }
+        }
         $recent = array_map(fn (array $clip): array => [
             'clip' => $clip['number'], 'idea' => $this->auditor->fieldValue($clip['text'], 'PRIMARY IDEA'),
             'action' => $this->auditor->fieldValue($clip['text'], 'VISIBLE CAUSE → ACTION → RESULT'),
@@ -380,7 +388,7 @@ final class StoryContinuationService
         if (count($rosters) !== 1) {
             return [];
         }
-        preg_match_all('/\b([A-Za-z]+-\d+)(?:\s*[×x]\s*(\d+))?/iu', $rosters[0], $matches, PREG_SET_ORDER);
+        preg_match_all('/\b([A-Za-z]+-\d+)(?:\s*\)?\s*[×x]\s*(\d+))?/iu', $rosters[0], $matches, PREG_SET_ORDER);
         $records = [];
         foreach ($matches as $match) {
             $records[strtoupper($match[1])] = (int) ($match[2] ?? 1);

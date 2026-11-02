@@ -159,3 +159,23 @@ The continuation compiler now materializes missing identity definitions from the
 No schema change or source-story rewrite is required. A source genuinely missing its authoritative literal definition must be resolved explicitly; the compiler will not invent one.
 
 Regression coverage: `ContinuationCanonicalIdentityTest` exercises the real controller, generation/serialization/repair pipeline and database persistence with HTTP-faked provider responses; `ContinuationIdentitySerializationTest` covers arbitrary IDs, complete extended definitions, idempotence, corrupt ledgers, duplicate/empty definitions, protected dialogue, shot-only declarations and empty-roster permissions. These are text/identity checks, not live-model or rendered-character quality claims.
+
+### Explicit roster blocks and Gemini failures
+
+The reader supports a bounded roster list/table below an empty `CANONICAL CHARACTER ROSTER:` label (or matching Markdown heading). Each row must contain an explicit canonical ID; table Count/Quantity columns preserve declared quantities. Names-only, mixed unknown entries, duplicate rows, contradictory None entries and unreadable counts remain invalid. Definitions and IDs in later sections are never borrowed to manufacture a roster. The generator is instructed to prefer the existing single-line roster contract.
+
+For an older block-form source whose saved `approved_cast` was empty because of the previous reader, preparation may interpret explicit counts from the saved canonical roster only when they match the current source roster. Literal definitions and ledger consistency are still required. This is a read-time interpretation, not an edit to the original story. A missing count map for an ordinary inline roster remains an error.
+
+Gemini final-text parsing excludes thought parts. Prompt blocks, safety/other non-normal terminations and token-limit truncation have distinct failures and are not retried or accepted as partial kits. A quick, successful response containing no final text is retried once; slow empty responses are not automatically repeated, bounding additional latency. Repeated empty replies do not create saved runs. The connection probe now permits 1,024 output tokens instead of 64 and applies the same final-text/termination checks. This does not guarantee provider availability or a particular model's performance.
+
+Live probe on a host that can reach Google's API:
+
+```sh
+# Use a newly rotated key, supplied through your shell/secret manager, not committed files.
+# Exact model ID must be returned by the provider model list; no model alias/fallback is assumed.
+ALLOW_LIVE_PROVIDER_TEST=1 GEMINI_MODEL=gemini-3.5-flash-lite \
+  php scripts/check-live-continuation.php
+# GEMINI_API_KEY must already be exported securely in that environment.
+```
+
+This opt-in script makes billable calls using the actual application services: model discovery, connection test, long opening, continuation and ending. It operates on a synthetic story in memory, prints pass/fail and QA counts rather than credentials or provider payloads, and performs no database writes. It is not a replacement for reproducing a particular customer's saved prompt kit or browser behavior. The development sandbox's outbound allowlist does not include Google's API, so no live Gemini success is claimed for the local HTTP-faked regression runs.

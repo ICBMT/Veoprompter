@@ -121,7 +121,7 @@ class AiProviderSetupTest extends TestCase
 
         Http::assertSent(fn (ClientRequest $request): bool => str_contains($request->url(), 'gemini-2.5-flash:generateContent')
             && $request->hasHeader('x-goog-api-key', 'temporary-gemini-secret')
-            && data_get($request->data(), 'generationConfig.maxOutputTokens') === 64);
+            && data_get($request->data(), 'generationConfig.maxOutputTokens') === 1024);
         $this->assertDatabaseCount('ai_settings', 0);
     }
 

@@ -110,8 +110,9 @@ final class PromptPlanSerializer
         $insertAt = 0;
         foreach (array_slice($lines, 0, $prefixEnd) as $index => $line) {
             $plain = str_replace(['**', '__', '`'], '', $line);
-            if (preg_match('/^\s*(?:[-*+>]\s*)?CANONICAL CHARACTER ROSTER\s*:/iu', $plain)) {
-                $insertAt = $index + 1;
+            if (preg_match('/^\h*(?:#{1,6}\h+)?(?:[-*+>]\h*)?CANONICAL CHARACTER ROSTER(?:\h*:\h*(.*)|\h*)$/iu', $plain, $roster)) {
+                // An empty header owns the following list/table; never insert into that block.
+                $insertAt = trim($roster[1] ?? '') === '' ? $index : $index + 1;
             }
             if (preg_match('/^\s*(?:[-*+>]\s*)?CANONICAL IDENTITY ([A-Za-z]+-\d+)\s*:\s*(.*)$/iu', $plain, $match)) {
                 $id = strtoupper($match[1]);
