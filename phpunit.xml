@@ -21,6 +21,7 @@
         <!-- Keep legacy strict-contract regressions; AI-managed tests explicitly exercise the production default. -->
         <env name="CONTINUATION_IDENTITY_MODE" value="strict"/>
         <env name="CONTINUATION_BOUNDARY_MODE" value="strict"/>
+        <env name="CONTINUATION_MEMORY_MODE" value="strict"/>
         <env name="APP_ENV" value="testing"/>
         <env name="APP_MAINTENANCE_DRIVER" value="file"/>
         <env name="BCRYPT_ROUNDS" value="4"/>

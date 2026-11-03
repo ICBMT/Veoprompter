@@ -99,3 +99,41 @@ Both policies have regression coverage. Strict regressions explicitly enable the
 strict configuration; advisory tests verify short/long candidates are saved
 unchanged with warnings, the parent remains unchanged, and provider failures or
 missing ending data are not falsely reported as success.
+
+## Optional compact memory (default)
+
+```
+CONTINUATION_MEMORY_MODE=optional
+```
+
+Long-form first batches and all next-part requests return the ordinary clip-prompt
+sections; they no longer depend on the model producing a special JSON memory
+footer. The application owns part/batch numbers and open/ended status, based on
+Continue, End Story and Sequel actions. A missing/malformed/duplicated/oversized or
+status-incompatible memory footer does not reject otherwise usable clips.
+
+Valid explicit compact memory can still be read as supplementary, unverified
+context. If it cannot be read safely, `memory` is null. No summary, facts or open
+threads are fabricated, and stale cached memory is never substituted for the
+actual current source. The full saved prompt, current configuration and final
+clip continue to travel with the next request. Source-content hashes, ending-state
+snapshot integrity, provider-completion checks and save transactions remain.
+No extra AI request or automatic quota retry is used to manufacture memory.
+
+Set `CONTINUATION_MEMORY_MODE=strict` to restore the earlier mandatory-footer
+contract. Apply environment changes using the deployment's normal config-cache
+rebuild. No database migration or source rewrite is required.
+
+The optional-memory tests cover short/long initial generation, repeated parts,
+endings and sequels using Gemini and OpenAI-compatible response contracts; missing,
+broken, combined, contradictory, duplicated and oversized memory; and stale-cache
+exclusion. Real browser QA also uses a local provider fixture that deliberately
+omits all story-memory footers. These are contract/transport tests, not live-model
+quality guarantees.
+
+For isolated browser QA, start `tests/browser/provider.mjs` with
+`BROWSER_PROVIDER_NO_MEMORY=1` and optionally `BROWSER_PROVIDER_PORT` (default 8901).
+Point only the dedicated QA database at that fixture. The chain stress test uses
+eight rapid continuation calls; run it separately from the other browser tests
+or use separate isolated accounts to respect the normal eight-per-minute limit.
+Do not raise production rate limits or clear production caches for testing.

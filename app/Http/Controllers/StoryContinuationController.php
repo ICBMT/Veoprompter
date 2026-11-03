@@ -63,10 +63,11 @@ class StoryContinuationController extends Controller
                 $generation = $generator->generateWithQualityReview($settings, $input);
                 $context = $stories->accept($generation['content'], $input);
                 $advisory = StoryContinuationService::advisoryBoundary($input);
+                $memoryDetail = StoryContinuationService::optionalMemory() ? 'Progression is server-managed; compact memory is optional.' : 'Memory/status structure was checked.';
                 $generation['quality_review']['checks'][] = ['id' => 'story_boundary', 'label' => 'Cross-batch opening and story memory', 'status' => $advisory ? 'needs_review' : 'passed',
                     'detail' => $advisory
-                        ? 'Saved for user review against source kit '.$project->id.'. Boundary comparisons are advisory, not proof of a match or mismatch. Memory/status structure was checked.'
-                        : 'Opening state and presentation match source kit '.$project->id.' literally; memory/status structure was checked. This is text evidence, not a rendered-video or plot-factuality guarantee.'];
+                        ? 'Saved for user review against source kit '.$project->id.'. Boundary comparisons are advisory, not proof of a match or mismatch. '.$memoryDetail
+                        : 'Opening state and presentation match source kit '.$project->id.' literally. '.$memoryDetail.' This is text evidence, not a rendered-video or plot-factuality guarantee.'];
                 $child = DB::transaction(function () use ($request, $project, $sourceHash, $input, $generation, $context, $settings, $data, $key, $requestHash) {
                     $source = PromptProject::query()->whereKey($project->id)->lockForUpdate()->first();
                     abort_unless($source && (int) $source->user_id === (int) $request->user()->id && hash('sha256', $source->content) === $sourceHash

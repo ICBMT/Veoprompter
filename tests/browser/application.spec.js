@@ -240,9 +240,32 @@ test('continuation works without randomUUID for short and long forms and retains
         await expect(page.locator(`[data-story-intent=${intent}]`)).toBeEnabled();
         expect(await requestId.inputValue()).toBe(editedId);
         await page.unroute('**/history/*/continue');
+        const priorUrl = page.url();
         const response = page.waitForResponse(r => /\/history\/\d+\/continue$/.test(r.url()) && r.request().method() === 'POST');
         await page.locator(`[data-story-intent=${intent}]`).click();
-        expect((await response).status()).toBe(200);
+        const saved = await response;
+        expect(saved.status()).toBe(200);
+        await page.waitForURL(url => url.href !== priorUrl && /\/history\/\d+$/.test(url.pathname));
         await expect(page.locator('[data-story-heading]')).toContainText(form === 'short' ? 'Part 2' : 'Batch 2');
+    }
+});
+
+test('short and long story chains work when the provider returns no story-memory footer', async ({ page }) => {
+    test.skip(process.env.BROWSER_PROVIDER_NO_MEMORY !== '1', 'Run the isolated provider fixture with BROWSER_PROVIDER_NO_MEMORY=1.');
+    for (const form of ['short', 'long']) {
+        await createProject(page, form);
+        await generate(page);
+        expect(await page.locator('[data-output-content]').textContent()).not.toContain('STORY MEMORY:');
+        for (const intent of [form === 'short' ? 'sequel' : 'continue', 'continue', 'finish', 'sequel']) {
+            const priorUrl = page.url();
+            const response = page.waitForResponse(r => /\/history\/\d+\/continue$/.test(r.url()) && r.request().method() === 'POST');
+            await page.locator(`[data-story-intent=${intent}]`).click();
+            const saved = await response;
+            expect(saved.status()).toBe(200);
+            await page.waitForURL(url => url.href !== priorUrl && /\/history\/\d+$/.test(url.pathname));
+            await expect(page.locator('[data-story-heading]')).toContainText(intent === 'finish' ? 'Part complete' : 'Story ongoing');
+            expect(await page.locator('[data-repair-output]').textContent()).not.toContain('STORY MEMORY:');
+            await expect(page.locator('[data-story-message]')).toHaveText('');
+        }
     }
 });

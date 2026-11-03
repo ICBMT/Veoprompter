@@ -21,9 +21,10 @@ createServer(async (request, response) => {
         let kind = system.includes('STORY BATCH CONTRACT') ? 'long' : 'short';
         if (system.includes('AUTHORITATIVE OPENING INHERITANCE')) kind = 'next';
         if (system.includes('The user chose END STORY.')) kind = 'ending';
-        response.end(JSON.stringify({ choices: [{ message: { content: fixtures[kind] } }] }));
+        const content = process.env.BROWSER_PROVIDER_NO_MEMORY === '1' ? fixtures[kind].split(/\nSECTION 11[ \u2014-]/)[0] : fixtures[kind];
+        response.end(JSON.stringify({ choices: [{ message: { content } }] }));
     } catch {
         response.statusCode = 400;
         response.end(JSON.stringify({ error: 'Invalid browser fixture request' }));
     }
-}).listen(8901, '127.0.0.1', () => console.log('Local browser provider ready on port 8901'));
+}).listen(Number(process.env.BROWSER_PROVIDER_PORT || 8901), '127.0.0.1', () => console.log('Local browser provider fixture ready'));

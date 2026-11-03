@@ -162,6 +162,11 @@ class PromptGenerationService
             }
         }
 
+        if (StoryContinuationService::optionalMemory() && (isset($input['_story_context']) || (($input['content_form'] ?? 'short') === 'long' && ($input['mode'] ?? 'story') === 'story'))) {
+            $qualityReview['story_memory_mode'] = 'optional';
+            $qualityReview['limitations'][] = 'Story progression is server-managed. Compact model-authored memory is optional; missing or invalid summaries are not invented. The complete saved source is carried into the next request.';
+        }
+
         $qualityReview['rejected_candidate_issues'] = $rejectedCandidateIssues;
         $qualityReview['first_pass'] = $firstPass;
         $qualityReview['final_unresolved_count'] = count($qualityReview['issues']);
