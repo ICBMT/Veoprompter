@@ -35,7 +35,7 @@ class PromptGenerationService
         if (($input['content_form'] ?? 'short') === 'long' || isset($input['_story_context'])) {
             $systemInstructions .= StoryContinuationService::instructions($input);
         }
-        $brief = $this->buildCreativeBrief($input, $referenceFrame !== null);
+        $brief = $this->buildCreativeBrief($input, $referenceFrame !== null).StoryContinuationService::openingBrief($input);
         $content = $this->requestText($settings, $systemInstructions, $brief, $referenceFrame, $this->outputTokenBudget($input));
         $auditor = new PromptOutputAuditor;
         $serialization = (new PromptPlanSerializer($auditor))->serialize($content, $input);
@@ -61,7 +61,7 @@ class PromptGenerationService
             'issue_categories' => array_values(array_unique(array_column($qualityReview['issues'], 'category'))),
             'serialization' => ['expanded' => $serialization['expanded'], 'template_sha256' => $serialization['template_sha256'], 'inherited_identity_ids' => $serialization['inherited_identity_ids']],
         ];
-        if (PromptRepairService::hasSupportedIssues($qualityReview)) {
+        if (PromptRepairService::hasSupportedIssues($qualityReview) && ! StoryContinuationService::advisoryBoundary($input)) {
             $timed = (new PromptRepairService($auditor, $this))->repair(null, $content, $input);
             $rejectedCandidateIssues = $timed['repair_report']['rejected_candidate_issues'] ?? [];
             if ($timed['repair_report']['applied']) {
@@ -76,7 +76,8 @@ class PromptGenerationService
         $repairableIssues = array_values(array_filter(
             $qualityReview['issues'],
             fn (array $issue): bool => ($issue['repairable'] ?? false) === true
-                && (! StoryContinuationService::aiManaged($input) || ($issue['category'] ?? '') !== 'identity'),
+                && (! StoryContinuationService::aiManaged($input) || ($issue['category'] ?? '') !== 'identity')
+                && (! StoryContinuationService::advisoryBoundary($input) || ! in_array($issue['category'] ?? '', ['continuity', 'handoff'], true)),
         ));
 
         if ($repairableIssues !== []) {
@@ -147,6 +148,18 @@ class PromptGenerationService
             $qualityReview['limitations'][] = 'Identity continuity is AI-managed using the complete saved source. Identity findings are advisory, not blockers or proof of a match; inspect characters and objects before rendering.';
             $qualityReview['checks'][] = ['id' => 'ai_managed_identity', 'label' => 'AI-managed character and object continuity', 'status' => 'needs_review',
                 'detail' => 'Full saved source supplied. Identity QA is advisory; no automated identity guarantee is made.'];
+        }
+
+        if (StoryContinuationService::advisoryBoundary($input)) {
+            $warnings = (new StoryContinuationService($auditor))->boundaryWarnings($content, $input);
+            $qualityReview['boundary_mode'] = 'advisory';
+            $qualityReview['continuation_warnings'] = $warnings;
+            $qualityReview['issues'] = [...$qualityReview['issues'], ...$warnings];
+            $qualityReview['finding_counts']['context_reviews'] = count(array_filter($qualityReview['issues'], fn (array $issue): bool => ($issue['kind'] ?? '') === 'review'));
+            $qualityReview['limitations'][] = 'Cross-batch continuity QA is advisory. This candidate is saved for your review, not certified continuous; compare it with the source before rendering.';
+            if ($warnings !== []) {
+                $qualityReview['status'] = 'needs_review';
+            }
         }
 
         $qualityReview['rejected_candidate_issues'] = $rejectedCandidateIssues;

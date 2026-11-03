@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\AiSetting;
 use App\Models\PromptProject;
+use App\Services\ContinuationOpeningException;
 use App\Services\PromptGenerationException;
 use App\Services\PromptGenerationService;
 use App\Services\StoryContinuationService;
@@ -61,8 +62,11 @@ class StoryContinuationController extends Controller
                 }
                 $generation = $generator->generateWithQualityReview($settings, $input);
                 $context = $stories->accept($generation['content'], $input);
-                $generation['quality_review']['checks'][] = ['id' => 'story_boundary', 'label' => 'Cross-batch opening and story memory', 'status' => 'passed',
-                    'detail' => 'Opening state and presentation match source kit '.$project->id.' literally; memory/status structure was checked. This is text evidence, not a rendered-video or plot-factuality guarantee.'];
+                $advisory = StoryContinuationService::advisoryBoundary($input);
+                $generation['quality_review']['checks'][] = ['id' => 'story_boundary', 'label' => 'Cross-batch opening and story memory', 'status' => $advisory ? 'needs_review' : 'passed',
+                    'detail' => $advisory
+                        ? 'Saved for user review against source kit '.$project->id.'. Boundary comparisons are advisory, not proof of a match or mismatch. Memory/status structure was checked.'
+                        : 'Opening state and presentation match source kit '.$project->id.' literally; memory/status structure was checked. This is text evidence, not a rendered-video or plot-factuality guarantee.'];
                 $child = DB::transaction(function () use ($request, $project, $sourceHash, $input, $generation, $context, $settings, $data, $key, $requestHash) {
                     $source = PromptProject::query()->whereKey($project->id)->lockForUpdate()->first();
                     abort_unless($source && (int) $source->user_id === (int) $request->user()->id && hash('sha256', $source->content) === $sourceHash
@@ -91,6 +95,8 @@ class StoryContinuationController extends Controller
             });
 
             return $result ?: response()->json(['message' => 'This batch is already generating. Wait, then retry the same request.'], 409);
+        } catch (ContinuationOpeningException $exception) {
+            return response()->json(['message' => $exception->getMessage(), 'code' => 'continuation_opening_mismatch', 'opening_issues' => $exception->issues], 502);
         } catch (PromptGenerationException $exception) {
             return response()->json(['message' => $exception->getMessage()], 502);
         } catch (HttpExceptionInterface $exception) {

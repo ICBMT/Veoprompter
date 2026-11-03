@@ -218,3 +218,31 @@ test('xKiro preset clears unrelated credentials and loads exact vendor model IDs
     await expect(page.locator('[data-model-input]')).toHaveValue('another-vendor/model:free');
     await expect(page.locator('[data-model-feedback]')).toContainText('models found');
 });
+
+test('continuation works without randomUUID for short and long forms and retains IDs on retry', async ({ page }) => {
+    await page.addInitScript(() => Object.defineProperty(globalThis.crypto, 'randomUUID', { value: undefined, configurable: true }));
+    for (const form of ['short', 'long']) {
+        await createProject(page, form);
+        await generate(page);
+        const requestId = page.locator('[data-story-form] [name=request_id]');
+        const oldId = await requestId.inputValue();
+        await page.locator('[data-story-form] [name=direction]').fill('Keep the same characters and continue from the saved ending.');
+        const editedId = await requestId.inputValue();
+        expect(editedId).not.toBe(oldId);
+        expect(editedId).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
+        const intent = form === 'short' ? 'sequel' : 'continue';
+        await page.route('**/history/*/continue', route => route.fulfill({ status: 502, contentType: 'application/json', body: JSON.stringify({
+            message: 'The source is unchanged.', code: 'continuation_opening_mismatch',
+            opening_issues: [{ field: 'OPENING PRESENTATION STATE', reason: 'does not match the saved ending' }],
+        }) }));
+        await page.locator(`[data-story-intent=${intent}]`).click();
+        await expect(page.locator('[data-story-message]')).toContainText('OPENING PRESENTATION STATE: does not match');
+        await expect(page.locator(`[data-story-intent=${intent}]`)).toBeEnabled();
+        expect(await requestId.inputValue()).toBe(editedId);
+        await page.unroute('**/history/*/continue');
+        const response = page.waitForResponse(r => /\/history\/\d+\/continue$/.test(r.url()) && r.request().method() === 'POST');
+        await page.locator(`[data-story-intent=${intent}]`).click();
+        expect((await response).status()).toBe(200);
+        await expect(page.locator('[data-story-heading]')).toContainText(form === 'short' ? 'Part 2' : 'Batch 2');
+    }
+});

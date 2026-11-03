@@ -4,7 +4,7 @@
         <summary data-story-heading>@if($run)Part {{ $run->story_part }} · Batch {{ $run->story_batch }} · {{ $run->story_status === 'open' ? 'Story ongoing' : 'Part complete — create a sequel' }}@else Continue this story @endif</summary>
         <p class="field-hint">Keep the story, characters and visual world connected. Each request saves a new kit; it never replaces this one. You can grow either format one batch at a time.</p>
         @if(config('prompt_generation.continuation_identity_mode', 'ai_managed') === 'ai_managed')
-            <p class="field-hint">AI-managed identity continuity uses the complete saved prompt. Identity findings are advisory; review the generated characters and objects before rendering. Exact opening-state checks remain enabled.</p>
+            <p class="field-hint">AI-managed identity continuity uses the complete saved prompt. Identity findings are advisory; review the generated characters and objects before rendering. {{ config('prompt_generation.continuation_boundary_mode', 'advisory') === 'advisory' ? 'Suspected opening/handoff differences are saved for your review, not rejected automatically.' : 'Strict opening-state checks are enabled.' }}</p>
         @endif
         <form method="post" action="{{ $run ? route('history.continue', $run, false) : '' }}" data-story-form data-story-status="{{ $run?->story_status ?? 'ended' }}">
             @csrf

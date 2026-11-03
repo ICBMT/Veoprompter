@@ -100,7 +100,10 @@ class AiManagedContinuationTest extends TestCase
         $source = $this->source()->refresh();
         $snapshot = $source->getAttributes();
         $this->fake(PromptQaCases::edit($source->content, 1, 'OPENING PRESENTATION STATE: camera=static; lighting=daylight; audio=quiet', 'OPENING PRESENTATION STATE: camera=aerial; lighting=night; audio=quiet'));
-        $this->send($source)->assertStatus(502)->assertJsonPath('message', 'The next batch did not open on the saved ending state/presentation. It was not saved; the original story is unchanged.');
+        $this->send($source)->assertStatus(502)->assertJsonPath('message', 'The next batch did not open on the saved ending state/presentation. It was not saved; the original story is unchanged.')
+            ->assertJsonPath('code', 'continuation_opening_mismatch')
+            ->assertJsonPath('opening_issues.0.field', 'OPENING PRESENTATION STATE')
+            ->assertJsonPath('opening_issues.0.reason', 'does not match the saved ending');
         $this->assertDatabaseCount('prompt_projects', 1);
         $this->assertSame($snapshot, $source->fresh()->getAttributes());
     }

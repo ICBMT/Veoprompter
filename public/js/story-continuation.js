@@ -1,4 +1,30 @@
 (() => {
+    // randomUUID is restricted to secure contexts in several browsers. getRandomValues
+    // remains available on ordinary HTTP development origins; never use Math.random for IDs.
+    const requestUuid = () => {
+        try {
+            if (typeof globalThis.crypto?.randomUUID === 'function') return globalThis.crypto.randomUUID();
+        } catch { /* Try the cryptographic fallback if a browser exposes an unusable method. */ }
+        if (typeof globalThis.crypto?.getRandomValues !== 'function') return null;
+        let bytes;
+        try { bytes = globalThis.crypto.getRandomValues(new Uint8Array(16)); } catch { return null; }
+        bytes[6] = (bytes[6] & 0x0f) | 0x40;
+        bytes[8] = (bytes[8] & 0x3f) | 0x80;
+        const hex = Array.from(bytes, value => value.toString(16).padStart(2, '0')).join('');
+        return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
+    };
+    const rotateRequestId = (form) => {
+        const id = requestUuid();
+        if (id) {
+            form.elements.request_id.value = id;
+            delete form.dataset.requestIdUnavailable;
+            return true;
+        }
+        form.dataset.requestIdUnavailable = 'true';
+        form.querySelector('[data-story-message]').textContent = 'This browser cannot create a secure request ID. Use a current browser or HTTPS before generating another batch.';
+        return false;
+    };
+
     // Studio creates its result asynchronously; saved library forms are already present.
     document.addEventListener('veoprompter:run-ready', (event) => {
         const panel = document.querySelector('[data-results] [data-story-panel]');
@@ -16,13 +42,14 @@
         form.elements.direction.value = '';
         form.elements.allow_new_subjects.checked = false;
         form.querySelector('[data-story-message]').textContent = '';
-        form.elements.request_id.value = crypto.randomUUID();
+        delete form.dataset.requestIntent;
+        rotateRequestId(form);
     });
 
     document.addEventListener('input', (event) => {
         const form = event.target.closest('[data-story-form]');
         if (form && event.target.name !== 'request_id' && form.dataset.busy !== 'true') {
-            form.elements.request_id.value = crypto.randomUUID();
+            rotateRequestId(form);
         }
     });
 
@@ -33,10 +60,14 @@
         if (form.dataset.busy === 'true' || !form.reportValidity()) return;
         const intent = event.submitter?.value;
         if (!['continue', 'finish', 'sequel'].includes(intent)) return;
+        if (form.dataset.requestIntent && form.dataset.requestIntent !== intent && !rotateRequestId(form)) return;
+        if (form.dataset.requestIdUnavailable === 'true') return;
+        form.dataset.requestIntent = intent;
         const data = new FormData(form);
         data.set('intent', intent);
         const message = form.querySelector('[data-story-message]');
         const controls = [...form.querySelectorAll('button, textarea, select, input[type="checkbox"]')];
+        const disabledStates = controls.map(control => control.disabled);
         form.dataset.busy = 'true';
         form.setAttribute('aria-busy', 'true');
         controls.forEach((control) => { control.disabled = true; });
@@ -49,7 +80,11 @@
                 headers: { Accept: 'application/json', 'X-Requested-With': 'XMLHttpRequest', 'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.content || '' },
             });
             const payload = await response.json().catch(() => ({}));
-            if (!response.ok) throw new Error(Object.values(payload.errors || {}).flat()[0] || payload.message || 'Generation could not finish. Your source is unchanged; please retry.');
+            if (!response.ok) {
+                const details = Array.isArray(payload.opening_issues) ? payload.opening_issues.map(issue => `${issue.field}: ${issue.reason}`).join('; ') : '';
+                const explanation = Object.values(payload.errors || {}).flat()[0] || payload.message || 'Generation could not finish. Your source is unchanged.';
+                throw new Error(`${explanation}${details ? ` ${details}` : ''} (HTTP ${response.status})`);
+            }
             if (!payload.url) throw new Error('No saved continuation was returned. Retry this same request.');
             const target = new URL(payload.url, location.origin);
             if (target.origin !== location.origin) throw new Error('The saved prompt URL must be on this site.');
@@ -59,7 +94,7 @@
         } finally {
             form.dataset.busy = 'false';
             form.removeAttribute('aria-busy');
-            controls.forEach((control) => { control.disabled = false; });
+            controls.forEach((control, index) => { control.disabled = disabledStates[index]; });
         }
     });
 })();

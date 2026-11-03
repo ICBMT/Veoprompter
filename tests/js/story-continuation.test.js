@@ -78,10 +78,10 @@ test('validation and duplicate-submit guard avoid unnecessary requests', async (
 });
 
 test('failure keeps request ID for idempotent retry and renders server errors as text', async () => {
-    const h = harness(async () => ({ ok: false, json: async () => ({ message: '<img src=x onerror=alert(1)> source unchanged' }) }));
+    const h = harness(async () => ({ ok: false, status: 502, json: async () => ({ message: '<img src=x onerror=alert(1)> source unchanged' }) }));
     await h.submit();
     assert.equal(h.elements.request_id.value, 'original-request-id');
-    assert.equal(h.messages.textContent, '<img src=x onerror=alert(1)> source unchanged');
+    assert.equal(h.messages.textContent, '<img src=x onerror=alert(1)> source unchanged (HTTP 502)');
     assert.equal(h.redirected, null); assert.equal(h.form.dataset.busy, 'false');
 });
 

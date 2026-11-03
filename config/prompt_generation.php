@@ -1,6 +1,7 @@
 <?php
 
 return [
+    'continuation_boundary_mode' => env('CONTINUATION_BOUNDARY_MODE', 'advisory'),
     'continuation_identity_mode' => env('CONTINUATION_IDENTITY_MODE', 'ai_managed'),
     // Both Gemini and OpenAI-compatible text generation; not TTS/subtitle timeouts.
     'stream' => (bool) env('PROMPT_STREAM', true),
