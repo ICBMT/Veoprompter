@@ -189,9 +189,17 @@ REPAIR_POLICY;
             Log::warning('The configured AI provider could not be reached.', [
                 'provider' => $settings->provider,
                 'exception' => $exception::class,
+                'elapsed_ms' => (int) round((microtime(true) - $started) * 1000),
             ]);
 
-            throw new PromptGenerationException('Could not connect to the AI provider. Check the connection and provider settings, then try again.', previous: $exception);
+            throw new PromptGenerationException('The AI provider connection failed or timed out before a complete response arrived. The provider may already have used tokens. No output was accepted and no automatic retry was made. Check provider availability and server timeout settings before trying again.', previous: $exception);
+        } catch (PromptGenerationException $exception) {
+            Log::warning('The provider response stream was not accepted.', [
+                'provider' => $settings->provider,
+                'elapsed_ms' => (int) round((microtime(true) - $started) * 1000),
+            ]);
+
+            throw $exception;
         }
 
         if (! $response->successful()) {
@@ -211,6 +219,14 @@ REPAIR_POLICY;
             : $response->json('choices.0.finish_reason');
         if (in_array($finishReason, ['MAX_TOKENS', 'length'], true)) {
             throw new PromptGenerationException('The provider reached its response-length limit before finishing the prompt kit. No partial response was accepted. Ask an administrator to raise the output-token budget within the selected model’s supported limit, or use a model with a larger output capacity.');
+        }
+
+        if ($settings->provider !== 'gemini' && (
+            ($finishReason !== null && $finishReason !== 'stop')
+            || filled($response->json('choices.0.message.refusal'))
+            || filled($response->json('choices.0.message.tool_calls'))
+        )) {
+            throw new PromptGenerationException('The provider did not finish a normal text response (blocked, tool-only, or unsupported output). No output was accepted. Choose a compatible text-generation model.');
         }
 
         $text = $settings->provider === 'gemini'
@@ -616,18 +632,23 @@ POLICY;
 
         $url = 'https://generativelanguage.googleapis.com/v1beta/models/'.rawurlencode($settings->model).':generateContent';
 
-        return Http::acceptJson()
-            ->withHeaders(['x-goog-api-key' => $settings->api_key])
-            ->connectTimeout(15)
-            ->timeout(120)
-            ->post($url, [
-                'systemInstruction' => ['parts' => [['text' => $systemInstructions]]],
-                'contents' => [['role' => 'user', 'parts' => $parts]],
-                'generationConfig' => [
-                    'temperature' => 0.55,
-                    'maxOutputTokens' => $outputTokens,
-                ],
-            ]);
+        $payload = [
+            'systemInstruction' => ['parts' => [['text' => $systemInstructions]]],
+            'contents' => [['role' => 'user', 'parts' => $parts]],
+            'generationConfig' => [
+                'temperature' => 0.55,
+                'maxOutputTokens' => $outputTokens,
+            ],
+        ];
+
+        if (config('prompt_generation.stream', true)) {
+            return app(ProviderTextStream::class)->request(str_replace(':generateContent', ':streamGenerateContent?alt=sse', $url), $settings->api_key, $payload, 'gemini');
+        }
+
+        return Http::withHeaders(['x-goog-api-key' => $settings->api_key])
+            ->acceptJson()->connectTimeout(15)
+            ->timeout(max(120, min(900, (int) config('prompt_generation.provider_timeout', 300))))
+            ->post($url, $payload);
     }
 
     private function callOpenAiCompatible(AiSetting $settings, string $systemInstructions, string $brief, ?UploadedFile $referenceFrame, int $outputTokens): Response
@@ -648,21 +669,19 @@ POLICY;
             ];
         }
 
-        $endpoint = rtrim((string) $settings->base_url, '/').'/chat/completions';
+        $payload = OpenAiChatPayload::make((string) $settings->base_url, $settings->model, [
+            ['role' => 'system', 'content' => $systemInstructions],
+            ['role' => 'user', 'content' => $userContent],
+        ], $outputTokens, 0.55);
+        if (config('prompt_generation.stream', true)) {
+            return app(ProviderTextStream::class)->request(rtrim((string) $settings->base_url, '/').'/chat/completions', $settings->api_key, $payload);
+        }
 
         return Http::acceptJson()
             ->withToken($settings->api_key)
             ->connectTimeout(15)
-            ->timeout(120)
-            ->post($endpoint, [
-                'model' => $settings->model,
-                'messages' => [
-                    ['role' => 'system', 'content' => $systemInstructions],
-                    ['role' => 'user', 'content' => $userContent],
-                ],
-                'temperature' => 0.55,
-                'max_tokens' => $outputTokens,
-            ]);
+            ->timeout(max(120, min(900, (int) config('prompt_generation.provider_timeout', 300))))
+            ->post(rtrim((string) $settings->base_url, '/').'/chat/completions', $payload);
     }
 
     private function geminiText(Response $response): string

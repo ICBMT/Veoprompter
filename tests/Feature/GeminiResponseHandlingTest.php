@@ -39,14 +39,14 @@ class GeminiResponseHandlingTest extends TestCase
         $this->postJson(route('studio.generate', $project), ['mode' => 'story', 'topic' => 'A wheel'])
             ->assertOk()->assertJsonPath('saved_to_history', true);
         Http::assertSentCount(2);
-        Http::assertSent(fn ($r) => str_contains($r->url(), '/gemini-3.5-flash-lite:generateContent') && $r->hasHeader('x-goog-api-key', 'fake-test-key'));
+        Http::assertSent(fn ($r) => str_contains($r->url(), '/gemini-3.5-flash-lite:streamGenerateContent?alt=sse') && $r->hasHeader('x-goog-api-key', 'fake-test-key'));
         $this->assertDatabaseCount('prompt_projects', 1);
     }
 
     public function test_repeated_empty_responses_are_bounded_and_do_not_save_a_run(): void
     {
         $project = $this->project();
-        Http::fake(['*' => Http::response($this->response([]))]);
+        Http::fake(['*' => fn () => Http::response($this->response([]))]);
         $this->postJson(route('studio.generate', $project), ['mode' => 'story', 'topic' => 'A wheel'])
             ->assertStatus(502)->assertJsonPath('message', 'The AI provider returned no final text after two attempts. No output was accepted. Check the selected text-generation model, provider availability and quota in the Control room.');
         Http::assertSentCount(2);
@@ -56,7 +56,7 @@ class GeminiResponseHandlingTest extends TestCase
     public function test_thought_parts_are_not_returned_or_persisted_as_the_prompt(): void
     {
         $project = $this->project();
-        Http::fake(['*' => Http::response($this->response([
+        Http::fake(['*' => fn () => Http::response($this->response([
             ['thought' => true, 'text' => 'PRIVATE REASONING MUST NOT BE A PROMPT'],
             ['text' => PromptQaCases::package()],
         ]))]);
@@ -83,7 +83,7 @@ class GeminiResponseHandlingTest extends TestCase
     public function test_blocked_and_partial_responses_are_not_retried_or_saved(array $body, string $message): void
     {
         $project = $this->project();
-        Http::fake(['*' => Http::response($body)]);
+        Http::fake(['*' => fn () => Http::response($body)]);
         $response = $this->postJson(route('studio.generate', $project), ['mode' => 'story', 'topic' => 'A wheel'])->assertStatus(502);
         $this->assertStringContainsString($message, $response->json('message'));
         Http::assertSentCount(1);
@@ -103,7 +103,7 @@ class GeminiResponseHandlingTest extends TestCase
     public function test_non_final_payloads_never_become_saved_prompts(array $body): void
     {
         $project = $this->project();
-        Http::fake(['*' => Http::response($body)]);
+        Http::fake(['*' => fn () => Http::response($body)]);
         $response = $this->postJson(route('studio.generate', $project), ['mode' => 'story', 'topic' => 'A wheel'])->assertStatus(502);
         $this->assertStringNotContainsString('PRIVATE THOUGHT', $response->getContent());
         $this->assertStringContainsString('no final text after two attempts', $response->json('message'));
@@ -113,7 +113,7 @@ class GeminiResponseHandlingTest extends TestCase
 
     public function test_connection_test_does_not_misreport_thought_only_output_as_success(): void
     {
-        Http::fake(['*' => Http::response($this->response([['thought' => true, 'text' => 'Not a final answer']]))]);
+        Http::fake(['*' => fn () => Http::response($this->response([['thought' => true, 'text' => 'Not a final answer']]))]);
         $this->expectException(AiProviderSetupException::class);
         $this->expectExceptionMessage('returned no text');
         (new AiProviderSetupService)->testConnection('gemini', null, 'gemini-3.5-flash-lite', 'fake-test-key');

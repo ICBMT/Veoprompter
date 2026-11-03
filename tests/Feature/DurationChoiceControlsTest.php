@@ -173,7 +173,7 @@ class DurationChoiceControlsTest extends TestCase
     public function test_existing_projects_generate_with_ai_selected_duration_when_duration_access_is_disabled(): void
     {
         Http::fake([
-            'https://generativelanguage.googleapis.com/*' => Http::response([
+            'https://generativelanguage.googleapis.com/*' => fn () => Http::response([
                 'candidates' => [[
                     'content' => [
                         'parts' => [['text' => "## PROJECT OVERVIEW\nA short story with a fixed duration."]],

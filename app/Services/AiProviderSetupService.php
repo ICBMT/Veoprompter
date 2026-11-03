@@ -26,6 +26,8 @@ class AiProviderSetupService
             $response = $provider === 'gemini'
                 ? $this->testGemini($model, $apiKey)
                 : $this->testOpenAiCompatible((string) $baseUrl, $model, $apiKey);
+        } catch (PromptGenerationException $exception) {
+            throw new AiProviderSetupException($exception->getMessage(), 502, $exception);
         } catch (ConnectionException $exception) {
             throw new AiProviderSetupException(
                 'The provider could not be reached. Check the endpoint and server network, then try again.',
@@ -40,6 +42,11 @@ class AiProviderSetupService
 
         if ($provider === 'gemini' && ($failure = GeminiTextResponse::failure($response)) !== null) {
             throw new AiProviderSetupException($failure, 502);
+        }
+        $finish = $response->json('choices.0.finish_reason');
+        if ($provider !== 'gemini' && (($finish !== null && $finish !== 'stop')
+            || filled($response->json('choices.0.message.refusal')) || filled($response->json('choices.0.message.tool_calls')))) {
+            throw new AiProviderSetupException('The model did not finish a normal text response. Select a text-generation model with adequate output capacity.', 502);
         }
         $reply = $provider === 'gemini'
             ? GeminiTextResponse::text($response)
@@ -170,33 +177,32 @@ class AiProviderSetupService
     private function testGemini(string $model, string $apiKey): Response
     {
         $url = self::GEMINI_MODELS_URL.'/'.rawurlencode($model).':generateContent';
+        $payload = [
+            'systemInstruction' => ['parts' => [['text' => 'Reply with one short sentence confirming this connection test.']]],
+            'contents' => [['role' => 'user', 'parts' => [['text' => 'Say: VeoPrompter connection test passed.']]]],
+            'generationConfig' => ['temperature' => 0, 'maxOutputTokens' => 1024],
+        ];
+        if (config('prompt_generation.stream', true)) {
+            return app(ProviderTextStream::class)->request(str_replace(':generateContent', ':streamGenerateContent?alt=sse', $url), $apiKey, $payload, 'gemini');
+        }
 
-        return Http::acceptJson()
-            ->withHeaders(['x-goog-api-key' => $apiKey])
-            ->connectTimeout(10)
-            ->timeout(30)
-            ->post($url, [
-                'systemInstruction' => ['parts' => [['text' => 'Reply with one short sentence confirming this connection test.']]],
-                'contents' => [['role' => 'user', 'parts' => [['text' => 'Say: VeoPrompter connection test passed.']]]],
-                'generationConfig' => ['temperature' => 0, 'maxOutputTokens' => 1024],
-            ]);
+        return Http::withHeaders(['x-goog-api-key' => $apiKey])->acceptJson()->connectTimeout(10)
+            ->timeout(max(120, min(900, (int) config('prompt_generation.provider_timeout', 300))))->post($url, $payload);
     }
 
     private function testOpenAiCompatible(string $baseUrl, string $model, string $apiKey): Response
     {
-        return Http::acceptJson()
-            ->withToken($apiKey)
-            ->connectTimeout(10)
-            ->timeout(30)
-            ->post(rtrim($baseUrl, '/').'/chat/completions', [
-                'model' => $model,
-                'messages' => [
-                    ['role' => 'system', 'content' => 'Reply with one short sentence confirming this connection test.'],
-                    ['role' => 'user', 'content' => 'Say: VeoPrompter connection test passed.'],
-                ],
-                'temperature' => 0,
-                'max_tokens' => 64,
-            ]);
+        $payload = OpenAiChatPayload::make($baseUrl, $model, [
+            ['role' => 'system', 'content' => 'Reply with one short sentence confirming this connection test.'],
+            ['role' => 'user', 'content' => 'Say: VeoPrompter connection test passed.'],
+        ], 1024, 0);
+        $url = rtrim($baseUrl, '/').'/chat/completions';
+        if (config('prompt_generation.stream', true)) {
+            return app(ProviderTextStream::class)->request($url, $apiKey, $payload);
+        }
+
+        return Http::withToken($apiKey)->acceptJson()->connectTimeout(10)
+            ->timeout(max(120, min(900, (int) config('prompt_generation.provider_timeout', 300))))->post($url, $payload);
     }
 
     private function openAiReply(Response $response): string

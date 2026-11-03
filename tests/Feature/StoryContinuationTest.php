@@ -58,7 +58,7 @@ class StoryContinuationTest extends TestCase
         $this->connect();
         $studio = $owner->studioProjects()->create(['name' => 'Long story', 'settings' => [...ProjectSettings::defaults(), 'content_form' => 'long']]);
         $text = trim($this->generation()['content']);
-        Http::fake(['*' => Http::response(['candidates' => [['content' => ['parts' => [['text' => $text]]]]]])]);
+        Http::fake(['*' => fn () => Http::response(['candidates' => [['content' => ['parts' => [['text' => $text]]]]]])]);
         $this->actingAs($owner)->postJson(route('studio.generate', $studio), ['mode' => 'story', 'topic' => 'The wheel investigation'])
             ->assertOk()->assertJsonPath('run.story_status', 'open')->assertJsonPath('saved_to_history', true);
         Http::assertSentCount(1);
@@ -88,7 +88,7 @@ class StoryContinuationTest extends TestCase
         $this->connect();
         $studio = $owner->studioProjects()->create(['name' => 'Long story', 'settings' => [...ProjectSettings::defaults(), 'content_form' => 'long']]);
         $raw = str_replace('0.2–2.2s', '0.0–2.0s', PromptQaCases::template()).StoryContinuationCases::footer();
-        Http::fake(['*' => Http::response(['candidates' => [['content' => ['parts' => [['text' => $raw]]]]]])]);
+        Http::fake(['*' => fn () => Http::response(['candidates' => [['content' => ['parts' => [['text' => $raw]]]]]])]);
         $this->actingAs($owner)->postJson(route('studio.generate', $studio), ['mode' => 'story', 'topic' => 'A connected investigation'])
             ->assertOk()->assertJsonPath('saved_to_history', true);
         $saved = $owner->promptProjects()->firstOrFail();
@@ -153,7 +153,7 @@ class StoryContinuationTest extends TestCase
             $text = $this->generation()['content'];
             $first = (new PromptOutputAuditor)->extractClips($text, $source->brief)[0]['text'];
             $text = PromptQaCases::edit($text, 1, $field.': '.(new PromptOutputAuditor)->fieldValue($first, $field), $field.': '.$wrong);
-            Http::fake(['*' => Http::response(['candidates' => [['content' => ['parts' => [['text' => $text]]]]]])]);
+            Http::fake(['*' => fn () => Http::response(['candidates' => [['content' => ['parts' => [['text' => $text]]]]]])]);
             $this->actingAs($owner)->postJson(route('history.continue', $source), $this->payload('continue'))->assertStatus(502)
                 ->assertJsonPath('message', 'The next batch did not open on the saved ending state/presentation. It was not saved; the original story is unchanged.');
             Http::assertSentCount(1); // No hidden correction that overwrites incompatible literal states.
@@ -170,7 +170,7 @@ class StoryContinuationTest extends TestCase
         foreach ([PromptQaCases::package(), PromptQaCases::package().StoryContinuationCases::footer('ended'),
             $this->generation()['content']."STORY STATUS: OPEN\n",
             str_replace('STORY MEMORY: {', 'STORY MEMORY: invalid {', $this->generation()['content'])] as $text) {
-            Http::fake(['*' => Http::response(['candidates' => [['content' => ['parts' => [['text' => $text]]]]]])]);
+            Http::fake(['*' => fn () => Http::response(['candidates' => [['content' => ['parts' => [['text' => $text]]]]]])]);
             $this->actingAs($owner)->postJson(route('studio.generate', $studio), ['mode' => 'story', 'topic' => 'A connected investigation'])->assertStatus(502);
             $this->assertSame(0, $owner->promptProjects()->count());
         }

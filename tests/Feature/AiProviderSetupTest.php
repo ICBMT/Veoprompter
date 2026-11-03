@@ -103,7 +103,7 @@ class AiProviderSetupTest extends TestCase
     public function test_test_connection_runs_a_short_model_request_without_saving_settings(): void
     {
         Http::fake([
-            'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent' => Http::response([
+            'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:streamGenerateContent?alt=sse' => Http::response([
                 'candidates' => [[
                     'content' => ['parts' => [['text' => 'VeoPrompter connection test passed.']]],
                 ]],
@@ -119,7 +119,7 @@ class AiProviderSetupTest extends TestCase
             ->assertJsonPath('reply', 'VeoPrompter connection test passed.')
             ->assertDontSee('temporary-gemini-secret');
 
-        Http::assertSent(fn (ClientRequest $request): bool => str_contains($request->url(), 'gemini-2.5-flash:generateContent')
+        Http::assertSent(fn (ClientRequest $request): bool => str_contains($request->url(), 'gemini-2.5-flash:streamGenerateContent?alt=sse')
             && $request->hasHeader('x-goog-api-key', 'temporary-gemini-secret')
             && data_get($request->data(), 'generationConfig.maxOutputTokens') === 1024);
         $this->assertDatabaseCount('ai_settings', 0);
@@ -145,7 +145,7 @@ class AiProviderSetupTest extends TestCase
         Http::assertSent(fn (ClientRequest $request): bool => $request->url() === 'https://api.compatible-provider.com/v1/chat/completions'
             && $request->hasHeader('Authorization', 'Bearer temporary-compatible-secret')
             && data_get($request->data(), 'model') === 'gpt-4.1-mini'
-            && data_get($request->data(), 'max_tokens') === 64);
+            && data_get($request->data(), 'max_tokens') === 1024);
         $this->assertDatabaseCount('ai_settings', 0);
     }
 

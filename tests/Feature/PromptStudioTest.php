@@ -93,7 +93,7 @@ class PromptStudioTest extends TestCase
     public function test_configured_gemini_receives_master_spec_saved_preferences_and_returns_copyable_text(): void
     {
         Http::fake([
-            'https://generativelanguage.googleapis.com/*' => Http::response([
+            'https://generativelanguage.googleapis.com/*' => fn () => Http::response([
                 'candidates' => [[
                     'content' => [
                         'parts' => [['text' => "## PROJECT OVERVIEW\nA short story.\n\n### COPY CLIP 1 PROMPT\n```text\nA stable opening shot.\n```"]],
@@ -132,7 +132,7 @@ class PromptStudioTest extends TestCase
             $systemInstruction = data_get($body, 'systemInstruction.parts.0.text', '');
             $brief = data_get($body, 'contents.0.parts.0.text', '');
 
-            return str_contains($request->url(), 'models/gemini-2.5-flash:generateContent')
+            return str_contains($request->url(), 'models/gemini-2.5-flash:streamGenerateContent?alt=sse')
                 && $request->hasHeader('x-goog-api-key', 'test-provider-secret')
                 && str_contains($systemInstruction, 'AI VIDEO STORYTELLER — MASTER SPECIFICATION')
                 && str_contains($systemInstruction, 'MANDATORY CONTINUATION INSTRUCTION')
@@ -193,7 +193,7 @@ class PromptStudioTest extends TestCase
     public function test_spoken_audio_off_requires_a_none_speech_map_and_no_spoken_words(): void
     {
         Http::fake([
-            'https://generativelanguage.googleapis.com/*' => Http::response([
+            'https://generativelanguage.googleapis.com/*' => fn () => Http::response([
                 'candidates' => [['content' => ['parts' => [['text' => "## PROJECT OVERVIEW\nA silent bee story.\n"]]]]],
             ], 200),
         ]);
@@ -226,7 +226,7 @@ class PromptStudioTest extends TestCase
     public function test_quality_focused_clip_count_builds_logically_sequenced_process_stages_and_plausible_handoffs(): void
     {
         Http::fake([
-            'https://generativelanguage.googleapis.com/*' => Http::response([
+            'https://generativelanguage.googleapis.com/*' => fn () => Http::response([
                 'candidates' => [['content' => ['parts' => [['text' => "## PROJECT OVERVIEW\nA quality-focused vehicle-manufacturing sequence.\n"]]]]],
             ], 200),
         ]);
@@ -269,7 +269,7 @@ class PromptStudioTest extends TestCase
     public function test_character_dialogue_uses_distinct_character_voice_profiles_and_never_requests_a_narrator(): void
     {
         Http::fake([
-            'https://generativelanguage.googleapis.com/*' => Http::response([
+            'https://generativelanguage.googleapis.com/*' => fn () => Http::response([
                 'candidates' => [['content' => ['parts' => [['text' => "## PROJECT OVERVIEW\nTwo characters discuss pollination."]]]]],
             ], 200),
         ]);
@@ -327,7 +327,7 @@ class PromptStudioTest extends TestCase
     public function test_new_visual_styles_guide_generated_prompts_and_are_saved_with_readable_history_labels(): void
     {
         Http::fake([
-            'https://generativelanguage.googleapis.com/*' => Http::response([
+            'https://generativelanguage.googleapis.com/*' => fn () => Http::response([
                 'candidates' => [['content' => ['parts' => [['text' => "## PROJECT OVERVIEW\nA visual story.\n\n### COPY CLIP 1 PROMPT\n```text\nA consistent opening shot.\n```"]]]]],
             ], 200),
         ]);
@@ -373,7 +373,7 @@ class PromptStudioTest extends TestCase
     public function test_cinematic_story_mode_uses_a_general_video_brief_without_changing_the_project_default(): void
     {
         Http::fake([
-            'https://generativelanguage.googleapis.com/*' => Http::response([
+            'https://generativelanguage.googleapis.com/*' => fn () => Http::response([
                 'candidates' => [['content' => ['parts' => [['text' => "## VIDEO OVERVIEW\nA quiet mystery.\n\n### COPY CLIP 1 PROMPT\n```text\nA lighthouse beam cuts through the rain.\n```"]]]]],
             ], 200),
         ]);
@@ -417,7 +417,7 @@ class PromptStudioTest extends TestCase
     public function test_openai_compatible_provider_uses_the_admin_configured_endpoint_and_bearer_key(): void
     {
         Http::fake([
-            'https://api.compatible-provider.com/*' => Http::response([
+            'https://api.compatible-provider.com/*' => fn () => Http::response([
                 'choices' => [[
                     'message' => ['content' => '## PROJECT OVERVIEW'."\n".'A connected story.'],
                 ]],
@@ -503,7 +503,7 @@ class PromptStudioTest extends TestCase
     {
         $generatedContent = "## PROJECT OVERVIEW\nA connected story.\n\n### COPY CLIP 1 PROMPT\n```text\nA stable opening shot.\n```";
         Http::fake([
-            'https://generativelanguage.googleapis.com/*' => Http::response([
+            'https://generativelanguage.googleapis.com/*' => fn () => Http::response([
                 'candidates' => [['content' => ['parts' => [['text' => $generatedContent]]]]],
             ], 200),
         ]);
@@ -590,7 +590,7 @@ class PromptStudioTest extends TestCase
     public function test_extension_uses_the_projects_separate_saved_extension_duration(): void
     {
         Http::fake([
-            'https://generativelanguage.googleapis.com/*' => Http::response([
+            'https://generativelanguage.googleapis.com/*' => fn () => Http::response([
                 'candidates' => [['content' => ['parts' => [['text' => '## EXTENSION PROMPT'."\\n".'Continue from the written starting state; no reference image was supplied.']]]]],
             ], 200),
         ]);
@@ -628,7 +628,7 @@ class PromptStudioTest extends TestCase
     public function test_ai_selects_a_bounded_extension_duration_when_global_duration_questions_are_off(): void
     {
         Http::fake([
-            'https://generativelanguage.googleapis.com/*' => Http::response([
+            'https://generativelanguage.googleapis.com/*' => fn () => Http::response([
                 'candidates' => [['content' => ['parts' => [['text' => '## EXTENSION PROMPT'."\n".'Continue from the written starting state; no reference image was supplied.']]]]],
             ], 200),
         ]);
@@ -664,7 +664,7 @@ class PromptStudioTest extends TestCase
     public function test_character_dialogue_extension_preserves_saved_voice_mode_without_claiming_to_hear_unseen_audio(): void
     {
         Http::fake([
-            'https://generativelanguage.googleapis.com/*' => Http::response([
+            'https://generativelanguage.googleapis.com/*' => fn () => Http::response([
                 'candidates' => [['content' => ['parts' => [['text' => "## EXTENSION PROMPT\nMina continues in-scene.\n"]]]]],
             ], 200),
         ]);
@@ -717,7 +717,7 @@ class PromptStudioTest extends TestCase
     public function test_provider_http_503_is_reported_as_temporary_unavailability_not_as_an_api_key_error(): void
     {
         Http::fake([
-            'https://generativelanguage.googleapis.com/*' => Http::response(['error' => ['message' => 'temporary overload']], 503),
+            'https://generativelanguage.googleapis.com/*' => fn () => Http::response(['error' => ['message' => 'temporary overload']], 503),
         ]);
         AiSetting::create([
             'provider' => 'gemini',
