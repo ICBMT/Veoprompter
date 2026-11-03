@@ -21,7 +21,7 @@
         <details><summary>Read the full draft</summary><p class="subtitle-full-transcript" data-transcript-paragraph></p></details>
         <p data-review-feedback role="status" aria-live="polite">Loading your private transcript…</p>
         <button class="button-secondary" type="button" data-review-load>Reload saved draft</button>
-        <form data-transcript-form>
+        <form data-transcript-form novalidate>
             <div class="subtitle-word-list" data-review-words></div>
             <nav class="subtitle-review-pages" aria-label="Transcript word pages"><button class="button-secondary" type="button" data-review-previous>Previous words</button><span data-review-page></span><button class="button-secondary" type="button" data-review-next>Next words</button></nav>
             <button class="button-secondary" type="button" data-review-save disabled>Save draft · do not render</button>

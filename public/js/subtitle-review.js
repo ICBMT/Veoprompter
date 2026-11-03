@@ -1,4 +1,4 @@
-export function initTranscriptReview(panel, onApproved, { fetcher = globalThis.fetch, onUncertain = async () => {}, confirmDiscard = () => globalThis.confirm('Discard unsaved edits and reload the saved draft?') } = {}) {
+export function initTranscriptReview(panel, onApproved, { fetcher = globalThis.fetch, onUncertain = async () => {}, confirmDiscard = () => globalThis.confirm('Discard unsaved edits and reload the saved draft?'), requestTimeout = 30000 } = {}) {
     const doc = panel.ownerDocument;
     const get = (name) => panel.querySelector(`[data-${name}]`);
     const feedback = get('review-feedback');
@@ -6,6 +6,10 @@ export function initTranscriptReview(panel, onApproved, { fetcher = globalThis.f
     const list = get('review-words');
     const player = get('review-video');
     const confirmation = get('review-confirm');
+    // Native required-field validation can prevent submit from reaching our handler,
+    // leaving no useful feedback (including invalid words on a different page).
+    // Validate the entire transcript explicitly below; server validation remains mandatory.
+    form.noValidate = true;
     const pageSize = 80;
     let words = [], revision = 0, page = 0, loaded = false, busy = false, dirty = false;
     const localUrl = (value) => {
@@ -14,11 +18,28 @@ export function initTranscriptReview(panel, onApproved, { fetcher = globalThis.f
         return url;
     };
     const request = async (url, options = {}) => {
-        const response = await fetcher(localUrl(url), { credentials: 'same-origin', cache: 'no-store', ...options,
-            headers: { Accept: 'application/json', 'Content-Type': 'application/json', 'X-CSRF-TOKEN': doc.querySelector('meta[name="csrf-token"]')?.content || '' } });
-        const data = await response.json().catch(() => ({}));
-        if (!response.ok || response.redirected) throw new Error(Object.values(data.errors || {}).flat()[0] || data.message || 'Could not confirm this request. Your edits remain in this tab; check the saved state before retrying.');
-        return data;
+        const controller = new AbortController();
+        let timer;
+        try {
+            const response = await Promise.race([
+                fetcher(localUrl(url), { credentials: 'same-origin', cache: 'no-store', ...options, signal: controller.signal,
+                    headers: { Accept: 'application/json', 'Content-Type': 'application/json', 'X-CSRF-TOKEN': doc.querySelector('meta[name="csrf-token"]')?.content || '' } }),
+                new Promise((_, reject) => { timer = setTimeout(() => {
+                    controller.abort();
+                    reject(new Error('The request took too long to confirm. Your edits remain here. Approval may have reached the server; checking progress before you retry.'));
+                }, requestTimeout); }),
+            ]);
+            const data = await response.json().catch(() => null);
+            if (!response.ok || response.redirected) {
+                if ([401, 403, 419].includes(response.status) || response.redirected) throw new Error('Your session or security token expired. Save a copy of your edits, sign in again in another tab, then reload this draft before approving.');
+                if (response.status === 429) throw new Error('Too many requests. Your edits remain here; wait a minute before retrying approval.');
+                throw new Error(Object.values(data?.errors || {}).flat()[0] || data?.message || 'Could not confirm this request. Your edits remain in this tab; check the saved state before retrying.');
+            }
+            if (!data || typeof data !== 'object' || Array.isArray(data)) throw new Error('The server did not return a valid confirmation. Your edits remain here; check progress before retrying.');
+            return data;
+        } finally {
+            clearTimeout(timer);
+        }
     };
     const controls = () => {
         ['review-save', 'review-approve', 'review-load', 'review-previous', 'review-next', 'review-confirm'].forEach(name => { get(name).disabled = busy || !loaded; });
@@ -50,6 +71,11 @@ export function initTranscriptReview(panel, onApproved, { fetcher = globalThis.f
         busy = true; controls();
         try {
             const data = await request(panel.dataset.reviewUrl);
+            if (typeof data.editable !== 'boolean' || !Number.isInteger(data.revision) || data.revision < 1
+                || !Array.isArray(data.words) || !data.words.length
+                || data.words.some(word => !Number.isFinite(word.start) || !Number.isFinite(word.end) || typeof word.text !== 'string' || typeof word.original !== 'string')) {
+                throw new Error('The transcript response is incomplete. Reload the saved draft to retry; no approval was sent.');
+            }
             if (!data.editable) { await onApproved(data); return; }
             words = data.words; revision = data.revision; page = 0; loaded = true; dirty = false; confirmation.checked = false;
             player.src = localUrl(panel.dataset.originalUrl).href;
@@ -73,10 +99,15 @@ export function initTranscriptReview(panel, onApproved, { fetcher = globalThis.f
         const invalid = words.findIndex(word => !word.text.trim() || [...word.text].length > 120 || /[\x00-\x1F\x7F]/.test(word.text));
         if (invalid >= 0) { page = Math.floor(invalid / pageSize); draw(); feedback.textContent = `Correct caption word ${invalid + 1}: nonempty text, at most 120 characters, no line breaks.`; return; }
         busy = true; controls();
+        feedback.textContent = approve ? 'Confirming your exact transcript and queueing the render…' : 'Saving your draft…';
         try {
             const data = await request(approve ? panel.dataset.approveUrl : panel.dataset.saveUrl, {
                 method: approve ? 'POST' : 'PUT', body: JSON.stringify({ revision, words: words.map(word => word.text), ...(approve ? { confirmed: true } : {}) }),
             });
+            const statuses = approve ? ['approved', 'generating_subtitles', 'rendering', 'completed', 'failed'] : ['awaiting_review'];
+            if (!Number.isInteger(data.revision) || data.revision < revision || !statuses.includes(data.status)) {
+                throw new Error('The server did not confirm the saved transcript state. Your edits remain here; checking progress before retrying.');
+            }
             revision = data.revision; dirty = false;
             if (approve) { player.pause(); await onApproved(data); }
             else { feedback.textContent = 'Draft saved. Rendering is still paused until you approve.'; confirmation.checked = false; }
@@ -87,6 +118,6 @@ export function initTranscriptReview(panel, onApproved, { fetcher = globalThis.f
         finally { busy = false; controls(); }
     };
     get('review-save').addEventListener('click', () => save(false));
-    form.addEventListener('submit', (event) => { event.preventDefault(); save(true); });
+    form.addEventListener('submit', (event) => { event.preventDefault(); return save(true); });
     return { load };
 }

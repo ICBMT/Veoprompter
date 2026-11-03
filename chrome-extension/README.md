@@ -29,3 +29,15 @@ From the Laravel repository root, run:
 ```sh
 node --test chrome-extension/tests/*.test.js
 ```
+
+### Version 1.7.1 connection recovery
+
+A saved active prompt no longer hides **Connect this site** when the app origin
+has lost its optional host permission, or when you open a different VeoPrompter
+site. The connection section opens with a separate connect button; reconnecting
+preserves the active prompt and copy position and injects the app bridge into
+the current tab. Main-action errors now show feedback and unlock retry rather
+than leaving the popup button disabled. Reload the unpacked extension in
+`chrome://extensions` after updating. Copy/paste remains local-only, editable,
+one-shot and never auto-submits. Transcript review and explicit approval still
+happen in the authenticated web app; the extension does not handle videos.

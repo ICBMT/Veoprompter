@@ -134,3 +134,39 @@ The transcription job now stops at `awaiting_review`, persisting original timed 
 - New `tests/Feature/SubtitleReviewTest.php`, updated pipeline/Studio tests and `tests/Unit/TranscriptReviewTest.php` cover ownership, drafts, approval/retry/revision guards, direct-dispatch bypass, snapshot tampering, retention/recovery and late failure callbacks. Run these using the normal PHPUnit/Laravel environment after installing Composer dependencies.
 
 Native PHP 8.4 is available for this change's syntax/service checks, but Composer/vendor dependencies are still unavailable here. **The Laravel/HTTP/database/queue tests and real browser/Whisper/FFmpeg review-to-render pipeline have not been executed for this change.** Earlier ASS-render smoke checks do not establish end-to-end approval-gate correctness.
+
+## Approval controls recovery (November 2026)
+
+The transcript form uses explicit full-draft validation instead of native form
+validation silently preventing its submit handler. Missing confirmation or an
+invalid word (including on another page) produces visible feedback; confirmation
+is still required both in the browser and on the server. Saving a draft never
+approves it. Approval shows an in-progress message and disables repeat clicks.
+Transcript/save/approval HTTP requests time out after 30 seconds instead of
+leaving controls locked indefinitely. A timeout is not proof that approval failed:
+the app checks job status before retrying, and the server's exact-wording
+idempotency behavior is unchanged. Edits remain in the tab after a failed request.
+Expired sessions, throttling, malformed responses and missing revision/status
+confirmations are reported rather than silently hiding review or corrupting the
+local revision. Retention and server word/timing/layout checks remain intact.
+
+The extension is still only a local prompt handoff, not a subtitle uploader,
+transcription tool or approval agent. Version 1.7.1 exposes app-site reconnection
+even with an existing stored prompt, and reports popup action failures rather
+than leaving the main button disabled. Reload the unpacked extension to update.
+No provider, prompt-generation, queue-worker or subtitle-rendering settings change.
+
+Targeted controls tests:
+
+```sh
+npm test
+BROWSER_EXECUTABLE=/path/to/chromium node --test tests/ui/subtitle-controls.test.mjs
+php scripts/check-subtitle-review.php
+php scripts/subtitle-ass-smoke.php
+```
+
+The standalone Chromium tests use the actual transcript Blade form and browser
+modules with local HTTP fixtures. They check approval validation, lost-response
+reconciliation, editable error/retry behavior, and extension reconnect without
+changing the stored prompt. They do **not** run Whisper, a Laravel queue, or
+FFmpeg; the existing deployment/worker prerequisites above still apply.

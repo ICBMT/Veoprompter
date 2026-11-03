@@ -83,3 +83,51 @@ test('remote URLs and failed save requests cannot approve or erase the current d
     assert.equal(failed.approvals.length, 0); assert.match(failed.nodes['review-feedback'].textContent, /Newer draft/);
     assert.equal(failed.nodes['review-words'].querySelectorAll('input')[0].value, 'Keep');
 });
+test('approval uses full-draft validation instead of silently suppressed native submission', async () => {
+    const s = setup(); await s.editor.load();
+    assert.equal(s.nodes['transcript-form'].noValidate, true);
+    await s.nodes['transcript-form'].emit('submit');
+    assert.match(s.nodes['review-feedback'].textContent, /Explicitly confirm/);
+    assert.equal(s.calls.length, 1);
+    assert.equal(s.nodes['review-approve'].disabled, false);
+});
+test('a hanging approval times out, preserves edits, checks progress, and unlocks retry', async () => {
+    let uncertain = 0;
+    const s = setup(3, { requestTimeout: 10, onUncertain: async () => { uncertain++; },
+        fetcher: async (_url, request) => request.method ? new Promise(() => {}) : ({ ok: true, json: async () => ({ editable: true, revision: 1, words: [{ start: 0, end: 1, text: 'Kept', original: 'Kept' }] }) }) });
+    await s.editor.load(); s.nodes['review-confirm'].checked = true;
+    const saving = s.nodes['transcript-form'].emit('submit');
+    assert.match(s.nodes['review-feedback'].textContent, /Confirming/);
+    assert.equal(s.nodes['review-approve'].disabled, true);
+    await saving;
+    assert.match(s.nodes['review-feedback'].textContent, /too long/);
+    assert.equal(uncertain, 1);
+    assert.equal(s.nodes['review-approve'].disabled, false);
+    assert.equal(s.nodes['review-words'].querySelectorAll('input')[0].value, 'Kept');
+    assert.equal(s.approvals.length, 0);
+});
+test('HTML or incomplete success responses cannot hide review or corrupt the revision', async () => {
+    let uncertain = 0;
+    const s = setup(3, { onUncertain: async () => { uncertain++; }, fetcher: async (_url, request) => ({ ok: true,
+        json: async () => request.method ? {} : ({ editable: true, revision: 1, words: [{ start: 0, end: 1, text: 'Keep', original: 'Keep' }] }) }) });
+    await s.editor.load(); s.nodes['review-confirm'].checked = true;
+    await s.nodes['transcript-form'].emit('submit');
+    assert.equal(s.approvals.length, 0); assert.equal(uncertain, 1);
+    assert.match(s.nodes['review-feedback'].textContent, /did not confirm/);
+    assert.equal(s.nodes['review-approve'].disabled, false);
+    const invalid = setup(3, { fetcher: async () => ({ ok: true, json: async () => ({}) }) });
+    await invalid.editor.load();
+    assert.equal(invalid.approvals.length, 0);
+    assert.match(invalid.nodes['review-feedback'].textContent, /incomplete/);
+    assert.equal(invalid.nodes['review-approve'].disabled, true);
+    assert.equal(invalid.nodes['review-load'].disabled, false);
+});
+test('expired approval sessions show actionable feedback without discarding edits', async () => {
+    const s = setup(3, { fetcher: async (_url, request) => ({ ok: !request.method, status: request.method ? 419 : 200,
+        json: async () => request.method ? { message: 'CSRF token mismatch.' } : ({ editable: true, revision: 1, words: [{ start: 0, end: 1, text: 'Keep', original: 'Keep' }] }) }) });
+    await s.editor.load(); s.nodes['review-confirm'].checked = true;
+    await s.nodes['transcript-form'].emit('submit');
+    assert.match(s.nodes['review-feedback'].textContent, /security token expired/);
+    assert.equal(s.nodes['review-words'].querySelectorAll('input')[0].value, 'Keep');
+    assert.equal(s.approvals.length, 0);
+});

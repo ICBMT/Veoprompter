@@ -13,6 +13,7 @@ const statusMessage = document.querySelector('[data-status]');
 const backAction = document.querySelector('[data-back-action]');
 const restartAction = document.querySelector('[data-restart-action]');
 const connectionList = document.querySelector('[data-connection-list]');
+const connectSiteButton = document.querySelector('[data-connect-site]');
 const progressTrack = document.querySelector('.progress-track');
 const characterCast = document.querySelector('[data-character-cast]');
 const characterCastValue = document.querySelector('[data-character-cast-value]');
@@ -211,7 +212,15 @@ async function refresh() {
         }
     }
     const isConnectedApp = appOrigin && popupState.connectedAppOrigins.includes(appOrigin) && hasAppPermission;
-    const needsConnection = Boolean(appOrigin && !isConnectedApp && isLikelyVeoPrompterPage(activeTab));
+    const needsConnection = Boolean(appOrigin && !isConnectedApp
+        && (isLikelyVeoPrompterPage(activeTab) || popupState.connectedAppOrigins.includes(appOrigin)));
+
+    connectSiteButton.hidden = !needsConnection || !popupState.activePrompt;
+    connectSiteButton.disabled = actionPending;
+    if (!connectSiteButton.hidden) {
+        connectSiteButton.textContent = `Connect ${appOrigin}`;
+        connectSiteButton.closest('details').open = true;
+    }
 
     if (popupState.activePrompt) {
         renderPrompt(popupState.activePrompt);
@@ -462,6 +471,18 @@ async function restartPrompt() {
     await navigatePrompt(0, 'Started over. Sections 1–7 are ready again.');
 }
 
+connectSiteButton.addEventListener('click', async () => {
+    if (actionPending) return;
+    actionPending = true;
+    connectSiteButton.disabled = true;
+    try {
+        await connectCurrentSite();
+    } finally {
+        actionPending = false;
+        connectSiteButton.disabled = false;
+    }
+});
+
 mainButton.addEventListener('click', async () => {
     if (actionPending) return;
     actionPending = true;
@@ -470,8 +491,12 @@ mainButton.addEventListener('click', async () => {
         if (currentAction === 'connect-site') await connectCurrentSite();
         else if (currentAction === 'copy') await copyNextPart();
         await refresh();
+    } catch {
+        setStatus('The extension could not finish this action. Your saved prompt is intact. Reopen the popup and retry; clipboard paste remains available if you already copied.', 'error');
     } finally {
         actionPending = false;
+        mainButton.disabled = currentAction === 'none';
+        connectSiteButton.disabled = false;
     }
 });
 
