@@ -138,3 +138,83 @@ test('subtitle draft edits survive reload and explicit approval precedes renderi
         expect((await download.body()).length).toBeGreaterThan(1000);
     }
 });
+
+test('a failed repeat generation retains the good kit, rejects duplicate submits and can recover', async ({ page }) => {
+    await createProject(page, 'short');
+    await generate(page);
+    const output = page.locator('[data-output-content]');
+    await expect(page.locator('[data-submit-button]')).toBeEnabled();
+    const previous = await output.textContent();
+    expect(previous).toContain('COPY CLIP 1 PROMPT');
+    let calls = 0;
+    let finish;
+    let entered;
+    const pending = new Promise(resolve => { entered = resolve; });
+    await page.route('**/projects/*/generate', async route => {
+        calls++;
+        await new Promise(resolve => { finish = resolve; entered(); });
+        await route.fulfill({ status: 502, contentType: 'text/html', body: '<h1>Bad Gateway</h1>' });
+    });
+    await page.locator('[data-submit-button]').evaluate(button => {
+        button.form.requestSubmit();
+        button.form.requestSubmit();
+    });
+    await pending;
+    expect(calls).toBe(1);
+    await expect(page.locator('[data-submit-button]')).toBeDisabled();
+    expect(await output.textContent()).toBe(previous);
+    finish();
+    await expect(page.locator('[data-generation-message]')).toBeVisible();
+    await expect(page.locator('[data-generation-message]')).toContainText('HTTP 502');
+    await expect(page.locator('[data-submit-button]')).toBeEnabled();
+    await expect(page.locator('[data-results]')).toBeVisible();
+    expect(await page.locator('[data-results]').evaluate(e => e.inert)).toBe(false);
+    expect(await output.textContent()).toBe(previous);
+    await page.unroute('**/projects/*/generate');
+    for (const failure of ['empty', 'provider', 'network']) {
+        await page.route('**/projects/*/generate', route => failure === 'network'
+            ? route.abort('failed')
+            : route.fulfill({
+                status: failure === 'provider' ? 502 : 200,
+                contentType: 'application/json',
+                body: JSON.stringify(failure === 'provider' ? { message: 'Provider quota exceeded.' } : { content: '' }),
+            }));
+        await page.locator('[data-submit-button]').click();
+        await expect(page.locator('[data-generation-message]')).toBeVisible();
+        await expect(page.locator('[data-submit-button]')).toBeEnabled();
+        expect(await output.textContent()).toBe(previous);
+        expect(await page.locator('[data-results]').evaluate(e => e.inert)).toBe(false);
+        if (failure === 'provider') await expect(page.locator('[data-generation-message]')).toContainText('Provider quota exceeded.');
+        await page.unroute('**/projects/*/generate');
+    }
+    await generate(page);
+    await expect(page.locator('[data-generation-message]')).toBeHidden();
+});
+
+test('xKiro preset clears unrelated credentials and loads exact vendor model IDs with tier labels', async ({ page }) => {
+    await page.goto('/admin');
+    await page.locator('#api_key').fill('unrelated-provider-secret');
+    await page.locator('[data-use-xkiro]').click();
+    await expect(page.locator('[data-provider-select]')).toHaveValue('openai');
+    await expect(page.locator('#base_url')).toHaveValue('https://api.xkiro.com/v1');
+    await expect(page.locator('#api_key')).toHaveValue('');
+    await expect(page.locator('[data-model-input]')).toHaveValue('');
+    await page.route('**/admin/models', async route => {
+        const body = route.request().postData();
+        expect(body).toContain('https://api.xkiro.com/v1');
+        expect(body).not.toContain('unrelated-provider-secret');
+        await route.fulfill({ contentType: 'application/json', body: JSON.stringify({ models: [
+            { id: 'vendor/free-model', label: 'vendor/free-model — Free tier' },
+            { id: 'vendor/paid-model', label: 'vendor/paid-model — Paid tier' },
+        ] }) });
+    });
+    await page.locator('#api_key').fill('fake-xkiro-key');
+    await page.locator('[data-load-models]').click();
+    await expect(page.locator('[data-model-input]')).toHaveValue('vendor/free-model');
+    await expect(page.locator('[data-model-input] option').first()).toHaveText('vendor/free-model — Free tier');
+    await page.locator('[data-toggle-manual-model]').click();
+    await page.locator('#manual_model').fill('another-vendor/model:free');
+    await page.locator('[data-toggle-manual-model]').click();
+    await expect(page.locator('[data-model-input]')).toHaveValue('another-vendor/model:free');
+    await expect(page.locator('[data-model-feedback]')).toContainText('models found');
+});

@@ -88,6 +88,7 @@
     const showMessage = (text) => {
         message.replaceChildren(document.createTextNode(text));
         message.hidden = false;
+        message.scrollIntoView({ behavior: window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth', block: 'center' });
     };
 
     const clearSelectedFile = () => {
@@ -423,37 +424,13 @@
 
     form.addEventListener('submit', async (event) => {
         event.preventDefault();
-        resultSection.hidden = true;
-        historyNotice.hidden = true;
-        if (qualityReviewPanel) qualityReviewPanel.hidden = true;
-        latestOutput = '';
-        latestRepairUrl = '';
-        latestRestoreUrl = '';
-        latestHistoryUrl = '';
-        latestRunId = null;
-        latestCanRestoreOriginal = false;
-        latestManualRepairAttempts = 0;
-        maxManualRepairAttempts = 2;
-        repairAllowedByServer = true;
-        repairButton?.removeAttribute('data-repair-url');
-        restoreButton?.removeAttribute('data-restore-url');
-        if (sendToFlowButton) sendToFlowButton.removeAttribute('data-prompt-run-id');
-        if (flowTransferStatus) {
-            flowTransferStatus.hidden = true;
-            flowTransferStatus.textContent = '';
-            flowTransferStatus.removeAttribute('data-kind');
-        }
-        if (sendToFlowButton) {
-            sendToFlowButton.disabled = false;
-            sendToFlowButton.removeAttribute('aria-busy');
-            const flowLabel = sendToFlowButton.querySelector('[data-flow-button-label]');
-            if (flowLabel) flowLabel.textContent = 'Send to Flow';
-        }
+        // A double submit must not issue a second generation or clear the last good kit.
+        if (submitButton.disabled) return;
         hideMessage();
         if (!form.reportValidity()) return;
 
-        document.dispatchEvent(new CustomEvent('veoprompter:run-ready', { detail: {} }));
-        const priorLabel = submitLabel.textContent;
+        resultSection.inert = true;
+        resultSection.setAttribute('aria-busy', 'true');
         submitButton.disabled = true;
         submitButton.classList.add('is-loading');
         submitButton.setAttribute('aria-busy', 'true');
@@ -479,11 +456,42 @@
             const payload = await response.json().catch(() => ({}));
             if (!response.ok) {
                 const validationError = payload.errors ? Object.values(payload.errors).flat()[0] : null;
-                const errorText = validationError || payload.message || 'The request could not be completed. Please try again.';
-                showMessage(errorText);
+                const errorText = validationError || payload.message || `The server did not provide a readable error message. Check the server or reverse-proxy logs; your previous prompt kit has not been replaced.`;
+                showMessage(`${errorText} (HTTP ${response.status})`);
                 return;
             }
 
+            if (typeof payload.content !== 'string' || !payload.content.trim()) {
+                showMessage('The server returned no prompt content. Your previous prompt kit has not been replaced.');
+                return;
+            }
+
+            resultSection.hidden = true;
+            historyNotice.hidden = true;
+            if (qualityReviewPanel) qualityReviewPanel.hidden = true;
+            latestOutput = '';
+            latestRepairUrl = '';
+            latestRestoreUrl = '';
+            latestHistoryUrl = '';
+            latestRunId = null;
+            latestCanRestoreOriginal = false;
+            latestManualRepairAttempts = 0;
+            maxManualRepairAttempts = 2;
+            repairAllowedByServer = true;
+            repairButton?.removeAttribute('data-repair-url');
+            restoreButton?.removeAttribute('data-restore-url');
+            if (sendToFlowButton) sendToFlowButton.removeAttribute('data-prompt-run-id');
+            if (flowTransferStatus) {
+                flowTransferStatus.hidden = true;
+                flowTransferStatus.textContent = '';
+                flowTransferStatus.removeAttribute('data-kind');
+            }
+            if (sendToFlowButton) {
+                sendToFlowButton.disabled = false;
+                sendToFlowButton.removeAttribute('aria-busy');
+                const flowLabel = sendToFlowButton.querySelector('[data-flow-button-label]');
+                if (flowLabel) flowLabel.textContent = 'Send to Flow';
+            }
             latestOutput = payload.content || '';
             renderOutput(latestOutput);
             resultSection.hidden = false;
@@ -508,6 +516,8 @@
             showMessage('We could not reach VeoPrompter. Check your connection and try again.');
         } finally {
             window.clearInterval(loadingTimer);
+            resultSection.inert = false;
+            resultSection.removeAttribute('aria-busy');
             submitButton.disabled = false;
             submitButton.classList.remove('is-loading');
             submitButton.removeAttribute('aria-busy');
@@ -776,6 +786,24 @@
             modelFeedback.textContent = 'Endpoint changed. Re-enter its API key before loading models or testing.';
         }
         scheduleModelLoad();
+    });
+    form.querySelector('[data-use-xkiro]')?.addEventListener('click', () => {
+        window.clearTimeout(loadTimer);
+        ++providerRequestId; // Ignore an in-flight catalogue for the previous endpoint.
+        const endpointChanged = provider.value !== 'openai' || baseInput.value.replace(/\/+$/, '') !== 'https://api.xkiro.com/v1';
+        provider.value = 'openai';
+        baseInput.value = 'https://api.xkiro.com/v1';
+        previousBaseUrl = baseInput.value;
+        loadModelsButton.disabled = false;
+        testButton.disabled = false;
+        modelFeedback.classList.remove('is-success', 'is-error');
+        if (endpointChanged) apiKeyInput.value = ''; // Never forward another provider's typed key.
+        if (manualMode) toggleManualModel();
+        updateProviderFields();
+        setModelOptions([{ id: '', label: 'Load xKiro models or enter a full vendor/model ID' }], '');
+        manualModelInput.value = '';
+        modelFeedback.textContent = 'xKiro endpoint selected (not saved). Enter your xKiro key, load models, test a text model, then save. Free tiers still have usage limits.';
+        apiKeyInput.focus();
     });
     loadModelsButton.addEventListener('click', loadModels);
     manualToggle.addEventListener('click', toggleManualModel);

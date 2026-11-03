@@ -25,6 +25,13 @@
     const visible = (element) => !element.closest('[hidden], [inert]') && getComputedStyle(element).display !== 'none';
     const ease = 'power3.out';
 
+    // quickTo/resetTo needs individual CSS transform properties, not the scale shorthand.
+    const quickScaleTo = (element, options) => {
+        const x = gsap.quickTo(element, 'scaleX', { ...options, overwrite: 'auto' });
+        const y = gsap.quickTo(element, 'scaleY', { ...options, overwrite: 'auto' });
+        return (value) => { x(value); y(value); };
+    };
+
     // Rolling labels keep their original DOM text for screen readers and existing summary logic.
     if (finePointer) {
         const bindRollingOwner = (owner) => {
@@ -270,14 +277,14 @@
                     item.style.transformOrigin = origin;
                     item.classList.add('is-dock-item');
                     const state = {
-                        scaleTo: gsap.quickTo(item, 'scale', { duration: 0.34, ease: 'power3.out', overwrite: 'auto' }),
+                        scaleTo: quickScaleTo(item, { duration: 0.34, ease: 'power3.out', overwrite: 'auto' }),
                         liftTo: gsap.quickTo(item, 'y', { duration: 0.34, ease: 'power3.out', overwrite: 'auto' }),
                         icon: options.iconSelector ? item.querySelector(options.iconSelector) : null,
                         iconScaleTo: null,
                         active: false,
                     };
                     if (state.icon) {
-                        state.iconScaleTo = gsap.quickTo(state.icon, 'scale', { duration: 0.34, ease: 'power3.out', overwrite: 'auto' });
+                        state.iconScaleTo = quickScaleTo(state.icon, { duration: 0.34, ease: 'power3.out', overwrite: 'auto' });
                     }
                     states.set(item, state);
                     return state;
@@ -343,7 +350,7 @@
             const isPrimary = element.matches('.button-primary, .topbar-control');
             const moveX = gsap.quickTo(element, 'x', { duration: 0.3, ease: 'power3.out', overwrite: 'auto' });
             const moveY = gsap.quickTo(element, 'y', { duration: 0.3, ease: 'power3.out', overwrite: 'auto' });
-            const scaleTo = gsap.quickTo(element, 'scale', { duration: 0.16, ease: 'power3.out', overwrite: 'auto' });
+            const scaleTo = quickScaleTo(element, { duration: 0.16, ease: 'power3.out', overwrite: 'auto' });
             element.addEventListener('pointermove', (event) => {
                 if (event.pointerType === 'touch' || element.disabled) return;
                 const bounds = element.getBoundingClientRect();
@@ -360,7 +367,7 @@
         });
 
         document.querySelectorAll('.history-search button, .pagination-control, .detail-delete').forEach((element) => {
-            const scaleTo = gsap.quickTo(element, 'scale', { duration: 0.16, ease: 'power3.out', overwrite: 'auto' });
+            const scaleTo = quickScaleTo(element, { duration: 0.16, ease: 'power3.out', overwrite: 'auto' });
             const release = () => scaleTo(1);
             element.addEventListener('pointerdown', () => scaleTo(0.978));
             element.addEventListener('pointerup', release);

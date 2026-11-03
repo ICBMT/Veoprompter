@@ -153,7 +153,13 @@ class AiProviderSetupService
                 continue;
             }
 
-            $models[$id] = ['id' => $id, 'label' => $id];
+            // xKiro's public catalogue includes account-independent access tiers.
+            // Keep exact vendor/model IDs; a listing is not an entitlement check.
+            $tier = is_array($item) ? ($item['access_tier'] ?? null) : null;
+            $label = in_array($tier, ['free', 'paid', 'premium'], true)
+                ? $id.' — '.ucfirst($tier).' tier'
+                : $id;
+            $models[$id] = ['id' => $id, 'label' => $label];
         }
 
         usort($models, fn (array $left, array $right): int => strnatcasecmp($left['id'], $right['id']));
