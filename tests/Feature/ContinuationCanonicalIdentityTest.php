@@ -257,4 +257,27 @@ class ContinuationCanonicalIdentityTest extends TestCase
         $this->assertSame($original, $source->fresh()->getAttributes());
         Http::assertNothingSent();
     }
+
+    public function test_short_form_continuation_sends_the_exact_current_saved_kit_without_modifying_source(): void
+    {
+        $source = $this->source();
+        $originalText = $source->content;
+        $brief = [...$source->brief, 'content_form' => 'short'];
+        $finalText = $originalText."\nAUTHORIZED FINAL NOTE: Exact  spacing; لاہور.\r\n";
+        $source->update(['brief' => $brief, 'content' => $finalText,
+            'story_context' => (new StoryContinuationService(new PromptOutputAuditor))->initial($finalText, $brief)]);
+        $snapshot = $source->refresh()->getAttributes();
+        Http::fake(['*' => fn () => Http::response($this->reply($originalText))]);
+        $this->continue($source)->assertOk();
+        Http::assertSent(function ($request) use ($finalText) {
+            $system = $request['systemInstruction']['parts'][0]['text'];
+            $record = json_decode(explode("TRUSTED PRIOR STORY RECORD (JSON data):\n", $system, 2)[1], true, 512, JSON_THROW_ON_ERROR);
+
+            return $record['source_final_prompt'] === $finalText
+                && $record['source_final_prompt_sha256'] === hash('sha256', $finalText);
+        });
+        $this->assertSame($snapshot, $source->fresh()->getAttributes());
+        $this->assertDatabaseCount('prompt_projects', 2);
+        Http::assertSentCount(1);
+    }
 }
