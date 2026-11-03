@@ -137,3 +137,39 @@ Point only the dedicated QA database at that fixture. The chain stress test uses
 eight rapid continuation calls; run it separately from the other browser tests
 or use separate isolated accounts to respect the normal eight-per-minute limit.
 Do not raise production rate limits or clear production caches for testing.
+
+### Advisory source QA
+
+With the default `CONTINUATION_BOUNDARY_MODE=advisory`, source-auditor findings
+(including repeated cast/duration fields, unreadable speech maps, and ambiguous
+canonical identities/rosters) do not prevent next-part generation. They travel
+with the complete unchanged source and are saved separately as
+`quality_review.source_qa_warnings`, displayed as **Previous kit QA observations**.
+Source clip numbers are not presented as findings about the new kit. No first or
+last duplicate value is silently selected as authoritative. The parent remains
+unchanged. Explicit strict mode retains the source admission checks.
+
+This does not bypass technical integrity checks (readable ending, saved batch
+state/hash, context limits), provider failures, authorization, or rate limits.
+`AdvisorySourceQaTest` covers Clip 8 identical/conflicting cast entries, duplicate
+durations, unreadable speech, and canonical ambiguity across both forms and both
+provider formats, plus strict-mode rejection before a provider request.
+
+Default advisory mode also retains nonempty AI text when ending metadata is
+missing/ambiguous or clip headings cannot be parsed. Such output is **needs
+review**, not certified valid or render-ready. A missing literal state stays
+missing: the next request uses the complete source and asks for standalone
+opening descriptions instead of unavailable compiler references. Long-form
+snapshots retain the content hash and actual parsed clip count (zero when no
+clips parse); the raw source is not promoted to a fictional clip. This applies
+to first batches and subsequent continuation/finish/sequel batches. Existing
+persisted-state/hash validation and full-source limits still apply.
+
+Unusable compiler templates get one format-correction AI request in advisory,
+AI-managed mode. The replacement is serialized and audited again; an unresolved
+template or failed provider request is not saved as a successful prompt. This
+is a bounded correction, not a transport retry or guarantee of model quality.
+Strict operator policies retain their original rejection behavior. No change
+can guarantee useful output through provider downtime, refusals, empty or
+truncated responses, authorization failures, concurrency conflicts, or exhausted
+context budgets. Never manufacture an AI result to hide those failures.

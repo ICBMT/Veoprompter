@@ -89,12 +89,16 @@ class ContinuationAdvisoryBoundaryTest extends TestCase
         $this->assertDatabaseCount('prompt_projects', 1);
     }
 
-    public function test_missing_usable_ending_still_blocks_future_state_corruption(): void
+    public function test_missing_ending_is_saved_for_review_without_inventing_a_snapshot(): void
     {
         $source = $this->source('long');
         $candidate = PromptQaCases::edit($source->content, 2, 'ENDING PRESENTATION STATE: camera=static; lighting=daylight; audio=quiet', 'ENDING PRESENTATION STATE:');
         $this->fake($candidate);
-        $this->send($source)->assertStatus(502);
-        $this->assertDatabaseCount('prompt_projects', 1);
+        $response = $this->send($source)->assertOk();
+        $child = PromptProject::findOrFail($response->json('id'));
+        $this->assertSame(trim($candidate), $child->content);
+        $this->assertEmpty($child->story_context['batch_state']['ending_presentation']);
+        $this->assertSame('needs_review', $child->quality_review['status']);
+        $this->assertDatabaseCount('prompt_projects', 2);
     }
 }
