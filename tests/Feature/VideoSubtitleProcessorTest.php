@@ -12,13 +12,22 @@ use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use Mockery;
+use PHPUnit\Framework\Attributes\DataProvider;
 use Tests\TestCase;
 
 class VideoSubtitleProcessorTest extends TestCase
 {
     use RefreshDatabase;
 
-    public function test_pipeline_uses_safe_commands_word_timestamps_lossless_encoding_and_stage_transitions(): void
+    public static function colourProfiles(): array
+    {
+        return ['SDR' => [[]], 'SDR 10-bit' => [['pix_fmt' => 'yuv420p10le', 'color_transfer' => 'bt709']],
+            'PQ' => [['color_transfer' => 'smpte2084', 'color_primaries' => 'bt2020', 'color_space' => 'bt2020nc', 'pix_fmt' => 'yuv420p10le']],
+            'HLG' => [['color_transfer' => 'arib-std-b67', 'color_primaries' => 'bt2020', 'color_space' => 'bt2020nc', 'pix_fmt' => 'yuv420p10le']]];
+    }
+
+    #[DataProvider('colourProfiles')]
+    public function test_pipeline_uses_safe_commands_word_timestamps_lossless_encoding_and_stage_transitions(array $colour): void
     {
         Storage::fake('subtitles');
         $disk = Storage::disk('subtitles');
@@ -32,12 +41,13 @@ class VideoSubtitleProcessorTest extends TestCase
         $disk->put($video->directory().'/original.mp4', 'original');
         $runner = Mockery::mock(LocalMediaProcess::class);
         $stages = [];
-        $runner->shouldReceive('run')->andReturnUsing(function (array $arguments, SubtitleVideo $current) use (&$stages): string {
+        $runner->shouldReceive('run')->andReturnUsing(function (array $arguments, SubtitleVideo $current) use (&$stages, $colour): string {
             $stages[] = $current->fresh()->status;
             $this->assertNotContains($current->original_name, $arguments);
             if (in_array('-show_streams', $arguments, true)) {
                 return json_encode(['format' => ['duration' => '4.0'], 'streams' => [
-                    ['index' => 0, 'codec_type' => 'video', 'width' => 720, 'height' => 1280, 'avg_frame_rate' => '24/1', 'pix_fmt' => 'yuv420p'],
+                    ['index' => 0, 'codec_type' => 'video', 'width' => 720, 'height' => 1280, 'avg_frame_rate' => '24/1', 'pix_fmt' => 'yuv420p', ...($arguments[array_key_last($arguments)] === $current->path('rendering.mp4')
+                        ? ['color_transfer' => 'bt709', 'color_primaries' => 'bt709', 'color_space' => 'bt709'] : $colour)],
                     ['index' => 1, 'codec_type' => 'audio', 'codec_name' => 'aac'],
                 ]]);
             }
@@ -47,7 +57,17 @@ class VideoSubtitleProcessorTest extends TestCase
                 file_put_contents($current->path('audio.json'), file_get_contents(base_path('tests/Fixtures/subtitles/words.json')));
             } elseif (in_array('rendering.mp4', $arguments, true)) {
                 $this->assertSame('rendering', $current->fresh()->status);
-                $this->assertContains('ass=captions.ass', $arguments);
+                $filter = $arguments[array_search('-vf', $arguments, true) + 1];
+                if (in_array($colour['color_transfer'] ?? '', ['smpte2084', 'arib-std-b67'], true)) {
+                    $this->assertStringContainsString('tonemap=', $filter);
+                    $this->assertStringEndsWith('ass=captions.ass', $filter);
+                    $this->assertSame('bt709', $arguments[array_search('-color_trc', $arguments, true) + 1]);
+                    $this->assertSame('hdr', $current->media['source_dynamic_range']);
+                } else {
+                    $this->assertSame('ass=captions.ass', $filter);
+                    $this->assertNotContains('-color_trc', $arguments);
+                    $this->assertSame($colour['pix_fmt'] ?? 'yuv420p', $arguments[array_search('-pix_fmt', $arguments, true) + 1]);
+                }
                 $this->assertContains('libx264', $arguments);
                 $this->assertSame('0', $arguments[array_search('-crf', $arguments, true) + 1]);
                 $this->assertSame('copy', $arguments[array_search('-c:a', $arguments, true) + 1]);

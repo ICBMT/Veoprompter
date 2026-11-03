@@ -49,6 +49,11 @@ Artisan::command('subtitles:doctor', function () {
             $this->line(strtok($result, "\n"));
         }
         $filters = $runner->run([config('subtitles.ffmpeg'), '-filters'], timeout: 20);
+        foreach (['zscale', 'tonemap', 'sidedata'] as $filter) {
+            if (! preg_match('/\b'.preg_quote($filter, '/').'\s+V->V/', $filters)) {
+                throw new \RuntimeException('HDR subtitle support requires the FFmpeg '.$filter.' filter (zscale needs libzimg).');
+            }
+        }
         $encoders = $runner->run([config('subtitles.ffmpeg'), '-encoders'], timeout: 20);
         if (! preg_match('/\bass\s+V->V/', $filters) || ! str_contains($encoders, 'libx264')) {
             throw new \RuntimeException('FFmpeg needs the libass filter and libx264 encoder.');

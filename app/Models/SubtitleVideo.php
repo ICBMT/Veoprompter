@@ -57,6 +57,7 @@ class SubtitleVideo extends Model
     {
         return match ($this->failure_code) {
             'invalid_media' => 'This MP4 is unsupported or exceeds the duration, resolution, frame-rate, or colour limits.',
+            'unsupported_hdr' => 'This HDR colour profile is not supported. Use HDR10/PQ or HLG with BT.2020 colour, or export an SDR copy. Dolby Vision requires an HDR10/HLG-compatible base layer.',
             'no_audio' => 'This video has no usable audio track.',
             'storage_limit' => 'The server does not currently have enough free space for a lossless render. Please contact the administrator.',
             'output_limit' => 'The lossless output exceeds the server output-size limit. Your original is intact; try a shorter video or ask the administrator to raise the limit.',

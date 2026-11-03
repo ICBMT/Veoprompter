@@ -15,6 +15,7 @@
         data-approve-url="{{ route('subtitles.approve', $video, false) }}"
         data-original-url="{{ route('subtitles.original', $video, false) }}"
         @if($video->status !== 'awaiting_review') hidden @endif>
+        @if(($video->media['source_dynamic_range'] ?? '') === 'hdr')<p class="subtitle-note">HDR source detected ({{ $video->media['source_transfer'] ?? 'HDR' }}). After approval, the subtitled output will be tone-mapped to SDR BT.709. Your original HDR upload remains unchanged.</p>@endif
         <h2>Review every caption before rendering</h2>
         <p>Read the transcript, replay the original audio, and correct spelling, names, capitalization or punctuation. Word timing/order stays fixed. Replacements share the original word's time window; major rewrites need a new transcription.</p>
         <video controls playsinline preload="none" data-review-video aria-label="Original video for transcript review"></video>
@@ -37,7 +38,7 @@
         <video controls playsinline preload="metadata" data-job-preview @if($video->status === 'completed') src="{{ route('subtitles.preview', $video, false) }}" @endif></video>
         <a class="button-primary" data-job-download @if($video->status === 'completed') href="{{ route('subtitles.download', $video, false) }}" @endif>Download subtitled MP4 ↧</a>
     </div>
-    <p class="subtitle-note">Lossless video encode · original dimensions/frame timing · no watermark. Lossless H.264 may not play in every browser; download and use VLC if needed. Transcript approval is required before captions are rendered. Review the finished video again before publishing. Retention: {{ config('subtitles.retention_days') }} days.</p>
+    <p class="subtitle-note">Lossless H.264 encode · original dimensions/frame timing · no watermark. HDR input is tone-mapped to SDR BT.709, not preserved as HDR. Lossless H.264 may not play in every browser; download and use VLC if needed. Transcript approval is required before captions are rendered. Review the finished video again before publishing. Retention: {{ config('subtitles.retention_days') }} days.</p>
     <a class="history-open" href="{{ route('subtitles.index', [], false) }}">← Back to Subtitle Studio</a>
 </section>
 @endsection

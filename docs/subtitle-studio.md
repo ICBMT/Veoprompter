@@ -10,11 +10,11 @@ The default style uses DejaVu Sans bold, white text, yellow current-word highlig
 
 Burning subtitles necessarily changes pixels and requires decoding/re-encoding video. **Bit-for-bit 1:1 video is impossible.** The default uses `libx264 -crf 0`, a lossless H.264 video encode, preserves source pixel format for supported SDR YUV inputs, does not resize, and uses timestamp passthrough rather than forcing a frame rate. Source display rotation is applied by FFmpeg. It does not restore quality already lost in the source. libass still changes subtitle-region pixels and uses its own rendering pipeline; this is not a claim of mathematically identical source pixels outside subtitles for every codec/colour configuration.
 
-AAC, MP3, and ALAC audio is stream-copied. Other codecs use AAC 320k and are **not lossless audio**. The first non-cover video track and first audio track are used; extra tracks, original subtitles and metadata are not carried into the deliverable. The original MP4 remains untouched. HDR/PQ/HLG and unsupported pixel formats are rejected instead of silently tonemapped. Lossless H.264 can be much larger and some browsers cannot play all lossless/10-bit/4:4:4 profiles: download and use VLC if necessary. Defaults limit input to 500 MiB, 10 minutes, 4096px per dimension, 9 million pixels, and 60 fps. Output is capped at 2 GiB by FFmpeg; a capped/truncated render fails, never becomes the downloadable result. Reserve at least the output cap plus 128 MiB free disk space per running render. Two active jobs, twenty retained videos and 2 GiB of original uploads per user limit resource growth. Deploy with OS CPU/memory/disk quotas as well.
+AAC, MP3, and ALAC audio is stream-copied. Other codecs use AAC 320k and are **not lossless audio**. The first non-cover video track and first audio track are used; extra tracks, original subtitles and metadata are not carried into the deliverable. The original MP4 remains untouched. HDR10/PQ and HLG BT.2020 inputs are explicitly tone-mapped to SDR BT.709 before captions are composited, with 8-bit limited-range YUV420 output and BT.709 tags. The HDR brightness/gamut is not preserved: lossless encoding applies only after conversion. The original HDR upload stays untouched. Unsupported pixel formats, contradictory HDR colour tags, and Dolby Vision without an explicitly HDR10/HLG-compatible base layer are rejected. Compatible Dolby Vision base layers use their PQ/HLG image only; dynamic Dolby Vision metadata is not retained. Missing PQ/HLG primaries/matrix tags use the standard BT.2020/nonconstant-luminance assumption; missing range uses limited range. Material lacking a PQ/HLG transfer tag cannot be reliably detected as HDR. Lossless H.264 can be much larger and some browsers cannot play all lossless/10-bit/4:4:4 profiles: download and use VLC if necessary. Defaults limit input to 500 MiB, 10 minutes, 4096px per dimension, 9 million pixels, and 60 fps. Output is capped at 2 GiB by FFmpeg; a capped/truncated render fails, never becomes the downloadable result. Reserve at least the output cap plus 128 MiB free disk space per running render. Two active jobs, twenty retained videos and 2 GiB of original uploads per user limit resource growth. Deploy with OS CPU/memory/disk quotas as well.
 
 ## Server installation
 
-Production needs PHP 8.3+ with normal Laravel dependencies, Python, FFmpeg **7+** with libass/libx264, DejaVu fonts, a pre-provisioned local OpenAI Whisper environment/model, database queues, and a scheduler. No paid API is used. Install dependencies on your Ubuntu server (administrative commands, not run in this workspace):
+Production needs PHP 8.3+ with normal Laravel dependencies, Python, FFmpeg **7+** with libass/libx264 and libzimg (`zscale`), `tonemap` and `sidedata` filters, DejaVu fonts, a pre-provisioned local OpenAI Whisper environment/model, database queues, and a scheduler. No paid API is used. Install dependencies on your Ubuntu server (administrative commands, not run in this workspace):
 
 ```sh
 sudo apt update
@@ -170,3 +170,49 @@ modules with local HTTP fixtures. They check approval validation, lost-response
 reconciliation, editable error/retry behavior, and extension reconnect without
 changing the stored prompt. They do **not** run Whisper, a Laravel queue, or
 FFmpeg; the existing deployment/worker prerequisites above still apply.
+
+
+## HDR/SDR upload compatibility
+
+No database migration is required. New uploads record detected source dynamic
+range/transfer in the existing private media JSON. SDR keeps the previous caption
+filter and pixel-format path. HDR uses linear-light float conversion, BT.709 gamut
+conversion, Mobius tone mapping, error-diffusion quantization to SDR YUV420, removal
+of stale HDR frame side data, then ASS caption compositing. The encode explicitly
+tags BT.709 primaries, transfer and matrix and limited range. Frame timing,
+dimensions/autorotation and existing audio-copy policy are unchanged. Tone mapping
+can change the creative look; it does not preserve the original HDR master.
+Output verification checks the SDR colour tags, pixel format and displayed size
+before publishing HDR-derived results. Transcript review/explicit approval,
+resource limits, cleanup, and source retention stay unchanged.
+
+After deployment, run `php artisan subtitles:doctor` to check the added FFmpeg
+filters, and restart long-lived queue workers so they load the updated code.
+Uploads already marked failed are not silently requeued: upload a fresh copy.
+The browser may not preview the original HDR codec correctly; this does not
+change the server's decoded tone-mapped output.
+
+Pure production-colour-plan checks (no framework/model required):
+
+```sh
+php scripts/check-subtitle-colour.php
+python3 scripts/check-subtitle-hdr.py --ffmpeg /path/to/ffmpeg --ffprobe /path/to/ffprobe --php-command php
+```
+
+The real-media script creates synthetic SDR, 10-bit HEVC PQ, HLG, full-range PQ,
+and rotated HLG fixtures; applies the actual production PHP colour plan and ASS
+generator; and verifies caption pixels, output BT.709 tagging, display dimensions,
+frame counts/rate, copied audio packet hashes and unchanged originals. These
+are synthetic rendering checks, not live Whisper or subjective source-master
+colour grading tests. `SubtitleColourPipelineTest` shares the pure assertions;
+`VideoSubtitleProcessorTest` includes SDR, 10-bit SDR, PQ and HLG command/state
+coverage in the framework suite.
+
+Executed for this change: all five synthetic colour/rotation cases on FFmpeg
+7.0.2 and 9.0.2; the existing three-resolution SDR subtitle/highlight smoke on
+7.0.2; 25 pure PHP colour assertions and 26 transcript-review assertions; 65
+JavaScript tests and 4 Chromium HTTP-fixture controls tests. PHP syntax checks
+passed for all changed PHP files. The added framework unit/processor matrix has
+not been run here because the current checkout has no installed Composer vendor
+dependencies and Packagist access is unavailable. No live Whisper transcription,
+production queue execution or subjective HDR grading validation is claimed.

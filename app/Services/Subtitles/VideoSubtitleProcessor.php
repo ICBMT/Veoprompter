@@ -15,7 +15,7 @@ class VideoSubtitleProcessor
         $ffmpeg = config('subtitles.ffmpeg');
         $media = $this->inspect($video);
         $audio = $media['audio'];
-        $video->update(['media' => array_intersect_key($media, array_flip(['width', 'height', 'duration', 'fps']))]);
+        $video->update(['media' => array_intersect_key($media, array_flip(['width', 'height', 'duration', 'fps', 'source_dynamic_range', 'source_transfer']))]);
         $this->process->run([$ffmpeg, '-nostdin', '-y', '-v', 'error', '-protocol_whitelist', 'file', '-f', 'mov', '-i', $video->path('original.mp4'), '-map', '0:'.$audio['index'], '-vn', '-ac', '1', '-ar', '16000', '-c:a', 'pcm_s16le', $video->path('audio.wav')], $video);
         $video->update(['status' => 'transcribing']);
         if (! is_file(rtrim(config('subtitles.model_directory'), '/').'/'.config('subtitles.model').'.pt')) {
@@ -67,8 +67,9 @@ class VideoSubtitleProcessor
         $copyAudio = in_array($audio['codec_name'] ?? '', ['aac', 'mp3', 'alac'], true);
         $arguments = [$ffmpeg, '-nostdin', '-y', '-v', 'error', '-threads', (string) config('subtitles.threads'),
             '-protocol_whitelist', 'file', '-f', 'mov', '-i', 'original.mp4', '-map', '0:'.$visual['index'], '-map', '0:'.$audio['index'],
-            '-filter_threads', (string) config('subtitles.threads'), '-vf', 'ass=captions.ass', '-c:v', 'libx264', '-preset', 'medium', '-crf', '0', '-threads', (string) config('subtitles.threads'),
-            '-pix_fmt', $visual['pix_fmt'], '-fps_mode', 'passthrough', '-c:a', $copyAudio ? 'copy' : 'aac'];
+            '-filter_threads', (string) config('subtitles.threads'), '-vf', $media['colour']['filter'], '-c:v', 'libx264', '-preset', 'medium', '-crf', '0', '-threads', (string) config('subtitles.threads'),
+            '-pix_fmt', $media['colour']['pixel_format'], '-fps_mode', 'passthrough', '-c:a', $copyAudio ? 'copy' : 'aac'];
+        array_push($arguments, ...$media['colour']['output_arguments']);
         if (! $copyAudio) {
             array_push($arguments, '-b:a', '320k');
         }
@@ -80,6 +81,15 @@ class VideoSubtitleProcessor
         $output = $this->probe($video->path('rendering.mp4'), $video);
         if (abs((float) ($output['format']['duration'] ?? 0) - $duration) > 0.5 || filesize($video->path('rendering.mp4')) < 100) {
             throw new SubtitleFailure('processing_failed');
+        }
+        if ($media['source_dynamic_range'] === 'hdr') {
+            $rendered = collect($output['streams'] ?? [])->firstWhere('codec_type', 'video');
+            if (! $rendered || ($rendered['color_transfer'] ?? '') !== 'bt709'
+                || ($rendered['color_primaries'] ?? '') !== 'bt709' || ($rendered['color_space'] ?? '') !== 'bt709'
+                || ($rendered['pix_fmt'] ?? '') !== 'yuv420p'
+                || (int) ($rendered['width'] ?? 0) !== $media['width'] || (int) ($rendered['height'] ?? 0) !== $media['height']) {
+                throw new SubtitleFailure('processing_failed');
+            }
         }
         if (! rename($video->path('rendering.mp4'), $video->path('output.mp4'))) {
             throw new SubtitleFailure('processing_failed');
@@ -111,7 +121,6 @@ class VideoSubtitleProcessor
         if (! $visual || ! is_finite($duration) || $duration <= 0 || $duration > config('subtitles.max_duration')
             || min($width, $height) < 64 || max($width, $height) > config('subtitles.max_dimension')
             || $width * $height > config('subtitles.max_pixels') || $fps <= 0 || $fps > config('subtitles.max_fps')
-            || in_array($visual['color_transfer'] ?? '', ['smpte2084', 'arib-std-b67'], true)
             || ! in_array($visual['pix_fmt'] ?? '', ['yuv420p', 'yuv422p', 'yuv444p', 'yuv420p10le', 'yuv422p10le', 'yuv444p10le'], true)) {
             throw new SubtitleFailure('invalid_media');
         }
@@ -126,7 +135,10 @@ class VideoSubtitleProcessor
         if (abs($rotation) % 180 === 90) {
             [$width, $height] = [$height, $width];
         }
-        return compact('visual', 'audio', 'width', 'height', 'duration', 'fps');
+        $colour = SubtitleColourPipeline::forStream($visual);
+
+        return [...compact('visual', 'audio', 'width', 'height', 'duration', 'fps', 'colour'),
+            'source_dynamic_range' => $colour['source_dynamic_range'], 'source_transfer' => $colour['source_transfer']];
     }
 
     private function probe(string $path, SubtitleVideo $video): array

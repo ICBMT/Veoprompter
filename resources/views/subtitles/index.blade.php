@@ -15,7 +15,7 @@
         <input type="hidden" name="upload_token" value="{{ old('upload_token', $uploadToken) }}">
         <label class="subtitle-drop">Choose your finished MP4
             <input type="file" name="video" accept="video/mp4,.mp4" required data-video-file>
-            <small>Up to {{ round(config('subtitles.max_upload_kb') / 1024) }} MB · {{ config('subtitles.max_duration') }} seconds · SDR only · maximum 60 fps</small>
+            <small>Up to {{ round(config('subtitles.max_upload_kb') / 1024) }} MB · {{ config('subtitles.max_duration') }} seconds · SDR or HDR10/PQ/HLG · maximum 60 fps</small>
         </label>
         <label>Caption style<select name="preset">@foreach(config('subtitles.presets') as $key => $label)<option value="{{ $key }}" @selected(old('preset', 'karaoke') === $key)>{{ $label }}</option>@endforeach</select></label>
         <details class="subtitle-controls"><summary>Fine-tune captions</summary>
@@ -27,7 +27,7 @@
                 <label>Bottom margin (reference pixels)<input name="vertical_margin" type="number" min="40" max="260" value="{{ old('vertical_margin', 110) }}" required></label>
             </div>
         </details>
-        <p class="subtitle-note">Lossless H.264 rendering preserves resolution and frame timing without a lossy video quality setting. Subtitles change pixels; the result is not bit-identical and may be much larger. Compatible audio is copied; other audio is converted to AAC.</p>
+        <p class="subtitle-note">Lossless H.264 rendering preserves resolution and frame timing without a lossy video quality setting. Subtitles change pixels; the result is not bit-identical and may be much larger. HDR input is tone-mapped to SDR BT.709 before captions are added; HDR brightness and colour are not preserved in the output. SDR keeps its existing rendering path. Compatible audio is copied; other audio is converted to AAC.</p>
         <button class="button-primary" type="submit"><span>Upload & transcribe for review</span><span aria-hidden="true">↗</span></button>
         <p data-upload-feedback role="status"></p>
     </form>
