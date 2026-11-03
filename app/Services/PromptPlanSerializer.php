@@ -14,7 +14,7 @@ final class PromptPlanSerializer
     {
         $templateHash = hash('sha256', $template);
         $inherited = [];
-        if (isset($input['_story_context'])) {
+        if (isset($input['_story_context']) && ! StoryContinuationService::aiManaged($input)) {
             [$template, $inherited] = $this->inheritIdentityDefinitions($template, $input);
         }
         $lines = preg_split('/\R/u', $template) ?: [];
@@ -25,6 +25,11 @@ final class PromptPlanSerializer
         foreach (array_slice($lines, 0, $prefixEnd) as $line) {
             if (preg_match('/^\s*(?:[-*+>]\s*)?CANONICAL IDENTITY ([A-Za-z]+-\d+)\s*:\s*(.+)$/iu', str_replace(['**', '__', '`'], '', $line), $match)) {
                 $id = strtoupper($match[1]);
+                if (isset($identities[$id]) && StoryContinuationService::aiManaged($input)) {
+                    $identities[$id] = '';
+
+                    continue;
+                }
                 if (isset($identities[$id])) {
                     throw new PromptGenerationException('The provider supplied an ambiguous canonical identity; no template was accepted.');
                 }

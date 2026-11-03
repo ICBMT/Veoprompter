@@ -3,6 +3,9 @@
     <details @if(!$compact) open @endif>
         <summary data-story-heading>@if($run)Part {{ $run->story_part }} · Batch {{ $run->story_batch }} · {{ $run->story_status === 'open' ? 'Story ongoing' : 'Part complete — create a sequel' }}@else Continue this story @endif</summary>
         <p class="field-hint">Keep the story, characters and visual world connected. Each request saves a new kit; it never replaces this one. You can grow either format one batch at a time.</p>
+        @if(config('prompt_generation.continuation_identity_mode', 'ai_managed') === 'ai_managed')
+            <p class="field-hint">AI-managed identity continuity uses the complete saved prompt. Identity findings are advisory; review the generated characters and objects before rendering. Exact opening-state checks remain enabled.</p>
+        @endif
         <form method="post" action="{{ $run ? route('history.continue', $run, false) : '' }}" data-story-form data-story-status="{{ $run?->story_status ?? 'ended' }}">
             @csrf
             <input type="hidden" name="request_id" value="{{ (string) \Illuminate\Support\Str::uuid() }}">
@@ -12,7 +15,7 @@
             <label class="field-label">What should happen next? <span class="field-hint">Optional</span>
                 <textarea class="text-input" name="direction" rows="3" maxlength="4000" placeholder="For example: follow the same characters into the observatory, reveal the clue slowly, and keep the mystery open."></textarea>
             </label>
-            <label class="field-hint"><input type="checkbox" name="allow_new_subjects" value="1"> Allow new recurring subjects explicitly described above (existing identities and project restrictions stay locked).</label>
+            <label class="field-hint"><input type="checkbox" name="allow_new_subjects" value="1"> Allow new recurring subjects explicitly described above (instruct the AI to preserve existing identities and project restrictions).</label>
             <div class="story-actions">
                 <button class="button-primary" type="submit" name="intent" value="continue" data-story-intent="continue" @if(!$run || $run->story_status !== 'open') hidden @endif>Generate next clips</button>
                 <button class="button-secondary" type="submit" name="intent" value="finish" data-story-intent="finish" @if(!$run || $run->story_status !== 'open') hidden @endif>Generate ending · end story</button>

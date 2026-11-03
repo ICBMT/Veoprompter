@@ -18,14 +18,39 @@ explicitly before a provider request, never by silently truncating the story.
 A model's own context-window limit may still be smaller. Including full source
 increases input-token usage; this is not a guarantee of live model quality.
 
-Canonical identities are still read literally. Markdown headings around explicit
-`CANONICAL IDENTITY CHAR-01: ...` definitions are recognized, but character names,
-clip descriptions and model-inferred traits are not substitutes. A genuinely
-missing definition, inconsistent ledger or ambiguous source still stops before
-provider usage. This change does not retroactively invent missing definitions
-for a broken saved kit; inspect the actual source to resolve those cases.
+## Identity policy (updated)
 
-Generated, serialized and repaired output still passes the existing independent
-identity and opening-continuity checks before saving. No new automatic repair
-rounds or quality bypasses are introduced. The original source remains unchanged,
-and the existing transaction checks still reject concurrent source edits.
+Continuation now defaults to **AI-managed identity continuity**:
+
+```
+CONTINUATION_IDENTITY_MODE=ai_managed
+```
+
+Missing `CANONICAL IDENTITY` labels, absent cached identity ledgers, literal
+identity mismatches and identity/roster QA findings no longer block a new part.
+The complete current saved source and current configuration are supplied to the
+model with explicit instructions to preserve existing characters, appearances,
+counts, objects, materials and world/style. New recurring subjects require the
+existing explicit permission and direction. No missing traits are filled in by
+the application, and model prose is not promoted to a verified identity ledger.
+
+Identity findings are retained as advisory warnings in the saved review. The UI
+labels this mode and recommends inspecting characters and objects before rendering.
+An identity match or perfect visual continuity is **not** certified by this mode.
+No additional AI identity-review request or hidden retry is made.
+
+Exact inherited opening state/presentation, story status and memory validity,
+response completeness, timing checks, scoped template resolution, request
+idempotency and concurrent-source-edit protection remain enabled. These can
+still legitimately reject a request. The source remains unchanged.
+
+An operator can opt back into the previous strict literal-ledger policy with
+`CONTINUATION_IDENTITY_MODE=strict`. Apply configuration changes through the
+normal deployment config-cache rebuild. Strict mode requires complete consistent
+literal definitions and can reject previously saved AI-managed kits that do not
+satisfy that contract. No migration is necessary.
+
+Regression suites cover both policies: existing strict-contract tests explicitly
+run under the strict setting; dedicated AI-managed tests exercise missing CHAR-01
+labels, empty legacy ledgers, short/long forms, repeated next parts, advisory
+mismatches, visible warnings and preserved opening/provider-failure rejection.

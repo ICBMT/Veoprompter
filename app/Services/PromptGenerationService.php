@@ -75,7 +75,8 @@ class PromptGenerationService
         }
         $repairableIssues = array_values(array_filter(
             $qualityReview['issues'],
-            fn (array $issue): bool => ($issue['repairable'] ?? false) === true,
+            fn (array $issue): bool => ($issue['repairable'] ?? false) === true
+                && (! StoryContinuationService::aiManaged($input) || ($issue['category'] ?? '') !== 'identity'),
         ));
 
         if ($repairableIssues !== []) {
@@ -135,6 +136,17 @@ class PromptGenerationService
             $stories = new StoryContinuationService($auditor);
             $stories->assertOpening($content, $input);
             $stories->assertIdentities($content, $input);
+        }
+
+        if (StoryContinuationService::aiManaged($input)) {
+            $qualityReview['identity_mode'] = 'ai_managed';
+            $qualityReview['identity_warnings'] = [
+                ...($input['_story_context']['source_identity_warnings'] ?? []),
+                ...array_values(array_filter($qualityReview['issues'], fn (array $issue): bool => ($issue['category'] ?? '') === 'identity')),
+            ];
+            $qualityReview['limitations'][] = 'Identity continuity is AI-managed using the complete saved source. Identity findings are advisory, not blockers or proof of a match; inspect characters and objects before rendering.';
+            $qualityReview['checks'][] = ['id' => 'ai_managed_identity', 'label' => 'AI-managed character and object continuity', 'status' => 'needs_review',
+                'detail' => 'Full saved source supplied. Identity QA is advisory; no automated identity guarantee is made.'];
         }
 
         $qualityReview['rejected_candidate_issues'] = $rejectedCandidateIssues;
