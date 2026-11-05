@@ -4,7 +4,7 @@
 
 An independent authenticated `/subtitles` workspace, linked from the existing sidebar. Upload a finished MP4 from any video generator, choose animated karaoke (default) or plain white captions, watch background stages, review/edit the transcript, explicitly approve its exact wording, then render, preview, and download. Existing prompt generation, QA/Auto-Fix, TTS, wizard and extension behavior are not replaced or coupled to transcription. The extension remains local-only: it does not upload videos or submit generation requests.
 
-The default style uses DejaVu Sans bold, white text, yellow current-word highlighting, a dark outline, subtle shadow, bottom-center alignment, reference font size 46, 26-character target wrapping, and 110px bottom margin on a 720×1280 reference. Font/outline/margins scale with the frame. Conservative glyph-width estimates additionally constrain wide text. Complete sentences have **one stable ASS event**, explicit line breaks, and per-span time-based colour transforms (45ms maximum easing); completed words return to white. There is no per-word event replacement, position animation, flashing, or popping. Very long sentences shrink to a minimum reference font size 24; if they still require more than four lines, processing fails rather than silently clipping text or inventing timing. English is the first supported language; adding languages requires compatible models and representative timing/render tests, not just changing the label.
+The default style uses DejaVu Sans bold, white text, yellow current-word highlighting, a dark outline, subtle shadow, bottom-center alignment, reference font size 46, 26-character target wrapping, and 110px bottom margin on a 720×1280 reference. Font/outline/margins scale with the frame. Conservative glyph-width estimates additionally constrain wide text. Fitting sentences have **one stable ASS event**, explicit line breaks, and per-span time-based colour transforms (45ms maximum easing); completed words return to white. There is no per-word event replacement, position animation, flashing, or popping. Sentences first shrink to a minimum reference font size 24; overflow is then paginated at existing word boundaries into stable, readable caption pages. No word or timestamp is changed. Each page fits at most four lines and the available vertical canvas; an individually unrenderable token still fails clearly instead of clipping or inventing timing. English is the first supported language; adding languages requires compatible models and representative timing/render tests, not just changing the label.
 
 ## Quality contract (important)
 
@@ -216,3 +216,44 @@ passed for all changed PHP files. The added framework unit/processor matrix has
 not been run here because the current checkout has no installed Composer vendor
 dependencies and Packagist access is unavailable. No live Whisper transcription,
 production queue execution or subjective HDR grading validation is claimed.
+
+
+## Approval 422 from long captions (November 2026)
+
+Approval preflight formerly rejected a whole sentence requiring more than four
+lines, even when every word and timestamp was valid. Long or unpunctuated
+transcripts could therefore finish transcription but fail approval with HTTP
+422, independently of HDR/SDR compatibility. The caption generator now paginates
+overflow at actual word boundaries after trying the existing fitting/shrinking
+path. Fitting short sentences keep their existing stable event. Overflow pages
+use readable font sizes and fit the horizontal and vertical canvas, never more
+than four lines. Page start/end and karaoke offsets use the original word times;
+all approved text remains in order exactly once. No punctuation, new timings,
+content rewriting, automatic approval, or truncation is introduced.
+
+An unrenderable individual token or invalid transcript edit still returns 422.
+The response includes `errors.words`, a readable message, and respectively
+`subtitle_layout_unrenderable` or `subtitle_invalid_review`. These specific
+layout/review errors are distinct from normal request-field validation errors.
+The transcript remains editable and no render is queued after failed approval.
+This is not universal codec/container support: upload restrictions, HDR policy,
+resource limits, ownership, revision, confirmation, and timing checks remain.
+
+Validation for this change:
+
+```sh
+php scripts/check-subtitle-pagination.php
+python3 scripts/check-subtitle-pagination-render.py --ffmpeg /path/ffmpeg --php-command php
+```
+
+The shared regression cases fail with the old generator's `sentence_too_long`
+and pass with the revised one: 562 assertions across portrait/landscape, two
+sizes, plain/karaoke, exact text order, page times, nonoverlap and short-sentence
+compatibility. Real FFmpeg 7.0.2/libass rendered all eight pages of the smoke
+fixture with highlight pixels, safe margins and timed removal; original/audio
+hash checks passed. Existing three-resolution SDR rendering/highlight tests,
+26 PHP transcript-review assertions, 25 colour assertions, and 65 JavaScript
+tests also passed. Added Laravel approval tests cover successful long-transcript
+approval and safe rejection of an unrenderable individual word; they have not
+been executed here because Composer vendor dependencies are unavailable.
+Restart long-lived subtitle workers after deploying the updated generator.

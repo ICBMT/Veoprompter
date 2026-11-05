@@ -9,7 +9,6 @@ use App\Services\Subtitles\SubtitleFailure;
 use App\Services\Subtitles\TranscriptReview;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Validation\ValidationException;
 
 class SubtitleReviewController extends Controller
 {
@@ -77,9 +76,14 @@ class SubtitleReviewController extends Controller
                 return ['status' => $locked->status, 'revision' => $revision, 'approved_at' => $locked->approved_at?->toIso8601String()];
             });
         } catch (SubtitleFailure $exception) {
-            throw ValidationException::withMessages(['words' => $exception->reason === 'sentence_too_long'
-                ? 'The corrected captions do not fit safely. Add appropriate sentence punctuation or shorten an overlong replacement before approving.'
-                : 'Keep every timed word in order, use nonempty text of at most 120 characters per row, and do not insert line breaks or control characters.']);
+            $layoutFailure = $exception->reason === 'sentence_too_long';
+            $message = $layoutFailure
+                ? 'An individual caption word cannot fit safely at the minimum font size. Shorten an overlong replacement or use a wider video. Long sentences are paged automatically; no punctuation edits are required.'
+                : 'Keep every timed word in order, use nonempty text of at most 120 characters per row, and do not insert line breaks or control characters.';
+
+            return response()->json(['message' => $message,
+                'code' => $layoutFailure ? 'subtitle_layout_unrenderable' : 'subtitle_invalid_review',
+                'errors' => ['words' => [$message]]], 422)->header('Cache-Control', 'private, no-store');
         }
 
         return response()->json($result)->header('Cache-Control', 'private, no-store');

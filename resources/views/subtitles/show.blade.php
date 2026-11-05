@@ -17,7 +17,7 @@
         @if($video->status !== 'awaiting_review') hidden @endif>
         @if(($video->media['source_dynamic_range'] ?? '') === 'hdr')<p class="subtitle-note">HDR source detected ({{ $video->media['source_transfer'] ?? 'HDR' }}). After approval, the subtitled output will be tone-mapped to SDR BT.709. Your original HDR upload remains unchanged.</p>@endif
         <h2>Review every caption before rendering</h2>
-        <p>Read the transcript, replay the original audio, and correct spelling, names, capitalization or punctuation. Word timing/order stays fixed. Replacements share the original word's time window; major rewrites need a new transcription.</p>
+        <p>Read the transcript, replay the original audio, and correct spelling, names, capitalization or punctuation. Word timing/order stays fixed. Replacements share the original word's time window; major rewrites need a new transcription. Long passages are split into readable caption pages automatically, preserving the approved words and their timings.</p>
         <video controls playsinline preload="none" data-review-video aria-label="Original video for transcript review"></video>
         <details><summary>Read the full draft</summary><p class="subtitle-full-transcript" data-transcript-paragraph></p></details>
         <p data-review-feedback role="status" aria-live="polite">Loading your private transcript…</p>

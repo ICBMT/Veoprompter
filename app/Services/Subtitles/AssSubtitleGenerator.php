@@ -23,24 +23,22 @@ class AssSubtitleGenerator
         $colour = $this->colour($settings['highlight']);
         $events = [];
         $previousEnd = 0.0;
+        $pages = [];
         foreach ($sentences as $words) {
+            array_push($pages, ...$this->captionPages($words, $fontSize, max(12, (int) round(24 * $scale)),
+                (int) $settings['line_length'], $width - 2 * $margin, $height - $vertical - $margin));
+        }
+        foreach ($pages as $page) {
+            $words = $page['words'];
+            $lines = $page['lines'];
+            $sentenceSize = $page['font_size'];
             $start = max($previousEnd, $words[0]['start']);
             $lastEnd = $words[array_key_last($words)]['end'];
             $end = min($duration, max($start + 0.01, $lastEnd));
             if ($end <= $start) {
                 continue;
             }
-            // One stable event per sentence, not one event per spoken word.
-            $lineLimit = (int) $settings['line_length'];
-            $sentenceSize = $fontSize;
-            $lines = $this->wrap($words, $lineLimit, ($width - 2 * $margin) / $sentenceSize);
-            while (count($lines) > 4 && $sentenceSize > max(12, (int) round(24 * $scale))) {
-                $sentenceSize--;
-                $lines = $this->wrap($words, (int) floor($lineLimit * $fontSize / $sentenceSize), ($width - 2 * $margin) / $sentenceSize);
-            }
-            if (count($lines) > 4) {
-                throw new SubtitleFailure('sentence_too_long');
-            }
+            // One stable event per fitted sentence/page, never per-word replacement.
             $parts = [];
             foreach ($lines as $line) {
                 $pieces = [];
@@ -63,6 +61,56 @@ class AssSubtitleGenerator
         }
 
         return $header.implode("\n", $events)."\n";
+    }
+
+    /** Keep fitting sentences unchanged; paginate overflow without altering words or timestamps. */
+    private function captionPages(array $words, int $fontSize, int $minimum, int $lineLimit, int $width, int $height): array
+    {
+        $fit = function (array $candidate, int $minimumSize) use ($fontSize, $lineLimit, $width, $height): ?array {
+            for ($size = $fontSize; $size >= $minimumSize; $size--) {
+                try {
+                    $lines = $this->wrap($candidate, (int) floor($lineLimit * $fontSize / $size), $width / $size);
+                } catch (SubtitleFailure $exception) {
+                    if ($exception->reason !== 'sentence_too_long') {
+                        throw $exception;
+                    }
+                    continue;
+                }
+                $maxLines = min(4, (int) floor($height / ($size * 1.3)));
+                if (count($lines) <= $maxLines) {
+                    return ['words' => $candidate, 'lines' => $lines, 'font_size' => $size];
+                }
+            }
+
+            return null;
+        };
+        if ($whole = $fit($words, $minimum)) {
+            return [$whole];
+        }
+        $pages = [];
+        $pending = [];
+        foreach ($words as $word) {
+            $candidate = [...$pending, $word];
+            if ($pending !== [] && $fit($candidate, $fontSize) === null) {
+                $page = $fit($pending, $minimum);
+                if ($page === null) {
+                    throw new SubtitleFailure('sentence_too_long');
+                }
+                $pages[] = $page;
+                $pending = [];
+            }
+            $pending[] = $word;
+        }
+        if ($pending !== []) {
+            $page = $fit($pending, $minimum);
+            if ($page === null) {
+                // An individual unbreakable token cannot safely fit, even at the minimum size.
+                throw new SubtitleFailure('sentence_too_long');
+            }
+            $pages[] = $page;
+        }
+
+        return $pages;
     }
 
     public function timestamp(float $seconds): string

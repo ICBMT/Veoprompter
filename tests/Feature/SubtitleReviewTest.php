@@ -107,6 +107,34 @@ class SubtitleReviewTest extends TestCase
         $this->assertSame('EVERY', $video->fresh()->transcript_approved[0]['word']);
     }
 
+    public function test_long_unpunctuated_transcript_can_be_approved_without_changing_words_or_timings(): void
+    {
+        $video = $this->video();
+        $words = [];
+        foreach (range(0, 199) as $i) {
+            $words[] = ['start' => $i * 0.3, 'end' => $i * 0.3 + 0.25, 'word' => 'token'.$i];
+        }
+        $video->update(['transcript_source' => $words, 'transcript_draft' => $words,
+            'media' => ['width' => 720, 'height' => 1280, 'duration' => 60]]);
+        $this->postJson(route('subtitles.approve', $video), ['revision' => 1, 'words' => array_column($words, 'word'), 'confirmed' => true])
+            ->assertOk()->assertJsonPath('status', 'approved');
+        $this->assertSame(TranscriptReview::hash($words), $video->fresh()->approved_hash);
+        $this->assertTrue($video->fresh()->hasApprovedTranscript());
+        Queue::assertPushed(RenderSubtitleVideo::class, 1);
+    }
+
+    public function test_unrenderable_individual_token_returns_a_specific_error_without_freezing_approval(): void
+    {
+        $video = $this->video();
+        $body = $this->body($video) + ['confirmed' => true];
+        $body['words'][0] = str_repeat('W', 120);
+        $this->postJson(route('subtitles.approve', $video), $body)->assertUnprocessable()
+            ->assertJsonPath('code', 'subtitle_layout_unrenderable')->assertJsonValidationErrors('words');
+        $this->assertSame('awaiting_review', $video->fresh()->status);
+        $this->assertNull($video->fresh()->approved_at);
+        Queue::assertNothingPushed();
+    }
+
     public function test_stale_approval_cannot_overwrite_another_tabs_saved_draft(): void
     {
         $video = $this->video();
