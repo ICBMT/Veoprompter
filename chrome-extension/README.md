@@ -41,3 +41,16 @@ than leaving the popup button disabled. Reload the unpacked extension in
 `chrome://extensions` after updating. Copy/paste remains local-only, editable,
 one-shot and never auto-submits. Transcript review and explicit approval still
 happen in the authenticated web app; the extension does not handle videos.
+
+### Version 1.8.0: ideas → wizard → finished prompt
+
+The popup now has a **Today's video ideas** shortcut for a connected app (current
+app first, then the active prompt's source, then another connected site). Each
+connected origin also has a shortcut in the connection section. It opens that origin’s authenticated `/ideas` page;
+no prompt, transcript, video, credentials or API request is sent by the extension.
+Choose a region and video format, generate ten ideas backed by dated search-trend
+evidence, then select **Review in project wizard**. Review/edit settings and the
+prefilled creative answers in the app, generate normally, and use the existing
+**Send to Flow** button. Only the finished kit enters the unchanged copy/paste
+sequence. The extension never fills Flow with raw questionnaire answers, clicks
+Send, or starts video generation. Reload the unpacked extension to apply 1.8.0.

@@ -23,6 +23,7 @@
 
     <form class="project-settings-form project-wizard" action="{{ route('projects.store', [], false) }}" method="post" novalidate data-project-wizard>
         @csrf
+        @if(!empty($ideaDraft))<input type="hidden" name="idea_draft" value="{{ $ideaDraft['token'] }}"><p class="duration-policy-note">Idea selected: {{ $ideaDraft['title'] }}. Review the suggested audience and video format below; all choices remain editable. Creative answers will be filled after setup. No prompt is generated automatically.</p>@endif
         @include('components.validation-summary')
 
         <div class="wizard-progress" aria-label="Project setup progress">
@@ -39,7 +40,7 @@
         <div class="wizard-stage">
             <section class="wizard-step" data-wizard-step data-wizard-group="PROJECT BASICS" data-wizard-title="Name your project">
                 <div class="wizard-question"><span class="wizard-question-number" data-wizard-number>01</span><h2 tabindex="-1">What should we call this project?</h2><p>Choose a name that helps you find this creative workspace again.</p></div>
-                <div class="wizard-answer wizard-answer--narrow"><label class="field-label" for="name">Project name</label><input class="text-input input-large" id="name" name="name" type="text" maxlength="100" required value="{{ old('name') }}" placeholder="For example, Ocean science stories" autofocus><span class="field-hint">You can rename it later.</span></div>
+                <div class="wizard-answer wizard-answer--narrow"><label class="field-label" for="name">Project name</label><input class="text-input input-large" id="name" name="name" type="text" maxlength="100" required value="{{ old('name', $ideaDraft['title'] ?? '') }}" placeholder="For example, Ocean science stories" autofocus><span class="field-hint">You can rename it later.</span></div>
             </section>
 
             <section class="wizard-step" data-wizard-step data-wizard-group="PROJECT BASICS" data-wizard-title="Choose your audience">

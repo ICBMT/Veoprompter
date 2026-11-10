@@ -34,6 +34,10 @@ Route::middleware('user.auth')->group(function (): void {
     Route::post('/presence', [PresenceController::class, 'ping'])->middleware('throttle:2,1,presence')->name('presence.ping');
     Route::post('/voice-samples', [VoiceSampleController::class, 'store'])->middleware('throttle:12,1,voice-sample')->name('voice-samples.store');
 
+    Route::get('/ideas', [\App\Http\Controllers\VideoIdeaController::class, 'index'])->name('ideas.index');
+    Route::post('/ideas', [\App\Http\Controllers\VideoIdeaController::class, 'generate'])->middleware('throttle:2,1,video-ideas')->name('ideas.generate');
+    Route::post('/ideas/choose', [\App\Http\Controllers\VideoIdeaController::class, 'choose'])->middleware('throttle:20,1,idea-selection')->name('ideas.choose');
+
     Route::get('/subtitles', [\App\Http\Controllers\SubtitleVideoController::class, 'index'])->name('subtitles.index');
     Route::post('/subtitles', [\App\Http\Controllers\SubtitleVideoController::class, 'store'])->middleware('throttle:3,1,subtitle-upload')->name('subtitles.store');
     Route::get('/subtitles/{subtitleVideo}', [\App\Http\Controllers\SubtitleVideoController::class, 'show'])->name('subtitles.show');

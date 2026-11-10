@@ -30,8 +30,12 @@ class StudioProjectController extends Controller
     {
         $durationOptions = ProjectSettings::durationOptionsFor($request->user());
 
+        $ideaDraft = VideoIdeaController::draft($request);
+        $defaults = $ideaDraft ? [...ProjectSettings::defaults(), 'audience' => $ideaDraft['audience'], 'video_type' => $ideaDraft['video_type']] : ProjectSettings::defaults();
+
         return view('projects.create', [
-            'settings' => ProjectSettings::applyDurationOptions(ProjectSettings::defaults(), $durationOptions),
+            'ideaDraft' => $ideaDraft,
+            'settings' => ProjectSettings::applyDurationOptions($defaults, $durationOptions),
             'durationOptions' => $durationOptions,
             'videoTypes' => ProjectSettings::videoTypes(),
         ]);
@@ -46,12 +50,23 @@ class StudioProjectController extends Controller
             ...ProjectSettings::rules($durationOptions),
         ]);
 
+        if ($request->filled('idea_draft')) {
+            abort_unless(VideoIdeaController::draft($request), 409, 'This idea draft expired or was replaced. Return to Ideas and select it again; no project was created.');
+        }
+
         $project = $request->user()->studioProjects()->create([
             'name' => trim($validated['name']),
             'settings' => ProjectSettings::fromValidated($validated, [], $durationOptions),
         ]);
 
-        return redirect()->to(route('projects.show', $project, false))
+        $ideaDraft = VideoIdeaController::draft($request);
+        $destination = route('projects.show', $project, false);
+        if ($ideaDraft) {
+            $request->session()->put('video_ideas.draft', [...$ideaDraft, 'project_id' => (int) $project->id]);
+            $destination .= '?idea_draft='.$ideaDraft['token'];
+        }
+
+        return redirect()->to($destination)
             ->with('success', 'Your project is ready. Its saved preferences will be reused for each new prompt.');
     }
 
@@ -62,6 +77,7 @@ class StudioProjectController extends Controller
         $durationOptions = ProjectSettings::durationOptionsFor($request->user());
 
         return view('studio.index', [
+            'ideaPrefill' => VideoIdeaController::draft($request, (int) $studioProject->id),
             'project' => $studioProject,
             'settings' => ProjectSettings::applyDurationOptions($studioProject->settings ?? [], $durationOptions),
             'durationOptions' => $durationOptions,

@@ -1,6 +1,7 @@
 import { copyableChunk } from './prompt-parser.js';
 import { armPasteOnNextField } from './field-paste.js';
 import { savedRunReviewLink } from './repair-link.js';
+import { videoIdeasLink } from './ideas-link.js';
 
 const STORAGE_KEYS = ['connectedAppOrigins', 'activePrompt'];
 const APP_BRIDGE_ID = 'veoprompter-app-bridge';
@@ -24,6 +25,8 @@ const handoffCue = document.querySelector('[data-handoff-cue]');
 const handoffKind = document.querySelector('[data-handoff-kind]');
 const handoffGuidance = document.querySelector('[data-handoff-guidance]');
 const outgoingHandoff = document.querySelector('[data-handoff-outgoing]');
+const ideasShortcut = document.querySelector('[data-ideas-shortcut]');
+const ideasLink = document.querySelector('[data-ideas-link]');
 
 let activeTab = null;
 let popupState = { connectedAppOrigins: [], activePrompt: null };
@@ -96,6 +99,15 @@ function updateConnectionList(origins) {
         const row = document.createElement('div');
         row.className = 'connection-origin';
         row.textContent = origin;
+        const ideasUrl = videoIdeasLink(origin, origins);
+        if (ideasUrl) {
+            const link = document.createElement('a');
+            link.href = ideasUrl;
+            link.target = '_blank';
+            link.rel = 'noopener noreferrer';
+            link.textContent = ' · Today’s video ideas ↗';
+            row.append(link);
+        }
         connectionList.append(row);
     });
 }
@@ -203,6 +215,12 @@ async function refresh() {
     updateConnectionList(popupState.connectedAppOrigins);
 
     const appOrigin = activeTab?.url ? currentOrigin(activeTab.url) : null;
+    const ideasUrl = [appOrigin, popupState.activePrompt?.sourceOrigin, ...popupState.connectedAppOrigins]
+        .map(origin => videoIdeasLink(origin, popupState.connectedAppOrigins)).find(Boolean);
+    ideasShortcut.hidden = !ideasUrl;
+    if (ideasUrl) ideasLink.href = ideasUrl;
+    else ideasLink.removeAttribute('href');
+
     let hasAppPermission = false;
     if (appOrigin) {
         try {

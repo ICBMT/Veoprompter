@@ -4,6 +4,8 @@
 @section('eyebrow', 'PROJECT WORKSPACE')
 
 @section('content')
+@if(!empty($ideaPrefill))<p class="duration-policy-note" role="status">Idea draft: {{ $ideaPrefill['title'] }}. Suggested answers have been filled into empty fields only. Review and edit them before generating. Search interest is not proof of news claims; verify facts before publishing. No prompt is generated or sent automatically.</p>@endif
+
 @php
     $characterLabels = ['ai-choice' => 'AI chooses', 'human-male' => 'Human male', 'human-female' => 'Human female', 'robot' => 'Robot', 'fictional' => 'Fictional character'];
     $characterLabel = $characterLabels[$settings['character_type'] ?? 'ai-choice'] ?? 'Custom character';
@@ -176,3 +178,10 @@
     </section>
 </div>
 @endsection
+
+@if(!empty($ideaPrefill))
+    @push('scripts')
+        <script type="application/json" data-idea-prefill>@json($ideaPrefill)</script>
+        <script type="module" src="/js/idea-prefill.js"></script>
+    @endpush
+@endif
